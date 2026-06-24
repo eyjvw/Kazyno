@@ -1,0 +1,112 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+---
+
+<Layout title="PISCASINO — Limbo">
+  <Nav />
+  <div class="shell">
+    <aside class="panel betpanel">
+      <div class="field">
+        <label>Mise</label>
+        <input class="input" data-bet type="number" min="1" value="100" />
+        <div class="chips">
+          <button data-amt="half">½</button>
+          <button data-amt="double">2×</button>
+          <button data-amt="max">Max</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Cible (multiplicateur)</label>
+        <input class="input" data-target type="number" min="1.01" step="0.01" value="2" />
+      </div>
+
+      <div class="stat-row">
+        <div class="stat"><span>Gain potentiel</span><b data-payout>—</b></div>
+        <div class="stat"><span>Chance</span><b data-chance>49.5%</b></div>
+      </div>
+
+      <button class="btn bet-btn" data-play>Miser</button>
+      <p class="result" data-result></p>
+    </aside>
+
+    <main class="panel stage">
+      <div class="big" data-big>1.00×</div>
+      <div class="hint">Bust avant ta cible = perdu</div>
+    </main>
+  </div>
+</Layout>
+
+<script>
+  import { bet, setupAmount, fmt, getBalance, BetError } from "../../lib/casino";
+
+  const EDGE = 0.99;
+  const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
+  const target = document.querySelector<HTMLInputElement>("[data-target]")!;
+  const payoutEl = document.querySelector<HTMLElement>("[data-payout]")!;
+  const chanceEl = document.querySelector<HTMLElement>("[data-chance]")!;
+  const result = document.querySelector<HTMLElement>("[data-result]")!;
+  const play = document.querySelector<HTMLButtonElement>("[data-play]")!;
+  const big = document.querySelector<HTMLElement>("[data-big]")!;
+
+  setupAmount(betInput);
+
+  function refresh() {
+    const t = Math.max(1.01, Number(target.value) || 1.01);
+    payoutEl.textContent = fmt(Math.floor(Number(betInput.value) * t));
+    chanceEl.textContent = ((EDGE / t) * 100).toFixed(2) + "%";
+  }
+  target.addEventListener("input", refresh);
+  betInput.addEventListener("input", refresh);
+  refresh();
+
+  function animateTo(value: number, win: boolean) {
+    const start = performance.now();
+    const dur = 700;
+    function step(now: number) {
+      const p = Math.min(1, (now - start) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      big.textContent = (1 + (value - 1) * eased).toFixed(2) + "×";
+      if (p < 1) requestAnimationFrame(step);
+      else big.style.color = win ? "var(--win)" : "var(--lose)";
+    }
+    requestAnimationFrame(step);
+  }
+
+  play.addEventListener("click", async () => {
+    play.disabled = true;
+    result.textContent = "";
+    result.className = "result";
+    big.style.color = "";
+    try {
+      const r: any = await bet("limbo", {
+        bet: Number(betInput.value),
+        target: Math.max(1.01, Number(target.value)),
+      });
+      animateTo(r.result, r.win);
+      result.textContent = r.win
+        ? `Gagne +${fmt(r.payout)} pts`
+        : `Perdu -${fmt(Number(betInput.value))} pts`;
+      result.classList.add(r.win ? "win" : "lose");
+    } catch (e) {
+      result.textContent = e instanceof BetError ? e.message : "Erreur";
+      result.classList.add("lose");
+    } finally {
+      play.disabled = false;
+    }
+  });
+</script>
+
+<style>
+  .big {
+    font-size: clamp(56px, 12vw, 110px);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+  }
+  .hint {
+    color: var(--muted);
+    font-size: 13px;
+  }
+</style>

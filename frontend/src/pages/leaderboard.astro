@@ -1,0 +1,298 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Layout title="PISCASINO — Classement">
+  <Nav />
+  <main class="wrap">
+    <header class="head">
+      <h1>Classement</h1>
+      <p>Les joueurs les plus riches de la piscine.</p>
+    </header>
+
+    <input
+      class="input search"
+      data-search
+      type="search"
+      placeholder="Rechercher un joueur…"
+      autocomplete="off"
+    />
+
+    <ol class="list" data-list>
+      <li class="empty">Chargement…</li>
+    </ol>
+
+    <nav class="pager" data-pager hidden>
+      <button class="ghost-btn" data-prev>← Préc.</button>
+      <span class="pginfo" data-pginfo></span>
+      <button class="ghost-btn" data-next>Suiv. →</button>
+    </nav>
+  </main>
+  <Footer />
+</Layout>
+
+<script>
+  import {
+    getLeaderboardPage,
+    loadMe,
+    fmt,
+    onLeaderboard,
+    type LeaderRow,
+    type Me,
+  } from "../lib/casino";
+
+  const PAGE = 20;
+  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
+  const list = $("[data-list]");
+  const search = $<HTMLInputElement>("[data-search]");
+  const pager = $("[data-pager]");
+  const pginfo = $("[data-pginfo]");
+  const prev = $<HTMLButtonElement>("[data-prev]");
+  const next = $<HTMLButtonElement>("[data-next]");
+
+  let me: Me | null = null;
+  let offset = 0;
+  let q = "";
+  let total = 0;
+
+  const initial = (n: string) => n.charAt(0).toUpperCase();
+
+  function rowHtml(r: LeaderRow) {
+    const name = r.display_name || r.login;
+    const isMe = me && r.login === me.login;
+    const rankCls = r.rank <= 3 ? `medal m${r.rank}` : "rank";
+    const av = r.image_url
+      ? `<img class="av" src="${r.image_url}" width="28" height="28" alt="" />`
+      : `<span class="av fb">${initial(name)}</span>`;
+    return `<li class="row${isMe ? " me" : ""}" data-login="${r.login}">
+      <span class="${rankCls}">${r.rank}</span>
+      ${av}
+      <a class="name" href="/profile?u=${r.login}">${name}<small>@${r.login}</small></a>
+      <span class="pts">${fmt(r.points)} <em>pts</em></span>
+    </li>`;
+  }
+
+  function render(rows: LeaderRow[]) {
+    if (!rows.length) {
+      list.innerHTML = `<li class="empty">Aucun joueur.</li>`;
+      pager.hidden = true;
+      return;
+    }
+
+    // FLIP: remember each visible row's position (keyed by login).
+    const prevTop = new Map<string, number>();
+    list.querySelectorAll<HTMLElement>(".row").forEach((r) => {
+      prevTop.set(r.dataset.login!, r.getBoundingClientRect().top);
+    });
+
+    list.innerHTML = rows.map(rowHtml).join("");
+
+    const items = list.querySelectorAll<HTMLElement>(".row");
+    items.forEach((r) => {
+      const old = prevTop.get(r.dataset.login!);
+      if (old == null) return; // new entry, no slide
+      const delta = old - r.getBoundingClientRect().top;
+      if (!delta) return;
+      // Invert: jump back to old spot instantly.
+      r.style.transition = "none";
+      r.style.transform = `translateY(${delta}px)`;
+      r.classList.add(delta > 0 ? "moved-up" : "moved-down");
+    });
+
+    // Play: release to new spot on next frame.
+    requestAnimationFrame(() => {
+      items.forEach((r) => {
+        if (prevTop.get(r.dataset.login!) == null) return;
+        r.style.transition = "transform .6s cubic-bezier(.2,.8,.2,1)";
+        r.style.transform = "";
+      });
+    });
+    items.forEach((r) =>
+      r.addEventListener(
+        "animationend",
+        () => r.classList.remove("moved-up", "moved-down"),
+        { once: true },
+      ),
+    );
+
+    const from = offset + 1;
+    const to = offset + rows.length;
+    pginfo.textContent = `${from}–${to} sur ${total}`;
+    prev.disabled = offset === 0;
+    next.disabled = offset + PAGE >= total;
+    pager.hidden = total <= PAGE && offset === 0;
+  }
+
+  async function load() {
+    const data = await getLeaderboardPage(PAGE, offset, q);
+    total = data.total;
+    render(data.leaderboard);
+  }
+
+  // Search resets to page 1
+  let timer: number;
+  search.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      q = search.value.trim();
+      offset = 0;
+      load();
+    }, 220);
+  });
+
+  prev.addEventListener("click", () => {
+    offset = Math.max(0, offset - PAGE);
+    load();
+  });
+  next.addEventListener("click", () => {
+    offset += PAGE;
+    load();
+  });
+
+  // Live: refetch current page on any bet-driven change.
+  let liveTimer: number;
+  onLeaderboard(() => {
+    clearTimeout(liveTimer);
+    liveTimer = window.setTimeout(load, 300);
+  });
+
+  loadMe().then((m) => {
+    me = m;
+    load();
+  });
+</script>
+
+<style>
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 40px);
+  }
+  .head h1 {
+    margin: 0;
+    font-size: clamp(28px, 5vw, 40px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+  .head p {
+    margin: 8px 0 22px;
+    color: var(--muted);
+  }
+  .search {
+    margin-bottom: 18px;
+  }
+  .list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  /* rows are injected at runtime -> target them globally under .list */
+  .list :global(.empty) {
+    color: var(--muted);
+    text-align: center;
+    padding: 40px 0;
+  }
+  .list :global(.row) {
+    display: grid;
+    grid-template-columns: 36px 28px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 14px;
+  }
+  .list :global(.row.me) {
+    border-color: var(--accent);
+    background: var(--panel-2);
+  }
+  .list :global(.row.moved-up) {
+    animation: flashUp 0.9s ease;
+  }
+  .list :global(.row.moved-down) {
+    animation: flashDown 0.9s ease;
+  }
+  .list :global(.rank),
+  .list :global(.medal) {
+    text-align: center;
+    font-weight: 800;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+  .list :global(.medal) {
+    border-radius: 6px;
+    padding: 3px 0;
+    color: #06121f;
+  }
+  .list :global(.m1) {
+    background: #ffd24a;
+  }
+  .list :global(.m2) {
+    background: #cdd6e0;
+  }
+  .list :global(.m3) {
+    background: #e08b4a;
+  }
+  .list :global(.av) {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--raise);
+  }
+  .list :global(.av.fb) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+    color: #fff;
+    background: var(--accent);
+  }
+  .list :global(.name) {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+    font-weight: 600;
+    font-size: 14px;
+    overflow: hidden;
+  }
+  .list :global(.name small) {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 11px;
+  }
+  .list :global(.pts) {
+    font-weight: 800;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  .list :global(.pts em) {
+    color: var(--muted);
+    font-style: normal;
+    font-weight: 400;
+    font-size: 11px;
+  }
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 20px;
+  }
+  .pager .ghost-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .pginfo {
+    color: var(--muted);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+</style>

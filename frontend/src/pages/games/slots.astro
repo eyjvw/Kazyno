@@ -1,0 +1,268 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+import Footer from "../../components/Footer.astro";
+---
+
+<Layout title="PISCASINO — Machine à sous">
+  <Nav />
+  <canvas class="ambient" data-ambient></canvas>
+  <div class="shell">
+    <aside class="panel betpanel">
+      <div class="field">
+        <label>Mise</label>
+        <input class="input" data-bet type="number" min="1" value="100" />
+        <div class="chips">
+          <button data-amt="half">½</button>
+          <button data-amt="double">2×</button>
+          <button data-amt="max">Max</button>
+        </div>
+      </div>
+
+      <div class="paytable">
+        <div class="pt-title">Gains (3 identiques)</div>
+        <div class="pt-row"><span>7️⃣ 7️⃣ 7️⃣</span><b>250×</b></div>
+        <div class="pt-row"><span>💎 💎 💎</span><b>90×</b></div>
+        <div class="pt-row"><span>⭐ ⭐ ⭐</span><b>40×</b></div>
+        <div class="pt-row"><span>🔔 🔔 🔔</span><b>20×</b></div>
+        <div class="pt-row"><span>🍋 🍋 🍋</span><b>12×</b></div>
+        <div class="pt-row"><span>🍒 🍒 🍒</span><b>8×</b></div>
+        <div class="pt-row dim"><span>2× 7️⃣ / 2× 💎</span><b>10× / 5×</b></div>
+      </div>
+
+      <button class="btn bet-btn" data-play>Tourner</button>
+      <p class="result" data-result></p>
+    </aside>
+
+    <main class="panel stage">
+      <div class="machine">
+        <div class="cabinet">
+          <div class="reel"><div class="strip" data-reel="0"></div></div>
+          <div class="reel"><div class="strip" data-reel="1"></div></div>
+          <div class="reel"><div class="strip" data-reel="2"></div></div>
+          <div class="payline"></div>
+          <div class="glass"></div>
+        </div>
+        <div class="mult" data-mult></div>
+      </div>
+    </main>
+  </div>
+  <Footer />
+</Layout>
+
+<script>
+  import { bet, setupAmount, fmt, BetError } from "../../lib/casino";
+
+  const SYMBOLS = ["🍒", "🍋", "🔔", "⭐", "💎", "7️⃣"];
+  const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
+  const result = document.querySelector<HTMLElement>("[data-result]")!;
+  const multEl = document.querySelector<HTMLElement>("[data-mult]")!;
+  const play = document.querySelector<HTMLButtonElement>("[data-play]")!;
+  const strips = [0, 1, 2].map(
+    (i) => document.querySelector<HTMLElement>(`[data-reel="${i}"]`)!,
+  );
+
+  setupAmount(betInput);
+  const rndSym = () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+  const cellH = () => strips[0].parentElement!.clientHeight;
+
+  // Initial idle symbols
+  strips.forEach((st) => (st.innerHTML = `<span class="cell">${rndSym()}</span>`));
+
+  function spinReel(st: HTMLElement, final: string, dur: number) {
+    const h = cellH();
+    const n = 30;
+    const syms = Array.from({ length: n }, rndSym);
+    syms.push(final); // last cell = result, lands centered
+    st.innerHTML = syms.map((s) => `<span class="cell">${s}</span>`).join("");
+    st.style.transition = "none";
+    st.style.transform = "translateY(0)";
+    void st.offsetHeight; // reflow
+    st.classList.add("spinning");
+    st.style.transition = `transform ${dur}ms cubic-bezier(0.12, 0.82, 0.18, 1)`;
+    st.style.transform = `translateY(${-(syms.length - 1) * h}px)`;
+    // drop the blur before the reel settles so the result is crisp
+    setTimeout(() => st.classList.remove("spinning"), Math.max(0, dur - 450));
+    return new Promise<void>((res) => setTimeout(res, dur));
+  }
+
+  play.addEventListener("click", async () => {
+    play.disabled = true;
+    result.textContent = "";
+    result.className = "result";
+    multEl.textContent = "";
+    strips.forEach((st) => st.parentElement!.classList.remove("hit"));
+
+    let data: any;
+    try {
+      data = await bet("slots", { bet: Number(betInput.value) });
+    } catch (e) {
+      result.textContent = e instanceof BetError ? e.message : "Erreur";
+      result.classList.add("lose");
+      play.disabled = false;
+      return;
+    }
+
+    await Promise.all([
+      spinReel(strips[0], data.reels[0], 1500),
+      spinReel(strips[1], data.reels[1], 1900),
+      spinReel(strips[2], data.reels[2], 2300),
+    ]);
+
+    if (data.win) {
+      strips.forEach((st) => st.parentElement!.classList.add("hit"));
+      multEl.textContent = `${data.multiplier}×`;
+      result.textContent = `Gagné +${fmt(data.payout)} pts`;
+      result.classList.add("win");
+    } else {
+      result.textContent = `Perdu -${fmt(Number(betInput.value))} pts`;
+      result.classList.add("lose");
+    }
+    play.disabled = false;
+  });
+
+  // Optional WebGL ambient glow (fails gracefully without GPU).
+  import("../../lib/ambient")
+    .then(({ initAmbient }) => {
+      const c = document.querySelector<HTMLCanvasElement>("[data-ambient]");
+      if (c) initAmbient(c);
+    })
+    .catch(() => {});
+</script>
+
+<style>
+  .ambient {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.5;
+  }
+  .shell {
+    position: relative;
+    z-index: 1;
+  }
+
+  .machine {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+  }
+  .cabinet {
+    position: relative;
+    display: flex;
+    gap: 14px;
+    padding: 22px;
+    border-radius: 22px;
+    background: linear-gradient(160deg, #1b3f53, #0c2230);
+    border: 1px solid var(--line);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45), inset 0 0 0 2px rgba(59, 130, 246, 0.15);
+  }
+  .reel {
+    position: relative;
+    width: 110px;
+    height: 130px;
+    border-radius: 14px;
+    background: linear-gradient(#ffffff, #e9eef5);
+    overflow: hidden;
+    box-shadow: inset 0 10px 18px rgba(0, 0, 0, 0.22), inset 0 -10px 18px rgba(0, 0, 0, 0.22);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .reel.hit {
+    transform: translateY(-4px) scale(1.05);
+    box-shadow: 0 0 26px rgba(0, 231, 1, 0.6), inset 0 10px 18px rgba(0, 0, 0, 0.2);
+  }
+  .strip {
+    display: flex;
+    flex-direction: column;
+    will-change: transform;
+  }
+  .strip.spinning {
+    filter: blur(0.6px);
+  }
+  .strip :global(.cell) {
+    height: 130px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 66px;
+    line-height: 1;
+  }
+  /* fade top/bottom + center payline */
+  .payline {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    top: 50%;
+    height: 2px;
+    background: rgba(59, 130, 246, 0.6);
+    transform: translateY(-50%);
+    pointer-events: none;
+    z-index: 3;
+  }
+  .glass {
+    position: absolute;
+    inset: 22px;
+    border-radius: 14px;
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      rgba(12, 34, 48, 0.55) 0%,
+      rgba(12, 34, 48, 0) 22%,
+      rgba(12, 34, 48, 0) 78%,
+      rgba(12, 34, 48, 0.55) 100%
+    );
+    z-index: 2;
+  }
+  .mult {
+    font-size: 40px;
+    font-weight: 800;
+    color: var(--win);
+    min-height: 48px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .paytable {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 13px;
+  }
+  .pt-title {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+  .pt-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+  }
+  .pt-row b {
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .pt-row.dim {
+    color: var(--muted);
+    margin-top: 6px;
+    border-top: 1px solid var(--line);
+    padding-top: 8px;
+  }
+
+  @media (max-width: 560px) {
+    .reel {
+      width: 84px;
+      height: 104px;
+    }
+    .strip :global(.cell) {
+      height: 104px;
+      font-size: 50px;
+    }
+  }
+</style>

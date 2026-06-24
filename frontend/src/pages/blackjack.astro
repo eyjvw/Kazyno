@@ -1,0 +1,182 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Layout title="PISCASINO — Blackjack">
+  <Nav />
+  <main class="wrap">
+    <header class="head">
+      <h1>Blackjack 🃏</h1>
+      <p>Joue solo contre le croupier, ou crée une table en ligne.</p>
+    </header>
+
+    <section class="actions">
+      <button class="btn" data-create>Lancer une room</button>
+      <form class="join" data-join-form>
+        <input class="input" name="code" placeholder="Code de table (ex: R47YY)" maxlength="5" autocomplete="off" />
+        <button class="btn ghost" type="submit">Rejoindre</button>
+      </form>
+    </section>
+    <p class="err" data-err></p>
+
+    <h2 class="section-title">Tables publiques</h2>
+    <ul class="rooms" data-rooms><li class="empty">Chargement…</li></ul>
+  </main>
+  <Footer />
+</Layout>
+
+<script>
+  import {
+    bjCreateRoom,
+    bjListRooms,
+    bjJoin,
+    bjJoinByCode,
+    loadMe,
+  } from "../lib/casino";
+
+  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
+  const err = $("[data-err]");
+  const roomsEl = $("[data-rooms]");
+
+  function fail(e: any) {
+    err.textContent = e?.message ?? "Erreur";
+  }
+
+  $("[data-create]").addEventListener("click", async () => {
+    try {
+      const r = await bjCreateRoom("", true);
+      location.href = `/table?room=${r.id}`;
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+  $<HTMLFormElement>("[data-join-form]").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const code = (e.target as HTMLFormElement).code.value.trim().toUpperCase();
+    if (!code) return;
+    try {
+      const r = await bjJoinByCode(code);
+      location.href = `/table?room=${r.id}`;
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+  async function loadRooms() {
+    const rooms = await bjListRooms();
+    roomsEl.innerHTML = rooms.length
+      ? rooms
+          .map(
+            (r: any) => `<li class="room">
+              <span class="rinfo"><b>${r.name}</b><small>par ${r.host} · ${r.players}/${r.maxSeats}</small></span>
+              <button class="btn sm" data-join="${r.id}">Rejoindre</button>
+            </li>`,
+          )
+          .join("")
+      : `<li class="empty">Aucune table publique. Crée la première !</li>`;
+  }
+
+  document.addEventListener("click", async (e) => {
+    const el = e.target as HTMLElement;
+    if (el.dataset.join) {
+      try {
+        await bjJoin(el.dataset.join);
+        location.href = `/table?room=${el.dataset.join}`;
+      } catch (e) {
+        fail(e);
+      }
+    }
+  });
+
+  loadMe();
+  loadRooms();
+  setInterval(loadRooms, 4000);
+</script>
+
+<style>
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 40px);
+  }
+  .head h1 {
+    margin: 0;
+    font-size: clamp(28px, 5vw, 40px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+  .head p {
+    margin: 8px 0 26px;
+    color: var(--muted);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+  .btn.ghost {
+    background: var(--panel);
+    border: 1px solid var(--line);
+  }
+  .btn.ghost:hover {
+    border-color: var(--accent);
+    background: var(--panel-2);
+  }
+  .join {
+    display: flex;
+    gap: 8px;
+  }
+  .join .input {
+    width: 200px;
+    text-transform: uppercase;
+  }
+  .err {
+    color: var(--lose);
+    min-height: 18px;
+    font-size: 13px;
+    margin: 12px 0 0;
+  }
+  .section-title {
+    margin: 30px 0 14px;
+    font-size: 20px;
+    font-weight: 800;
+  }
+  .rooms {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .rooms :global(.empty) {
+    color: var(--muted);
+    text-align: center;
+    padding: 30px 0;
+  }
+  .rooms :global(.room) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .rooms :global(.rinfo) {
+    display: flex;
+    flex-direction: column;
+  }
+  .rooms :global(.rinfo small) {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .rooms :global(.btn.sm) {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+</style>

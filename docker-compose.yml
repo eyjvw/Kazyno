@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: piscasino-postgres
+    environment:
+      POSTGRES_USER: piscasino
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-piscasino}
+      POSTGRES_DB: piscasino
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U piscasino -d piscasino"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - piscasino
+
+  backend:
+    build: ./backend
+    container_name: piscasino-backend
+    environment:
+      DATABASE_URL: postgres://piscasino:${POSTGRES_PASSWORD:-piscasino}@postgres:5432/piscasino
+      SESSION_SECRET: ${SESSION_SECRET:-dev-insecure-change-me}
+      FT_UID: ${FT_UID:-}
+      FT_SECRET: ${FT_SECRET:-}
+      FT_REDIRECT_URI: ${FT_REDIRECT_URI:-http://localhost:8080/api/auth/callback}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:8080}
+      ADMIN_LOGINS: ${ADMIN_LOGINS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - piscasino
+
+  frontend:
+    build: ./frontend
+    container_name: piscasino-frontend
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:4321/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - piscasino
+
+  gateway:
+    build: ./gateway
+    container_name: piscasino-gateway
+    environment:
+      FRONTEND_URL: http://frontend:4321
+      BACKEND_URL: http://backend:3000
+    ports:
+      - "8080:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    networks:
+      - piscasino
+
+volumes:
+  pgdata:
+
+networks:
+  piscasino:
+    driver: bridge

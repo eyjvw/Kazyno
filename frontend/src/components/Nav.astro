@@ -1,0 +1,729 @@
+---
+// Top navigation shared by the lobby and game pages.
+---
+
+<div class="boot" data-boot>
+  <div class="boot-inner">
+    <span class="boot-brand">PIS<b>CASINO</b></span>
+    <span class="spinner"></span>
+  </div>
+</div>
+
+<nav class="nav">
+  <a class="brand" href="/app">PIS<b>CASINO</b></a>
+  <div class="links">
+    <a href="/app" data-link="/app">Casino</a>
+    <a href="/leaderboard" data-link="/leaderboard">Classement</a>
+    <a href="/paris" data-link="/paris">Paris</a>
+    <a href="/admin" data-link="/admin" data-admin-link hidden>Admin</a>
+  </div>
+  <span class="spacer"></span>
+  <span class="pill"><b data-balance>—</b><span>pts</span></span>
+
+  <!-- Notifications popover -->
+  <div class="pop" data-notif-pop>
+    <button class="icon-btn" data-notif-toggle title="Notifications" aria-expanded="false">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+      </svg>
+      <span class="badge" data-notif-badge hidden></span>
+    </button>
+    <div class="menu friends-menu" data-notif-menu hidden>
+      <div class="menu-head">
+        <span class="menu-name">Notifications</span>
+        <button class="menu-link clear" data-notif-clear>Tout effacer</button>
+      </div>
+      <ul class="fr-list" data-notif-list><li class="fr-empty">Aucune notification</li></ul>
+    </div>
+  </div>
+
+  <!-- Friends popover -->
+  <div class="pop" data-friends-pop>
+    <button class="icon-btn" data-friends-toggle title="Amis" aria-expanded="false">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+        <circle cx="9" cy="7" r="4"></circle>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+      </svg>
+      <span class="badge" data-req-badge hidden></span>
+    </button>
+
+    <div class="menu friends-menu" data-friends-menu hidden>
+      <div class="menu-head">
+        <span class="menu-name">Amis</span>
+        <a class="menu-link" href="/friends">Gérer / chercher →</a>
+      </div>
+      <div class="req-line" data-req-line hidden></div>
+      <ul class="fr-list" data-fr-list>
+        <li class="fr-empty">Chargement…</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Account popover -->
+  <div class="pop account" data-account>
+    <button class="acct-btn" data-acct-toggle aria-haspopup="true" aria-expanded="false">
+      <span class="avatar-wrap">
+        <img class="avatar" data-avatar width="28" height="28" alt="" hidden />
+        <span class="avatar fallback" data-avatar-fallback hidden></span>
+        <span class="status-dot" title="En ligne"></span>
+      </span>
+      <span class="acct-name" data-user>…</span>
+      <span class="caret">▾</span>
+    </button>
+
+    <div class="menu" data-menu hidden>
+      <div class="menu-head">
+        <span class="menu-name" data-menu-name></span>
+        <span class="menu-sub" data-menu-sub></span>
+      </div>
+      <button class="menu-item" data-logout>Se deconnecter</button>
+      <button class="menu-item danger" data-delete>Supprimer mon compte</button>
+    </div>
+  </div>
+</nav>
+
+<script>
+  import {
+    loadMe,
+    onBalance,
+    logout,
+    deleteAccount,
+    connectRealtime,
+    getFriends,
+    getRequests,
+    onFriendEvent,
+    onPresence,
+    loadPresence,
+    adminMe,
+    getNotifications,
+    markNotifsRead,
+    deleteNotif,
+    clearNotifs,
+    onNotification,
+    type FriendCard,
+  } from "../lib/casino";
+
+  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s);
+
+  // Active top link
+  const path = location.pathname;
+  document.querySelectorAll<HTMLAnchorElement>("[data-link]").forEach((a) => {
+    const target = a.dataset.link!;
+    const active =
+      target === "/app"
+        ? path === "/app" || path.startsWith("/games/")
+        : path.startsWith(target);
+    a.classList.toggle("is-active", active);
+  });
+
+  const balanceEl = $("[data-balance]");
+  const userEl = $("[data-user]");
+  const avatar = $<HTMLImageElement>("[data-avatar]");
+  const fallback = $("[data-avatar-fallback]");
+  const menuName = $("[data-menu-name]");
+  const menuSub = $("[data-menu-sub]");
+
+  onBalance((pts) => {
+    if (balanceEl) balanceEl.textContent = pts.toLocaleString("fr-FR");
+  });
+
+  loadMe().then((me) => {
+    if (!me) {
+      location.replace("/");
+      return;
+    }
+    const name = me.login;
+    if (userEl) userEl.textContent = name;
+    if (menuName) menuName.textContent = me.display_name || name;
+    if (menuSub) menuSub.textContent = "@" + name;
+    if (me.image_url && avatar) {
+      avatar.src = me.image_url;
+      avatar.hidden = false;
+      fallback?.setAttribute("hidden", "");
+    } else if (fallback) {
+      fallback.textContent = name.charAt(0).toUpperCase();
+      fallback.hidden = false;
+    }
+    connectRealtime();
+    loadPresence();
+    refreshRequests();
+    refreshFriends();
+    refreshNotifs();
+    hideBoot();
+    adminMe().then((ok) => {
+      if (ok) $("[data-admin-link]")?.removeAttribute("hidden");
+    });
+  });
+
+  // Boot loader: always show it briefly (min), then hide once ready.
+  const boot = document.querySelector<HTMLElement>("[data-boot]");
+  const BOOT_MIN = 450;
+  const bootStart = Date.now();
+  let bootDone = false;
+  function hideBoot() {
+    if (bootDone) return;
+    bootDone = true;
+    const wait = Math.max(0, BOOT_MIN - (Date.now() - bootStart));
+    setTimeout(() => {
+      if (!boot) return;
+      boot.classList.add("hide");
+      document.body.classList.add("booted");
+      setTimeout(() => boot.remove(), 500);
+    }, wait);
+  }
+  // Safety: never trap the user behind the loader.
+  setTimeout(hideBoot, 4000);
+
+  // ── Friends popover content ───────────────────────────────────────────
+  const badge = $("[data-req-badge]");
+  const reqLine = $("[data-req-line]");
+  const frList = $("[data-fr-list]");
+  const initial = (n: string) => n.charAt(0).toUpperCase();
+
+  async function refreshRequests() {
+    const { incoming } = await getRequests();
+    const n = incoming.length;
+    if (badge) {
+      badge.textContent = String(n);
+      badge.hidden = n === 0;
+    }
+    if (reqLine) {
+      if (n) {
+        reqLine.innerHTML = `<a href="/friends">${n} demande(s) reçue(s) →</a>`;
+        reqLine.hidden = false;
+      } else {
+        reqLine.hidden = true;
+      }
+    }
+  }
+
+  function renderFriends(list: FriendCard[]) {
+    if (!frList) return;
+    const sorted = [...list].sort(
+      (a, b) =>
+        Number(b.online) - Number(a.online) || a.login.localeCompare(b.login),
+    );
+    frList.innerHTML = sorted.length
+      ? sorted
+          .map((f) => {
+            const av = f.image_url
+              ? `<img class="fr-av" src="${f.image_url}" width="30" height="30" alt="" />`
+              : `<span class="fr-av fb">${initial(f.login)}</span>`;
+            return `<li class="fr-item">
+              <a class="fr-avwrap" href="/profile?u=${f.login}">${av}<span class="fr-dot ${f.online ? "on" : "off"}"></span></a>
+              <a class="fr-name" href="/profile?u=${f.login}">${f.display_name || f.login}</a>
+              <span class="fr-st ${f.online ? "on" : "off"}">${f.online ? "en ligne" : ""}</span>
+            </li>`;
+          })
+          .join("")
+      : `<li class="fr-empty">Aucun ami. <a href="/friends">Cherche →</a></li>`;
+  }
+
+  async function refreshFriends() {
+    renderFriends(await getFriends());
+  }
+
+  onFriendEvent(() => {
+    refreshRequests();
+    refreshFriends();
+  });
+  onPresence(() => refreshFriends());
+
+  // ── Notifications ─────────────────────────────────────────────────────
+  const notifBadge = document.querySelector<HTMLElement>("[data-notif-badge]");
+  const notifList = document.querySelector<HTMLElement>("[data-notif-list]");
+  const timeAgo = (iso: string) => {
+    const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 60) return "à l'instant";
+    if (s < 3600) return `${Math.floor(s / 60)} min`;
+    if (s < 86400) return `${Math.floor(s / 3600)} h`;
+    return `${Math.floor(s / 86400)} j`;
+  };
+  function renderNotifs(items: any[]) {
+    if (!notifList) return;
+    notifList.innerHTML = items.length
+      ? items
+          .map((n) => {
+            const who = n.from_name || n.from_login || "Système";
+            const av = n.from_image
+              ? `<img class="fr-av" src="${n.from_image}" width="30" height="30" alt="" />`
+              : `<span class="fr-av fb">${who.charAt(0).toUpperCase()}</span>`;
+            const inner = `${av}<span class="nf-body"><b>${who}</b><span class="nf-msg">${n.message}</span><span class="nf-time">${timeAgo(n.created_at)}</span></span>`;
+            const del = n.id ? `<button class="nf-del" data-del="${n.id}" title="Supprimer">✕</button>` : "";
+            return n.link
+              ? `<li class="fr-item nf ${n.read ? "" : "unread"}"><a class="nf-link" href="${n.link}">${inner}</a>${del}</li>`
+              : `<li class="fr-item nf ${n.read ? "" : "unread"}">${inner}${del}</li>`;
+          })
+          .join("")
+      : `<li class="fr-empty">Aucune notification</li>`;
+  }
+  async function refreshNotifs() {
+    const { items, unread } = await getNotifications();
+    if (notifBadge) {
+      notifBadge.textContent = String(unread);
+      notifBadge.hidden = unread === 0;
+    }
+    renderNotifs(items);
+  }
+  onNotification(() => refreshNotifs());
+
+  // Delete one / clear all
+  notifList?.addEventListener("click", async (e) => {
+    const del = (e.target as HTMLElement).closest<HTMLElement>("[data-del]");
+    if (!del) return;
+    e.preventDefault();
+    e.stopPropagation();
+    await deleteNotif(Number(del.dataset.del));
+    refreshNotifs();
+  });
+  document
+    .querySelector("[data-notif-clear]")
+    ?.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await clearNotifs();
+      refreshNotifs();
+    });
+
+  // ── Popovers (generic) ────────────────────────────────────────────────
+  function wirePopover(rootSel: string, toggleSel: string, menuSel: string) {
+    const root = $(rootSel);
+    const toggle = $<HTMLButtonElement>(toggleSel);
+    const menu = $(menuSel);
+    if (!root || !toggle || !menu) return;
+    toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const opening = menu.hasAttribute("hidden");
+      closeAll();
+      if (opening) {
+        menu.removeAttribute("hidden");
+        toggle.setAttribute("aria-expanded", "true");
+      }
+    });
+    document.addEventListener("click", (e) => {
+      if (!root.contains(e.target as Node)) {
+        menu.setAttribute("hidden", "");
+        toggle.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+  function closeAll() {
+    document.querySelectorAll<HTMLElement>(".menu").forEach((m) => m.setAttribute("hidden", ""));
+    document
+      .querySelectorAll<HTMLButtonElement>("[aria-expanded]")
+      .forEach((b) => b.setAttribute("aria-expanded", "false"));
+  }
+  wirePopover("[data-notif-pop]", "[data-notif-toggle]", "[data-notif-menu]");
+  wirePopover("[data-friends-pop]", "[data-friends-toggle]", "[data-friends-menu]");
+  wirePopover("[data-account]", "[data-acct-toggle]", "[data-menu]");
+
+  // Mark notifications read when the panel opens.
+  $("[data-notif-toggle]")?.addEventListener("click", () => {
+    setTimeout(async () => {
+      const open = !$("[data-notif-menu]")?.hasAttribute("hidden");
+      if (open) {
+        await markNotifsRead();
+        if (notifBadge) notifBadge.hidden = true;
+      }
+    }, 0);
+  });
+
+  $("[data-logout]")?.addEventListener("click", async () => {
+    await logout();
+    location.replace("/");
+  });
+  $("[data-delete]")?.addEventListener("click", async () => {
+    const ok = confirm(
+      "Supprimer definitivement ton compte et toutes tes donnees ? Cette action est irreversible.",
+    );
+    if (!ok) return;
+    const done = await deleteAccount();
+    if (done) location.replace("/?deleted=1");
+    else alert("Echec de la suppression. Reessaie.");
+  });
+</script>
+
+<style>
+  .boot {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.45s ease;
+  }
+  .boot.hide {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .boot-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 22px;
+  }
+  .boot-brand {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--fg);
+  }
+  .boot-brand b {
+    color: var(--accent);
+  }
+  .spinner {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 3px solid var(--line);
+    border-top-color: var(--accent);
+    animation: bootspin 0.8s linear infinite;
+  }
+  @keyframes bootspin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .links {
+    display: flex;
+    gap: 4px;
+  }
+  .links a {
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 7px 12px;
+    border-radius: 8px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .links a:hover {
+    color: var(--fg);
+  }
+  .links a.is-active {
+    color: var(--fg);
+    background: var(--panel);
+  }
+
+  .pop {
+    position: relative;
+  }
+  .icon-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .icon-btn:hover {
+    color: var(--fg);
+    border-color: var(--accent);
+  }
+  .badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 9px;
+    background: var(--lose);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--bg-2);
+  }
+
+  .acct-btn {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 10px 6px 6px;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .acct-btn:hover {
+    border-color: var(--accent);
+  }
+  .avatar-wrap {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    flex: none;
+  }
+  .avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--raise);
+  }
+  .avatar.fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    color: #fff;
+    background: var(--accent);
+  }
+  .status-dot {
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--win);
+    border: 2px solid var(--bg-2);
+    box-shadow: 0 0 6px var(--win);
+  }
+  .caret {
+    color: var(--muted);
+    font-size: 10px;
+  }
+  [hidden] {
+    display: none !important;
+  }
+
+  .menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 240px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 6px;
+    z-index: 20;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  }
+  .menu-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    padding: 8px 10px 10px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 6px;
+  }
+  .menu-name {
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .menu-sub {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .menu-link {
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .menu-item:hover {
+    background: var(--panel-2);
+  }
+  .menu-item.danger {
+    color: var(--lose);
+  }
+  .menu-item.danger:hover {
+    background: rgba(237, 65, 99, 0.12);
+  }
+
+  .friends-menu {
+    width: 280px;
+  }
+  .req-line {
+    padding: 6px 10px 10px;
+  }
+  .req-line :global(a) {
+    color: var(--lose);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .fr-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 320px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  /* friend items are injected at runtime -> global under .fr-list */
+  .fr-list :global(.fr-empty) {
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 18px 0;
+  }
+  .fr-list :global(.fr-empty a) {
+    color: var(--accent);
+  }
+  .fr-list :global(.fr-item) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+  }
+  .fr-list :global(.fr-item:hover) {
+    background: var(--panel-2);
+  }
+  .fr-list :global(.fr-avwrap) {
+    position: relative;
+    width: 30px;
+    height: 30px;
+    flex: none;
+  }
+  .fr-list :global(.fr-av) {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--raise);
+  }
+  .fr-list :global(.fr-av.fb) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+    color: #fff;
+    background: var(--accent);
+  }
+  .fr-list :global(.fr-dot) {
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--panel);
+  }
+  .fr-list :global(.fr-dot.on) {
+    background: var(--win);
+  }
+  .fr-list :global(.fr-dot.off) {
+    background: var(--muted);
+  }
+  .fr-list :global(.fr-name) {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .fr-list :global(.fr-st) {
+    font-size: 11px;
+  }
+  .fr-list :global(.fr-st.on) {
+    color: var(--win);
+  }
+  /* clear button is a <button> not an <a> */
+  button.menu-link {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button.menu-link:hover {
+    text-decoration: underline;
+  }
+
+  /* notification rows */
+  .fr-list :global(.nf) {
+    align-items: flex-start;
+    text-transform: uppercase;
+  }
+  .fr-list :global(.nf.unread) {
+    background: rgba(59, 130, 246, 0.1);
+  }
+  .fr-list :global(.nf-link) {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    width: 100%;
+    color: inherit;
+  }
+  .fr-list :global(.nf-body) {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+  .fr-list :global(.nf-body b) {
+    font-size: 13px;
+  }
+  .fr-list :global(.nf-msg) {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: normal;
+  }
+  .fr-list :global(.nf-time) {
+    font-size: 10px;
+    color: var(--muted);
+    opacity: 0.7;
+    margin-top: 2px;
+  }
+  .fr-list :global(.nf-del) {
+    margin-left: auto;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    line-height: 1;
+    transition: color 0.12s, background 0.12s;
+    align-self: center;
+  }
+  .fr-list :global(.nf-del:hover) {
+    color: var(--lose);
+    background: rgba(237, 65, 99, 0.12);
+  }
+
+  @media (max-width: 560px) {
+    .acct-name {
+      display: none;
+    }
+  }
+</style>

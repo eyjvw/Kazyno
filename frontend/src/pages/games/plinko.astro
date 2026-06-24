@@ -1,0 +1,176 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+
+const MULT = [5.6, 2.1, 1.1, 1, 0.5, 1, 1.1, 2.1, 5.6];
+const ROWS = 8;
+---
+
+<Layout title="PISCASINO — Plinko">
+  <Nav />
+  <div class="shell">
+    <aside class="panel betpanel">
+      <div class="field">
+        <label>Mise</label>
+        <input class="input" data-bet type="number" min="1" value="100" />
+        <div class="chips">
+          <button data-amt="half">½</button>
+          <button data-amt="double">2×</button>
+          <button data-amt="max">Max</button>
+        </div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat"><span>Max</span><b>5.6×</b></div>
+        <div class="stat"><span>Min</span><b>0.5×</b></div>
+      </div>
+
+      <button class="btn bet-btn" data-play>Lacher la bille</button>
+      <p class="result" data-result></p>
+    </aside>
+
+    <main class="panel stage">
+      <div class="board" data-board>
+        <div class="pegs">
+          {
+            Array.from({ length: ROWS }).map((_, r) => (
+              <div class="peg-row">
+                {Array.from({ length: r + 3 }).map(() => (
+                  <span class="peg" />
+                ))}
+              </div>
+            ))
+          }
+        </div>
+        <div class="ball" data-ball hidden></div>
+      </div>
+      <div class="buckets">
+        {
+          MULT.map((m, i) => (
+            <span class={`bucket b${i}`} data-bucket={i}>
+              {m}×
+            </span>
+          ))
+        }
+      </div>
+    </main>
+  </div>
+</Layout>
+
+<script>
+  import { bet, setupAmount, fmt, BetError } from "../../lib/casino";
+
+  const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
+  const result = document.querySelector<HTMLElement>("[data-result]")!;
+  const play = document.querySelector<HTMLButtonElement>("[data-play]")!;
+  const board = document.querySelector<HTMLElement>("[data-board]")!;
+  const ball = document.querySelector<HTMLElement>("[data-ball]")!;
+  const buckets = document.querySelectorAll<HTMLElement>("[data-bucket]");
+
+  setupAmount(betInput);
+
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  async function drop(path: number[], bucket: number) {
+    const rect = board.getBoundingClientRect();
+    const unit = rect.width / 9 / 2;
+    let x = 0;
+    const top0 = 8;
+    const stepY = (rect.height - 24) / path.length;
+    ball.hidden = false;
+    ball.style.transition = "none";
+    ball.style.transform = `translate(-50%,0) translate(0px, ${top0}px)`;
+    ball.style.left = "50%";
+    await wait(20);
+    ball.style.transition = "transform 0.18s ease-in";
+    for (let i = 0; i < path.length; i++) {
+      x += path[i] ? unit : -unit;
+      ball.style.transform = `translate(-50%,0) translate(${x}px, ${top0 + (i + 1) * stepY}px)`;
+      await wait(180);
+    }
+    buckets.forEach((b, i) => b.classList.toggle("hit", i === bucket));
+    setTimeout(() => buckets.forEach((b) => b.classList.remove("hit")), 1200);
+  }
+
+  play.addEventListener("click", async () => {
+    play.disabled = true;
+    result.textContent = "";
+    result.className = "result";
+    try {
+      const r: any = await bet("plinko", { bet: Number(betInput.value) });
+      await drop(r.path, r.bucket);
+      result.textContent = r.win
+        ? `${r.multiplier}× · +${fmt(r.payout)} pts`
+        : `${r.multiplier}× · -${fmt(Number(betInput.value) - r.payout)} pts`;
+      result.classList.add(r.win ? "win" : "lose");
+    } catch (e) {
+      result.textContent = e instanceof BetError ? e.message : "Erreur";
+      result.classList.add("lose");
+    } finally {
+      play.disabled = false;
+    }
+  });
+</script>
+
+<style>
+  .board {
+    position: relative;
+    width: min(420px, 100%);
+    height: 320px;
+  }
+  .pegs {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    padding: 4px 0;
+  }
+  .peg-row {
+    display: flex;
+    justify-content: center;
+    gap: 26px;
+  }
+  .peg {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--raise);
+  }
+  .ball {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+    z-index: 2;
+  }
+  .buckets {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 4px;
+    width: min(420px, 100%);
+  }
+  .bucket {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 8px 2px;
+    border-radius: 6px;
+    background: var(--raise);
+    font-variant-numeric: tabular-nums;
+    transition: transform 0.1s, filter 0.1s;
+  }
+  /* heat: edges hot, center cold */
+  .b0, .b8 { background: #ed4163; }
+  .b1, .b7 { background: #f0803c; }
+  .b2, .b6 { background: #f2b33d; }
+  .b3, .b5 { background: #2f4553; }
+  .b4 { background: #213743; }
+  .bucket.hit {
+    transform: translateY(-4px) scale(1.08);
+    filter: brightness(1.4);
+  }
+</style>

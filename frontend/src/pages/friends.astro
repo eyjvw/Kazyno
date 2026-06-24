@@ -1,0 +1,401 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Layout title="PISCASINO — Amis">
+  <Nav />
+  <main class="wrap">
+    <header class="head">
+      <h1>Amis</h1>
+      <p>Cherche des joueurs, ajoute-les, vois qui est en ligne.</p>
+    </header>
+
+    <div class="search">
+      <input
+        class="input"
+        data-search
+        type="search"
+        placeholder="Rechercher un joueur (login ou nom)…"
+        autocomplete="off"
+      />
+      <ul class="list results" data-results hidden></ul>
+    </div>
+
+    <div class="tabs">
+      <button class="tab is-active" data-tab="friends">
+        Amis <span class="count" data-c-friends>0</span>
+      </button>
+      <button class="tab" data-tab="requests">
+        Demandes <span class="count" data-c-requests>0</span>
+      </button>
+    </div>
+
+    <section data-pane="friends">
+      <ul class="list" data-friends><li class="empty">Chargement…</li></ul>
+    </section>
+
+    <section data-pane="requests" hidden>
+      <ul class="list" data-requests><li class="empty">Aucune demande.</li></ul>
+    </section>
+  </main>
+  <Footer />
+</Layout>
+
+<script>
+  import {
+    getFriends,
+    getRequests,
+    searchUsers,
+    sendFriendRequest,
+    acceptFriend,
+    declineFriend,
+    cancelFriend,
+    removeFriend,
+    onFriendEvent,
+    onPresence,
+    loadPresence,
+    fmt,
+    type FriendCard,
+    type RequestsData,
+    type SearchResult,
+  } from "../lib/casino";
+
+  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
+  const friendsEl = $("[data-friends]");
+  const requestsEl = $("[data-requests]");
+  const resultsEl = $("[data-results]");
+  const searchInput = $<HTMLInputElement>("[data-search]");
+  const cFriends = $("[data-c-friends]");
+  const cRequests = $("[data-c-requests]");
+
+  const initial = (n: string) => n.charAt(0).toUpperCase();
+  const avatar = (u: { image_url: string | null; login: string }) =>
+    u.image_url
+      ? `<img class="av" src="${u.image_url}" width="36" height="36" alt="" />`
+      : `<span class="av fb">${initial(u.login)}</span>`;
+  const dot = (online?: boolean) =>
+    `<span class="pres ${online ? "on" : "off"}" title="${online ? "en ligne" : "hors ligne"}"></span>`;
+
+  // ── Friends + requests ──────────────────────────────────────────────
+  function renderFriends(list: FriendCard[]) {
+    cFriends.textContent = String(list.length);
+    friendsEl.innerHTML = list.length
+      ? list
+          .map(
+            (f) => `<li class="row">
+              <a class="avwrap" href="/profile?u=${f.login}">${avatar(f)}${dot(f.online)}</a>
+              <a class="name" href="/profile?u=${f.login}">${f.display_name || f.login}<small>@${f.login}</small></a>
+              <span class="pts">${fmt(f.points ?? 0)} pts</span>
+              <button class="ghost-btn sm" data-remove="${f.id}">Retirer</button>
+            </li>`,
+          )
+          .join("")
+      : `<li class="empty">Aucun ami. Cherche quelqu'un ci-dessus 👆</li>`;
+  }
+
+  function renderRequests(data: RequestsData) {
+    const { incoming, outgoing } = data;
+    cRequests.textContent = String(incoming.length + outgoing.length);
+
+    if (!incoming.length && !outgoing.length) {
+      requestsEl.innerHTML = `<li class="empty">Aucune demande.</li>`;
+      return;
+    }
+
+    const inHtml = incoming
+      .map(
+        (u) => `<li class="row">
+          <a class="avwrap" href="/profile?u=${u.login}">${avatar(u)}</a>
+          <a class="name" href="/profile?u=${u.login}">${u.display_name || u.login}<small>@${u.login}</small></a>
+          <button class="btn sm" data-accept="${u.id}">Accepter</button>
+          <button class="ghost-btn sm" data-decline="${u.id}">Refuser</button>
+        </li>`,
+      )
+      .join("");
+
+    const outHtml = outgoing
+      .map(
+        (u) => `<li class="row">
+          <a class="avwrap" href="/profile?u=${u.login}">${avatar(u)}</a>
+          <a class="name" href="/profile?u=${u.login}">${u.display_name || u.login}<small>@${u.login}</small></a>
+          <span class="tag">En attente</span>
+          <button class="ghost-btn sm" data-cancel="${u.id}">Annuler</button>
+        </li>`,
+      )
+      .join("");
+
+    requestsEl.innerHTML =
+      (incoming.length ? `<li class="subhead">Reçues</li>${inHtml}` : "") +
+      (outgoing.length ? `<li class="subhead">Envoyées</li>${outHtml}` : "");
+  }
+
+  async function refresh() {
+    const [friends, requests] = await Promise.all([getFriends(), getRequests()]);
+    renderFriends(friends);
+    renderRequests(requests);
+  }
+
+  // ── Search ──────────────────────────────────────────────────────────
+  const actionFor = (r: SearchResult) => {
+    switch (r.status) {
+      case "friend":
+        return `<span class="tag ok">Ami ✓</span>`;
+      case "pending_out":
+        return `<span class="tag">En attente</span>`;
+      case "pending_in":
+        return `<button class="btn sm" data-accept="${r.id}">Accepter</button>`;
+      default:
+        return `<button class="btn sm" data-add="${r.id}" data-login="${r.login}">Ajouter</button>`;
+    }
+  };
+
+  function renderResults(list: SearchResult[]) {
+    if (!list.length) {
+      resultsEl.innerHTML = `<li class="empty sm">Aucun résultat.</li>`;
+      resultsEl.hidden = false;
+      return;
+    }
+    resultsEl.innerHTML = list
+      .map(
+        (r) => `<li class="row">
+          <a class="avwrap" href="/profile?u=${r.login}">${avatar(r)}${dot(r.online)}</a>
+          <a class="name" href="/profile?u=${r.login}">${r.display_name || r.login}<small>@${r.login}</small></a>
+          ${actionFor(r)}
+        </li>`,
+      )
+      .join("");
+    resultsEl.hidden = false;
+  }
+
+  let timer: number;
+  searchInput.addEventListener("input", () => {
+    clearTimeout(timer);
+    const q = searchInput.value.trim();
+    if (!q) {
+      resultsEl.hidden = true;
+      resultsEl.innerHTML = "";
+      return;
+    }
+    timer = window.setTimeout(async () => {
+      renderResults(await searchUsers(q));
+    }, 220);
+  });
+
+  async function rerunSearch() {
+    const q = searchInput.value.trim();
+    if (q) renderResults(await searchUsers(q));
+  }
+
+  // ── Actions (delegation, works for both lists + results) ────────────
+  document.addEventListener("click", async (e) => {
+    const el = e.target as HTMLElement;
+    if (el.dataset.add) {
+      try {
+        await sendFriendRequest(el.dataset.login!);
+      } catch {}
+      await Promise.all([refresh(), rerunSearch()]);
+    } else if (el.dataset.accept) {
+      await acceptFriend(Number(el.dataset.accept));
+      await Promise.all([refresh(), rerunSearch()]);
+    } else if (el.dataset.decline) {
+      await declineFriend(Number(el.dataset.decline));
+      refresh();
+    } else if (el.dataset.cancel) {
+      await cancelFriend(Number(el.dataset.cancel));
+      await Promise.all([refresh(), rerunSearch()]);
+    } else if (el.dataset.remove) {
+      await removeFriend(Number(el.dataset.remove));
+      await Promise.all([refresh(), rerunSearch()]);
+    }
+  });
+
+  // Tabs
+  document.querySelectorAll<HTMLButtonElement>(".tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const t = tab.dataset.tab;
+      document
+        .querySelectorAll(".tab")
+        .forEach((x) => x.classList.toggle("is-active", x === tab));
+      document
+        .querySelectorAll<HTMLElement>("[data-pane]")
+        .forEach((p) => (p.hidden = p.dataset.pane !== t));
+    });
+  });
+
+  // Live
+  onFriendEvent(() => {
+    refresh();
+    rerunSearch();
+  });
+  onPresence(() => refresh());
+  loadPresence();
+  refresh();
+</script>
+
+<style>
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 40px);
+  }
+  .head h1 {
+    margin: 0;
+    font-size: clamp(28px, 5vw, 40px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+  .head p {
+    margin: 8px 0 24px;
+    color: var(--muted);
+  }
+  .search {
+    position: relative;
+    margin-bottom: 24px;
+  }
+  .results {
+    margin-top: 8px;
+  }
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 18px;
+  }
+  .tab {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .tab.is-active {
+    color: var(--fg);
+    border-color: var(--accent);
+  }
+  .count {
+    background: var(--raise);
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: 11px;
+    margin-left: 4px;
+  }
+  .list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  /* rows are injected at runtime -> target them globally under .list */
+  .list :global(.empty) {
+    color: var(--muted);
+    text-align: center;
+    padding: 36px 0;
+  }
+  .list :global(.empty.sm) {
+    padding: 16px 0;
+  }
+  .list :global(.subhead) {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 8px 4px 2px;
+  }
+  .list :global(.empty a) {
+    color: var(--accent);
+  }
+  .list :global(.row) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .list :global(.avwrap) {
+    position: relative;
+    flex: none;
+    width: 36px;
+    height: 36px;
+  }
+  .list :global(.av) {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--raise);
+  }
+  .list :global(.av.fb) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: #fff;
+    background: var(--accent);
+  }
+  .list :global(.pres) {
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    border: 2px solid var(--panel);
+  }
+  .list :global(.pres.on) {
+    background: var(--win);
+  }
+  .list :global(.pres.off) {
+    background: var(--muted);
+  }
+  .list :global(.name) {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+    font-weight: 600;
+    flex: 1;
+    min-width: 0;
+  }
+  .list :global(.name small) {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 12px;
+  }
+  .list :global(.pts) {
+    color: var(--muted);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .list :global(.tag) {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .list :global(.tag.ok) {
+    color: var(--win);
+    border-color: var(--win);
+  }
+  .list :global(.ghost-btn.sm),
+  .list :global(.btn.sm) {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  @media (max-width: 560px) {
+    .list :global(.row) {
+      flex-wrap: wrap;
+    }
+    .list :global(.pts) {
+      display: none;
+    }
+  }
+</style>

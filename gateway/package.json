@@ -1,0 +1,12 @@
+{
+  "name": "gateway",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts"
+  },
+  "dependencies": {
+    "elysia": "^1.1.0"
+  }
+}

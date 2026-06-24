@@ -1,0 +1,428 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+---
+
+<Layout title="PISCASINO — Table">
+  <Nav />
+  <main class="wrap">
+    <div class="topbar">
+      <a class="back" href="/blackjack">← Quitter</a>
+      <span class="rname" data-rname>Table</span>
+      <span class="code">Code <b data-code>—</b></span>
+    </div>
+
+    <div class="scene" data-scene>
+      <div class="felt2d" data-felt2d></div>
+    </div>
+
+    <div class="controls panel" data-controls>
+      <span class="wait">Connexion à la table…</span>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  import {
+    subscribeRoom,
+    unsubscribeRoom,
+    onRoom,
+    getMyId,
+    loadMe,
+    getFriends,
+    bjStart,
+    bjBet,
+    bjHit,
+    bjStand,
+    bjDouble,
+    bjAddBot,
+    bjInvite,
+    toast,
+    type FriendCard,
+  } from "../lib/casino";
+
+  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
+  const roomId = new URLSearchParams(location.search).get("room") ?? "";
+  const controls = $("[data-controls]");
+  const felt2d = $("[data-felt2d]");
+  let scene: any = null;
+
+  if (!roomId) location.href = "/blackjack";
+
+  // ── 2D DOM fallback renderer (always available) ───────────────────────
+  const RED = (s: string) => s === "♥" || s === "♦";
+  const cardHtml = (c: { r: string; s: string }) =>
+    c.r === "?"
+      ? `<span class="c2 back"></span>`
+      : `<span class="c2 ${RED(c.s) ? "red" : ""}"><b>${c.r}</b><i>${c.s}</i></span>`;
+  const RES: Record<string, string> = {
+    win: "Gagné", lose: "Perdu", push: "Égalité", blackjack: "Blackjack !", bust: "Bust",
+  };
+
+  function renderFelt(room: any) {
+    if (scene) return; // 3D handles it
+    const myId = getMyId();
+    const d = room.dealer;
+    felt2d.innerHTML = `
+      <div class="d2">
+        <span class="lab">Croupier ${d.value != null ? "· " + d.value : ""}</span>
+        <div class="row2">${d.cards.map(cardHtml).join("") || '<span class="c2 empty"></span>'}</div>
+      </div>
+      <div class="seats2">
+        ${room.seats
+          .map((s: any) => {
+            if (!s) return `<div class="seat2 empty">Libre</div>`;
+            const turn = room.turnSeatId === s.seatId;
+            const res =
+              s.result && room.phase === "payout"
+                ? `<span class="r2 ${s.result}">${RES[s.result] ?? ""}${s.win > 0 ? " +" + s.win : ""}</span>`
+                : "";
+            return `<div class="seat2 ${turn ? "turn" : ""} ${s.userId === myId ? "me" : ""}">
+              <span class="sn">${s.display_name || s.login}${s.isBot ? " 🤖" : ""}</span>
+              <div class="row2">${(s.cards || []).map(cardHtml).join("") || '<span class="c2 empty"></span>'}</div>
+              <span class="sf">${s.cards?.length ? `<b>${s.value}</b>` : ""}${s.bet ? ` · ${s.bet} pts` : ""} ${res}</span>
+            </div>`;
+          })
+          .join("")}
+      </div>`;
+  }
+
+  // ── Controls ──────────────────────────────────────────────────────────
+  function renderControls(room: any) {
+    const myId = getMyId();
+    const mySeat = room.seats.find((s: any) => s && s.userId === myId);
+    const isHost = room.hostId === myId;
+    const isMyTurn =
+      room.phase === "playing" && mySeat && room.turnSeatId === mySeat.seatId;
+    let html = "";
+    if (room.phase === "waiting") {
+      if (isHost) {
+        const n = room.seats.filter(Boolean).length;
+        html = `<button class="btn" data-start ${n < 1 ? "disabled" : ""}>Démarrer la manche</button>
+          <button class="btn ghost" data-bot>+ Bot</button>
+          <button class="btn ghost" data-invite>Inviter un ami</button>`;
+      } else html = `<span class="wait">En attente que l'hôte lance la manche…</span>`;
+    } else if (room.phase === "betting") {
+      if (mySeat && mySeat.bet === 0)
+        html = `<div class="betrow"><input class="input bet" data-betamt type="number" min="10" value="100" />
+            <button class="btn" data-bet>Miser</button></div>`;
+      else html = `<span class="wait">Mise placée — en attente…</span>`;
+    } else if (room.phase === "playing") {
+      if (isMyTurn) {
+        const canDouble = mySeat.cards.length === 2;
+        html = `<button class="btn" data-hit>Tirer</button>
+          <button class="btn ghost" data-stand>Rester</button>
+          ${canDouble ? `<button class="btn ghost" data-double>Doubler</button>` : ""}`;
+      } else {
+        const cur = room.seats.find((s: any) => s && s.seatId === room.turnSeatId);
+        html = `<span class="wait">Tour de ${cur ? cur.display_name || cur.login : "…"}</span>`;
+      }
+    } else if (room.phase === "dealer") html = `<span class="wait">Le croupier joue…</span>`;
+    else if (room.phase === "payout")
+      html = `<span class="wait">Manche terminée — nouvelle manche bientôt…</span>`;
+    controls.innerHTML = html;
+  }
+
+  controls.addEventListener("click", async (e) => {
+    const el = e.target as HTMLElement;
+    try {
+      if (el.hasAttribute("data-start")) await bjStart(roomId);
+      else if (el.hasAttribute("data-bot")) await bjAddBot(roomId);
+      else if (el.hasAttribute("data-bet"))
+        await bjBet(roomId, Number($<HTMLInputElement>("[data-betamt]").value));
+      else if (el.hasAttribute("data-hit")) await bjHit(roomId);
+      else if (el.hasAttribute("data-stand")) await bjStand(roomId);
+      else if (el.hasAttribute("data-double")) await bjDouble(roomId);
+      else if (el.hasAttribute("data-invite")) openInvite();
+    } catch (err: any) {
+      toast(err?.message ?? "Erreur");
+    }
+  });
+
+  async function openInvite() {
+    const friends: FriendCard[] = await getFriends();
+    const ex = document.querySelector(".invite-pop");
+    if (ex) {
+      ex.remove();
+      return;
+    }
+    const pop = document.createElement("div");
+    pop.className = "invite-pop panel";
+    pop.innerHTML = friends.length
+      ? friends
+          .map(
+            (f) =>
+              `<button class="inv-item" data-inv="${f.id}">${f.display_name || f.login}${f.online ? " 🟢" : ""}</button>`,
+          )
+          .join("")
+      : `<span class="inv-empty">Aucun ami à inviter.</span>`;
+    controls.appendChild(pop);
+    pop.addEventListener("click", async (e) => {
+      const id = (e.target as HTMLElement).dataset.inv;
+      if (!id) return;
+      try {
+        await bjInvite(roomId, Number(id));
+        toast("Invitation envoyée");
+      } catch (err: any) {
+        toast(err?.message ?? "Erreur");
+      }
+      pop.remove();
+    });
+  }
+
+  let gotState = false;
+  onRoom((msg) => {
+    if (msg.type === "room" && msg.room.id === roomId) gotState = true;
+    if (msg.type === "room_closed") {
+      toast("La table a été fermée");
+      setTimeout(() => (location.href = "/blackjack"), 1200);
+      return;
+    }
+    if (msg.type === "room" && msg.room.id === roomId) {
+      $("[data-rname]").textContent = msg.room.name;
+      $("[data-code]").textContent = msg.room.code;
+      if (scene) scene.update(msg.room, getMyId());
+      else renderFelt(msg.room);
+      renderControls(msg.room);
+    }
+  });
+
+  window.addEventListener("beforeunload", () => {
+    unsubscribeRoom(roomId);
+    navigator.sendBeacon?.(`/api/bj/rooms/${roomId}/leave`);
+  });
+
+  // Subscribe FIRST so the table works even if 3D/WebGL is unavailable.
+  loadMe().then(async () => {
+    subscribeRoom(roomId);
+    // Room gone (server restarted / bad id) -> back to lobby.
+    setTimeout(() => {
+      if (!gotState) {
+        toast("Table introuvable");
+        location.href = "/blackjack";
+      }
+    }, 2500);
+    try {
+      const { BlackjackScene } = await import("../lib/bjscene");
+      const s = new BlackjackScene($("[data-scene]"));
+      felt2d.style.display = "none";
+      scene = s;
+    } catch (e) {
+      console.warn("3D indisponible, fallback 2D", e);
+    }
+  });
+</script>
+
+<style>
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 16px clamp(12px, 3vw, 32px) 40px;
+  }
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 0 14px;
+  }
+  .back {
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .back:hover {
+    color: var(--fg);
+  }
+  .rname {
+    font-weight: 700;
+  }
+  .code {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .code b {
+    color: var(--accent);
+    letter-spacing: 0.1em;
+  }
+  .scene {
+    position: relative;
+    width: 100%;
+    min-height: min(58vh, 540px);
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: radial-gradient(ellipse at 50% 0%, #16384a, #0d2230);
+  }
+  .scene :global(canvas) {
+    display: block;
+  }
+
+  /* 2D fallback felt */
+  .felt2d {
+    padding: 26px 18px;
+  }
+  .felt2d :global(.d2) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 26px;
+  }
+  .felt2d :global(.lab) {
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .felt2d :global(.row2) {
+    display: flex;
+    justify-content: center;
+    min-height: 60px;
+    max-width: 100%;
+  }
+  .felt2d :global(.row2 .c2 + .c2) {
+    margin-left: -22px; /* overlap so many cards fit */
+  }
+  .felt2d :global(.c2) {
+    flex: none;
+    width: 42px;
+    height: 60px;
+    border-radius: 7px;
+    background: #fff;
+    color: #16202b;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  }
+  .felt2d :global(.c2 b) {
+    font-size: 17px;
+  }
+  .felt2d :global(.c2 i) {
+    font-style: normal;
+    font-size: 15px;
+  }
+  .felt2d :global(.c2.red) {
+    color: #d4123f;
+  }
+  .felt2d :global(.c2.back) {
+    background: repeating-linear-gradient(45deg, #3b82f6, #3b82f6 6px, #2563c9 6px, #2563c9 12px);
+  }
+  .felt2d :global(.c2.empty) {
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: none;
+  }
+  .felt2d :global(.seats2) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+  }
+  .felt2d :global(.seat2) {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px;
+    width: 180px;
+    max-width: 180px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+  }
+  .felt2d :global(.dealer-overlap),
+  .felt2d :global(.d2 .row2 .c2 + .c2) {
+    margin-left: -22px;
+  }
+  .felt2d :global(.seat2.empty) {
+    opacity: 0.4;
+    justify-content: center;
+    min-height: 110px;
+    color: var(--muted);
+  }
+  .felt2d :global(.seat2.turn) {
+    border-color: var(--accent);
+    box-shadow: 0 0 16px rgba(59, 130, 246, 0.4);
+  }
+  .felt2d :global(.seat2.me) {
+    background: rgba(59, 130, 246, 0.1);
+  }
+  .felt2d :global(.sn) {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .felt2d :global(.sf) {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .felt2d :global(.r2) {
+    font-weight: 700;
+  }
+  .felt2d :global(.r2.win),
+  .felt2d :global(.r2.blackjack) {
+    color: var(--win);
+  }
+  .felt2d :global(.r2.lose),
+  .felt2d :global(.r2.bust) {
+    color: var(--lose);
+  }
+
+  .controls {
+    margin-top: 14px;
+    padding: 16px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    position: relative;
+    min-height: 60px;
+  }
+  .controls :global(.btn.ghost) {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+  }
+  .controls :global(.wait) {
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .controls :global(.betrow) {
+    display: flex;
+    gap: 8px;
+  }
+  .controls :global(.input.bet) {
+    width: 130px;
+  }
+  .invite-pop {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 16px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 200px;
+    z-index: 30;
+  }
+  .invite-pop :global(.inv-item) {
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .invite-pop :global(.inv-item:hover) {
+    background: var(--panel-2);
+  }
+  .invite-pop :global(.inv-empty) {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 10px;
+  }
+</style>

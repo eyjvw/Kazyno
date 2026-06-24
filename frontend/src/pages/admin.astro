@@ -1,0 +1,362 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Layout title="PISCASINO — Admin">
+  <Nav />
+  <main class="wrap">
+    <header class="head">
+      <h1>Panel admin 🛠️</h1>
+      <p>Notifications et gestion des points.</p>
+    </header>
+
+    <div class="grid" data-panel hidden>
+      <section class="panel card">
+        <h2>Envoyer une notification</h2>
+        <label class="lbl">Message</label>
+        <textarea class="input" data-msg rows="3" maxlength="280" placeholder="Message aux joueurs…"></textarea>
+
+        <label class="lbl">Destinataire — vide = tout le monde</label>
+        <div class="picker" data-picker="notif">
+          <input class="input" data-search placeholder="Rechercher un joueur…" autocomplete="off" />
+          <ul class="presults" data-results hidden></ul>
+          <div class="chip" data-chip hidden>
+            <img class="cav" data-chip-av width="26" height="26" alt="" hidden />
+            <span class="cav fb" data-chip-fb hidden></span>
+            <span data-chip-name></span><button type="button" data-clear>✕</button>
+          </div>
+        </div>
+
+        <button class="btn" data-send>Envoyer</button>
+        <p class="msg" data-msg-res></p>
+      </section>
+
+      <section class="panel card">
+        <h2>Ajouter / retirer des points</h2>
+        <label class="lbl">Joueur</label>
+        <div class="picker" data-picker="points">
+          <input class="input" data-search placeholder="Rechercher un joueur…" autocomplete="off" />
+          <ul class="presults" data-results hidden></ul>
+          <div class="chip" data-chip hidden>
+            <img class="cav" data-chip-av width="26" height="26" alt="" hidden />
+            <span class="cav fb" data-chip-fb hidden></span>
+            <span data-chip-name></span><button type="button" data-clear>✕</button>
+          </div>
+        </div>
+
+        <label class="lbl">Montant (négatif pour retirer)</label>
+        <input class="input" data-pts-amount type="number" value="100" />
+        <button class="btn" data-grant>Appliquer</button>
+        <p class="msg" data-pts-res></p>
+      </section>
+    </div>
+
+    <p class="denied" data-denied hidden>Accès réservé aux admins.</p>
+  </main>
+  <Footer />
+</Layout>
+
+<script>
+  import {
+    loadMe,
+    adminMe,
+    adminSearch,
+    adminNotify,
+    adminAddPoints,
+  } from "../lib/casino";
+
+  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
+
+  function makePicker(root: HTMLElement) {
+    const input = root.querySelector<HTMLInputElement>("[data-search]")!;
+    const results = root.querySelector<HTMLElement>("[data-results]")!;
+    const chip = root.querySelector<HTMLElement>("[data-chip]")!;
+    const chipName = root.querySelector<HTMLElement>("[data-chip-name]")!;
+    const chipAv = root.querySelector<HTMLImageElement>("[data-chip-av]")!;
+    const chipFb = root.querySelector<HTMLElement>("[data-chip-fb]")!;
+    let selected: string | null = null;
+    let timer: number;
+
+    input.addEventListener("input", () => {
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (!q) {
+        results.hidden = true;
+        results.innerHTML = "";
+        return;
+      }
+      timer = window.setTimeout(async () => {
+        const list = await adminSearch(q);
+        results.innerHTML = list.length
+          ? list
+              .map((u: any) => {
+                const name = u.display_name || u.login;
+                const av = u.image_url
+                  ? `<img class="pav" src="${u.image_url}" width="32" height="32" alt="" />`
+                  : `<span class="pav fb">${name.charAt(0).toUpperCase()}</span>`;
+                return `<li data-login="${u.login}" data-name="${name}" data-image="${u.image_url || ""}">
+                    ${av}
+                    <span class="pinfo"><b>${name}</b><small>@${u.login} · ${u.points} pts</small></span>
+                  </li>`;
+              })
+              .join("")
+          : `<li class="empty">aucun résultat</li>`;
+        results.hidden = false;
+      }, 200);
+    });
+
+    results.addEventListener("click", (e) => {
+      const li = (e.target as HTMLElement).closest<HTMLElement>("li[data-login]");
+      if (!li) return;
+      selected = li.dataset.login!;
+      chipName.textContent = li.dataset.name!;
+      const img = li.dataset.image;
+      if (img) {
+        chipAv.src = img;
+        chipAv.hidden = false;
+        chipFb.hidden = true;
+      } else {
+        chipFb.textContent = li.dataset.name!.charAt(0).toUpperCase();
+        chipFb.hidden = false;
+        chipAv.hidden = true;
+      }
+      chip.hidden = false;
+      input.value = "";
+      input.hidden = true;
+      results.hidden = true;
+    });
+    root.querySelector("[data-clear]")!.addEventListener("click", () => {
+      selected = null;
+      chip.hidden = true;
+      input.hidden = false;
+      input.focus();
+    });
+
+    return { get login() { return selected; } };
+  }
+
+  loadMe().then(async (me) => {
+    if (!me) return;
+    if (!(await adminMe())) {
+      $("[data-denied]").hidden = false;
+      return;
+    }
+    $("[data-panel]").hidden = false;
+
+    const notifPicker = makePicker($('[data-picker="notif"]'));
+    const ptsPicker = makePicker($('[data-picker="points"]'));
+
+    $("[data-send]").addEventListener("click", async () => {
+      const res = $("[data-msg-res]");
+      res.textContent = "";
+      res.className = "msg";
+      try {
+        await adminNotify($<HTMLTextAreaElement>("[data-msg]").value, notifPicker.login ?? undefined);
+        res.textContent = notifPicker.login
+          ? "Notification envoyée au joueur ✓"
+          : "Notification envoyée à tout le monde ✓";
+        res.classList.add("ok");
+        $<HTMLTextAreaElement>("[data-msg]").value = "";
+      } catch (e: any) {
+        res.textContent = e?.message ?? "Erreur";
+        res.classList.add("err");
+      }
+    });
+
+    $("[data-grant]").addEventListener("click", async () => {
+      const res = $("[data-pts-res]");
+      res.textContent = "";
+      res.className = "msg";
+      if (!ptsPicker.login) {
+        res.textContent = "Choisis un joueur";
+        res.classList.add("err");
+        return;
+      }
+      try {
+        const r = await adminAddPoints(
+          ptsPicker.login,
+          Number($<HTMLInputElement>("[data-pts-amount]").value),
+        );
+        res.textContent = `OK — nouveau solde : ${r.points} pts`;
+        res.classList.add("ok");
+      } catch (e: any) {
+        res.textContent = e?.message ?? "Erreur";
+        res.classList.add("err");
+      }
+    });
+  });
+</script>
+
+<style>
+  .wrap {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: clamp(20px, 4vw, 40px) clamp(16px, 4vw, 40px);
+  }
+  .head h1 {
+    margin: 0;
+    font-size: clamp(28px, 5vw, 40px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+  .head p {
+    margin: 8px 0 28px;
+    color: var(--muted);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  .card {
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+  }
+  .card h2 {
+    margin: 0 0 8px;
+    font-size: 18px;
+  }
+  .lbl {
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 14px 0 6px;
+  }
+  textarea.input {
+    resize: vertical;
+    font-family: inherit;
+  }
+  [hidden] {
+    display: none !important;
+  }
+  .picker {
+    position: relative;
+  }
+  .presults {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 4px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 5;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .presults li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .presults li:hover {
+    background: var(--panel);
+  }
+  .pav {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--raise);
+    flex: none;
+  }
+  .pav.fb {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    color: #fff;
+    background: var(--accent);
+  }
+  .pinfo {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+    min-width: 0;
+  }
+  .pinfo b {
+    font-size: 14px;
+  }
+  .pinfo small {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .presults li.empty {
+    color: var(--muted);
+    cursor: default;
+    justify-content: center;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--raise);
+    border-radius: 8px;
+    padding: 6px 12px 6px 6px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .cav {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex: none;
+  }
+  .cav.fb {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+    color: #fff;
+    background: var(--accent);
+  }
+  .chip button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .chip button:hover {
+    color: var(--lose);
+  }
+  .btn {
+    margin-top: 16px;
+  }
+  .msg {
+    min-height: 18px;
+    font-size: 13px;
+    margin: 10px 0 0;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-weight: 700;
+  }
+  .msg.ok {
+    color: var(--win);
+  }
+  .msg.err {
+    color: var(--lose);
+  }
+  .denied {
+    color: var(--muted);
+    text-align: center;
+    padding: 60px 0;
+  }
+  @media (max-width: 700px) {
+    .grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

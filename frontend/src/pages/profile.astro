@@ -1,0 +1,223 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Layout title="PISCASINO — Profil">
+  <Nav />
+  <main class="wrap">
+    <a class="back" href="/friends">← Retour</a>
+    <div data-profile>
+      <p class="loading">Chargement…</p>
+    </div>
+  </main>
+  <Footer />
+</Layout>
+
+<script>
+  import {
+    getProfile,
+    sendFriendRequest,
+    acceptFriend,
+    removeFriend,
+    onFriendEvent,
+    onPresence,
+    loadPresence,
+    fmt,
+    type Profile,
+  } from "../lib/casino";
+
+  const host = document.querySelector<HTMLElement>("[data-profile]")!;
+  const login = new URLSearchParams(location.search).get("u") ?? "";
+
+  const initial = (n: string) => n.charAt(0).toUpperCase();
+  const since = (iso: string) =>
+    new Date(iso).toLocaleDateString("fr-FR", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+
+  function actionHtml(p: Profile) {
+    switch (p.status) {
+      case "self":
+        return `<span class="tag">C'est toi</span>`;
+      case "friend":
+        return `<button class="ghost-btn" data-remove="${p.id}">Retirer des amis</button>`;
+      case "pending_out":
+        return `<span class="tag">Demande envoyée</span>`;
+      case "pending_in":
+        return `<button class="btn" data-accept="${p.id}">Accepter la demande</button>`;
+      default:
+        return `<button class="btn" data-add="${p.login}">Ajouter en ami</button>`;
+    }
+  }
+
+  function render(p: Profile) {
+    const name = p.display_name || p.login;
+    const av = p.image_url
+      ? `<img class="pp" src="${p.image_url}" width="96" height="96" alt="" />`
+      : `<span class="pp fb">${initial(name)}</span>`;
+    host.innerHTML = `
+      <section class="card">
+        <div class="ppwrap">
+          ${av}<span class="dot ${p.online ? "on" : "off"}"></span>
+        </div>
+        <h1 class="name">${name}</h1>
+        <p class="sub">@${p.login} · ${p.online ? '<span class="ol">en ligne</span>' : "hors ligne"}</p>
+        <div class="stats">
+          <div class="stat"><span>Solde</span><b>${fmt(p.points)} pts</b></div>
+          <div class="stat"><span>Rang</span><b>${p.rank ? "#" + p.rank : "—"}</b></div>
+          <div class="stat"><span>Membre depuis</span><b>${since(p.created_at)}</b></div>
+        </div>
+        <div class="action">${actionHtml(p)}</div>
+      </section>`;
+  }
+
+  async function load() {
+    if (!login) {
+      host.innerHTML = `<p class="loading">Aucun joueur.</p>`;
+      return;
+    }
+    const p = await getProfile(login);
+    if (!p) {
+      host.innerHTML = `<p class="loading">Joueur introuvable.</p>`;
+      return;
+    }
+    render(p);
+  }
+
+  document.addEventListener("click", async (e) => {
+    const el = e.target as HTMLElement;
+    if (el.dataset.add) {
+      try {
+        await sendFriendRequest(el.dataset.add);
+      } catch {}
+      load();
+    } else if (el.dataset.accept) {
+      await acceptFriend(Number(el.dataset.accept));
+      load();
+    } else if (el.dataset.remove) {
+      await removeFriend(Number(el.dataset.remove));
+      load();
+    }
+  });
+
+  onFriendEvent(() => load());
+  onPresence(() => load());
+  loadPresence();
+  load();
+</script>
+
+<style>
+  .wrap {
+    max-width: 540px;
+    margin: 0 auto;
+    padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 40px);
+  }
+  .back {
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .back:hover {
+    color: var(--fg);
+  }
+  .loading {
+    color: var(--muted);
+    text-align: center;
+    padding: 60px 0;
+  }
+  .wrap :global(.card) {
+    margin-top: 18px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .wrap :global(.ppwrap) {
+    position: relative;
+    width: 96px;
+    height: 96px;
+  }
+  .wrap :global(.pp) {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--raise);
+  }
+  .wrap :global(.pp.fb) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+    font-weight: 800;
+    color: #fff;
+    background: var(--accent);
+  }
+  .wrap :global(.dot) {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 3px solid var(--panel);
+  }
+  .wrap :global(.dot.on) {
+    background: var(--win);
+  }
+  .wrap :global(.dot.off) {
+    background: var(--muted);
+  }
+  .wrap :global(.name) {
+    margin: 16px 0 2px;
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  .wrap :global(.sub) {
+    margin: 0 0 22px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .wrap :global(.ol) {
+    color: var(--win);
+  }
+  .wrap :global(.stats) {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    width: 100%;
+    margin-bottom: 22px;
+  }
+  .wrap :global(.stat) {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .wrap :global(.stat span) {
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .wrap :global(.stat b) {
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  .wrap :global(.tag) {
+    color: var(--muted);
+    font-size: 14px;
+    padding: 12px 18px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+</style>

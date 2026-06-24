@@ -1,0 +1,112 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Layout title="PISCASINO — 42">
+  <div class="page">
+    <header class="topbar">
+      <span class="brand">PIS<span class="accent">CASINO</span></span>
+      <span class="tag">42 Le Havre · Pour la Piscine</span>
+    </header>
+
+    <section class="hero">
+      <h1 class="title">PIS<span class="accent">CASINO</span></h1>
+      <p class="lede">Le casino de l'intra 42. Tu mises des points, pas des euros : connecte-toi avec ton compte 42, repars avec <span class="accent">1000 points</span>, et tente ta chance au blackjack, dice, plinko et plus.</p>
+      <a class="btn" href="/api/auth/42">Se connecter avec 42 →</a>
+    </section>
+
+    <Footer />
+  </div>
+</Layout>
+
+<script>
+  // Guard: already logged in -> skip the landing.
+  fetch("/api/auth/me")
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (d?.authenticated) location.replace("/app");
+    })
+    .catch(() => {});
+</script>
+
+<style>
+  .page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+  /* ambient glow so the space feels full */
+  .page::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(60% 50% at 80% 0%, rgba(59, 130, 246, 0.22), transparent 60%),
+      radial-gradient(50% 50% at 0% 100%, rgba(59, 130, 246, 0.12), transparent 55%);
+    pointer-events: none;
+  }
+
+  .topbar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px clamp(20px, 5vw, 56px);
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .brand {
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    font-size: 18px;
+  }
+  .tag {
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+  .accent {
+    color: var(--accent);
+  }
+
+  .hero {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 40px clamp(20px, 5vw, 56px);
+  }
+  .title {
+    font-size: clamp(64px, 16vw, 200px);
+    line-height: 0.9;
+    letter-spacing: -0.04em;
+    margin: 0;
+    font-weight: 800;
+  }
+  .lede {
+    max-width: 600px;
+    margin: 28px 0 0;
+    color: #cfcfcf;
+    font-size: clamp(15px, 2vw, 18px);
+  }
+  .btn {
+    display: inline-block;
+    align-self: flex-start;
+    margin-top: 40px;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    font-size: 16px;
+    padding: 16px 28px;
+    border-radius: 10px;
+    transition: filter 0.15s, transform 0.08s;
+  }
+  .btn:hover {
+    filter: brightness(1.12);
+    transform: translateY(-1px);
+  }
+</style>

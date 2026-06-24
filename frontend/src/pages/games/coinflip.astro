@@ -1,0 +1,122 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+---
+
+<Layout title="PISCASINO — Coinflip">
+  <Nav />
+  <div class="shell">
+    <aside class="panel betpanel">
+      <div class="field">
+        <label>Mise</label>
+        <input class="input" data-bet type="number" min="1" value="100" />
+        <div class="chips">
+          <button data-amt="half">½</button>
+          <button data-amt="double">2×</button>
+          <button data-amt="max">Max</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Choix</label>
+        <div class="seg" data-side>
+          <button data-val="heads" class="is-active">Pile</button>
+          <button data-val="tails">Face</button>
+        </div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat"><span>Multiplicateur</span><b>1.98×</b></div>
+        <div class="stat"><span>Chance</span><b>50%</b></div>
+      </div>
+
+      <button class="btn bet-btn" data-play>Lancer la piece</button>
+      <p class="result" data-result></p>
+    </aside>
+
+    <main class="panel stage">
+      <div class="coin" data-coin>
+        <div class="face heads">P</div>
+        <div class="face tails">F</div>
+      </div>
+    </main>
+  </div>
+</Layout>
+
+<script>
+  import { bet, setupAmount, fmt, BetError } from "../../lib/casino";
+
+  const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
+  const result = document.querySelector<HTMLElement>("[data-result]")!;
+  const play = document.querySelector<HTMLButtonElement>("[data-play]")!;
+  const coin = document.querySelector<HTMLElement>("[data-coin]")!;
+  let side: "heads" | "tails" = "heads";
+
+  setupAmount(betInput);
+
+  document.querySelectorAll<HTMLButtonElement>("[data-side] button").forEach((b) => {
+    b.addEventListener("click", () => {
+      side = b.dataset.val as "heads" | "tails";
+      document
+        .querySelectorAll("[data-side] button")
+        .forEach((x) => x.classList.toggle("is-active", x === b));
+    });
+  });
+
+  play.addEventListener("click", async () => {
+    play.disabled = true;
+    result.textContent = "";
+    result.className = "result";
+    try {
+      const r = await bet("coinflip", { bet: Number(betInput.value), side });
+      const turns = 4 * 360;
+      const final = r.outcome === "heads" ? 0 : 180;
+      coin.style.transition = "transform 1s cubic-bezier(.2,.8,.2,1)";
+      coin.style.transform = `rotateY(${turns + final}deg)`;
+      setTimeout(() => {
+        coin.style.transition = "none";
+        coin.style.transform = `rotateY(${final}deg)`;
+        result.textContent = r.win
+          ? `Gagne +${fmt(r.payout)} pts`
+          : `Perdu -${fmt(Number(betInput.value))} pts`;
+        result.classList.add(r.win ? "win" : "lose");
+        play.disabled = false;
+      }, 1000);
+    } catch (e) {
+      result.textContent = e instanceof BetError ? e.message : "Erreur";
+      result.classList.add("lose");
+      play.disabled = false;
+    }
+  });
+</script>
+
+<style>
+  .coin {
+    width: 160px;
+    height: 160px;
+    position: relative;
+    transform-style: preserve-3d;
+    transform: rotateY(0deg);
+  }
+  .face {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 64px;
+    font-weight: 800;
+    backface-visibility: hidden;
+    border: 4px solid rgba(255, 255, 255, 0.25);
+  }
+  .heads {
+    background: linear-gradient(145deg, #5b9bff, #3b82f6);
+    color: #06121f;
+  }
+  .tails {
+    background: linear-gradient(145deg, #2f4553, #213743);
+    color: #fff;
+    transform: rotateY(180deg);
+  }
+</style>
