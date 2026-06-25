@@ -1,65 +1,87 @@
-import * as THREE from "three";
-
-// Subtle drifting particle field for page backgrounds. Low-key, not flashy.
 export function initAmbient(canvas: HTMLCanvasElement) {
-  const scene = new THREE.Scene();
-  const cam = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 100);
-  cam.position.z = 14;
+  const ctx = canvas.getContext("2d")!;
 
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-
-  const size = () => {
-    renderer.setSize(innerWidth, innerHeight);
-    cam.aspect = innerWidth / innerHeight;
-    cam.updateProjectionMatrix();
+  const resize = () => {
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
   };
-  size();
+  resize();
 
-  const N = 480;
-  const pos = new Float32Array(N * 3);
-  for (let i = 0; i < N * 3; i++) pos[i] = (Math.random() - 0.5) * 26;
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  const mat = new THREE.PointsMaterial({
-    color: 0x5b9bff,
-    size: 0.16,
-    transparent: true,
-    opacity: 0.9,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  const pts = new THREE.Points(geo, mat);
-  scene.add(pts);
+  interface Star {
+    x: number;
+    y: number;
+    len: number;
+    speed: number;
+    angle: number;
+    alpha: number;
+    size: number;
+  }
+
+  const MAX = 35;
+  const stars: Star[] = [];
+
+  function spawn(initialY = false): Star {
+    // angle: mostly downward, slight left-right drift (75°–105° from horizontal)
+    const angle = (Math.PI / 180) * (75 + Math.random() * 30);
+    const x = Math.random() * (innerWidth + 200) - 100;
+    const y = initialY
+      ? Math.random() * innerHeight  // spread on init
+      : -(Math.random() * 200);      // spawn above screen
+    return {
+      x,
+      y,
+      len: 50 + Math.random() * 100,
+      speed: 1.5 + Math.random() * 3,
+      angle,
+      alpha: 0.1 + Math.random() * 0.5,
+      size: 0.6 + Math.random() * 1,
+    };
+  }
+
+  for (let i = 0; i < MAX; i++) stars.push(spawn(true));
 
   let raf = 0;
-  let mx = 0;
-  let my = 0;
-  const onMove = (e: PointerEvent) => {
-    mx = (e.clientX / innerWidth - 0.5) * 2;
-    my = (e.clientY / innerHeight - 0.5) * 2;
-  };
-  addEventListener("pointermove", onMove);
 
-  const clock = new THREE.Clock();
-  const loop = () => {
+  function loop() {
     raf = requestAnimationFrame(loop);
-    const t = clock.getElapsedTime();
-    pts.rotation.y = t * 0.025;
-    pts.rotation.x = Math.sin(t * 0.05) * 0.08;
-    // gentle parallax toward cursor
-    cam.position.x += (mx * 1.5 - cam.position.x) * 0.03;
-    cam.position.y += (-my * 1.5 - cam.position.y) * 0.03;
-    cam.lookAt(0, 0, 0);
-    renderer.render(scene, cam);
-  };
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    for (const s of stars) {
+      s.x += Math.cos(s.angle) * s.speed;
+      s.y += Math.sin(s.angle) * s.speed;
+
+      if (s.y > innerHeight + s.len || s.x < -100 || s.x > innerWidth + 100) {
+        Object.assign(s, spawn(false));
+        continue;
+      }
+
+      const tx = s.x - Math.cos(s.angle) * s.len;
+      const ty = s.y - Math.sin(s.angle) * s.len;
+
+      const grad = ctx.createLinearGradient(tx, ty, s.x, s.y);
+      grad.addColorStop(0, `rgba(180,210,255,0)`);
+      grad.addColorStop(0.6, `rgba(180,210,255,${s.alpha * 0.35})`);
+      grad.addColorStop(1, `rgba(220,235,255,${s.alpha})`);
+
+      ctx.save();
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = s.size;
+      ctx.lineCap = "round";
+      ctx.shadowBlur = 5;
+      ctx.shadowColor = `rgba(150,200,255,${s.alpha * 0.4})`;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(s.x, s.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   loop();
-  addEventListener("resize", size);
+  addEventListener("resize", resize);
 
   return () => {
     cancelAnimationFrame(raf);
-    removeEventListener("resize", size);
-    removeEventListener("pointermove", onMove);
-    renderer.dispose();
+    removeEventListener("resize", resize);
   };
 }

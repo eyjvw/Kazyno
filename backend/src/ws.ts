@@ -7,6 +7,10 @@ import { roomViewJSON } from "./blackjack";
 const secret = new TextEncoder().encode(
   process.env.SESSION_SECRET ?? "dev-insecure-change-me",
 );
+const ADMINS = (process.env.ADMIN_LOGINS ?? "")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
 
 // Verify the session JWT carried in the cookie header, return the user id.
 async function userIdFromCookie(cookieHeader?: string): Promise<number | null> {
@@ -37,11 +41,14 @@ export const realtimeWs = new Elysia().ws("/api/ws", {
     ws.subscribe("presence");
     ws.subscribe("broadcast");
     await addPresence(id);
-    const rows = (await sql`SELECT points FROM users WHERE id = ${id}`) as Array<{
-      points: number;
+    const rows = (await sql`SELECT points, login FROM users WHERE id = ${id}`) as Array<{
+      points: number; login: string;
     }>;
     if (rows[0]) {
       ws.send(JSON.stringify({ type: "balance", points: rows[0].points }));
+      if (ADMINS.includes(rows[0].login.toLowerCase())) {
+        ws.subscribe("admin-log");
+      }
     }
   },
   message(ws, raw) {

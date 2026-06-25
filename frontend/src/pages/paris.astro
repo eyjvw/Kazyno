@@ -9,32 +9,43 @@ import Footer from "../components/Footer.astro";
   <main class="wrap">
     <header class="head">
       <h1>Paris d'exam 🎓</h1>
-      <p>
-        Prédis ta note au prochain exam 42. Le résultat est récupéré
-        automatiquement depuis l'intra — plus tu es précis, plus tu gagnes.
-      </p>
+      <p>Prédis ta note avant la date de l'exam. Plus tu es précis, plus tu gagnes.</p>
     </header>
 
-    <section class="grid">
-      <div class="col">
-        <div class="bet-card panel" data-betbox>
-          <p class="loading">Chargement…</p>
-        </div>
-
-        <div class="bareme panel">
-          <div class="bt">Barème (écart prédit / réel)</div>
-          <div class="br"><span>Exact (±0)</span><b>10×</b></div>
-          <div class="br"><span>±6</span><b>3×</b></div>
-          <div class="br"><span>±12</span><b>1.5×</b></div>
-          <div class="br"><span>±20</span><b>mise rendue</b></div>
-          <div class="br dim"><span>au-delà</span><b>perdu</b></div>
-        </div>
+    <div class="baremes-row">
+      <div class="bareme-card panel">
+        <div class="bt">Standard (×10)</div>
+        <div class="br"><span>Exact</span><b>10×</b></div>
+        <div class="br"><span>±10</span><b>3×</b></div>
+        <div class="br"><span>±20</span><b>1.5×</b></div>
+        <div class="br"><span>±30</span><b>remboursé</b></div>
+        <div class="br dim"><span>au-delà</span><b>perdu</b></div>
       </div>
-
-      <div class="col">
-        <h2 class="section-title">Derniers résultats</h2>
-        <ul class="feed" data-feed><li class="empty">Chargement…</li></ul>
+      <div class="bareme-card panel">
+        <div class="bt">Final (×6)</div>
+        <div class="br"><span>Exact</span><b>10×</b></div>
+        <div class="br"><span>±6</span><b>3×</b></div>
+        <div class="br"><span>±12</span><b>1.5×</b></div>
+        <div class="br"><span>±18</span><b>remboursé</b></div>
+        <div class="br dim"><span>au-delà</span><b>perdu</b></div>
       </div>
+    </div>
+
+    <section class="exams-section">
+      <h2 class="section-title">Examens à venir</h2>
+      <div class="exam-cards" data-exam-cards>
+        <p class="loading">Chargement…</p>
+      </div>
+    </section>
+
+    <section class="history-section">
+      <h2 class="section-title">Mes paris réglés</h2>
+      <ul class="feed" data-history><li class="empty">Aucun pari réglé.</li></ul>
+    </section>
+
+    <section class="feed-section">
+      <h2 class="section-title">Derniers résultats</h2>
+      <ul class="feed" data-feed><li class="empty">Chargement…</li></ul>
     </section>
   </main>
   <Footer />
@@ -43,80 +54,327 @@ import Footer from "../components/Footer.astro";
 <script>
   import {
     loadMe,
+    getExams,
     getExamBets,
     getExamFeed,
     placeExamBet,
+    modifyExamBet,
+    cancelExamBet,
     onExamSettled,
+    getBalance,
     fmt,
   } from "../lib/casino";
 
-  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
-  const betbox = $("[data-betbox]");
-  const feedEl = $("[data-feed]");
-  const initial = (n: string) => n.charAt(0).toUpperCase();
+  const $ = <T extends HTMLElement>(s: string, root: ParentNode = document) =>
+    root.querySelector<T>(s)!;
+  const $$ = <T extends HTMLElement>(s: string, root: ParentNode = document) =>
+    [...root.querySelectorAll<T>(s)];
 
-  function renderBetbox(data: any) {
-    if (data.pending) {
-      const p = data.pending;
-      betbox.innerHTML = `
-        <div class="pending">
-          <span class="lbl">Pari en cours</span>
-          <div class="pred">${p.predicted}<small>/100</small></div>
-          <span class="stake">Mise : ${fmt(p.stake)} pts</span>
-          <span class="wait">En attente de ta note d'exam…</span>
-        </div>`;
+  const cardsEl = $("[data-exam-cards]");
+  const histEl  = $("[data-history]");
+  const feedEl  = $("[data-feed]");
+
+  const SCORES: Record<string, number[]> = {
+    standard: Array.from({ length: 11 }, (_, i) => i * 10),
+    final: (() => {
+      const s: number[] = [];
+      for (let i = 0; i <= 96; i += 6) s.push(i);
+      s.push(100);
+      return s;
+    })(),
+  };
+
+  function examType(exam: any): string {
+    return exam.is_final ? "final" : "standard";
+  }
+
+  function renderPicker(container: HTMLElement, scores: number[], selected: number, onPick: (v: number) => void) {
+    container.innerHTML = "";
+    scores.forEach((s) => {
+      const btn = document.createElement("button");
+      btn.className = "score-btn" + (s === selected ? " is-active" : "");
+      btn.textContent = String(s);
+      btn.addEventListener("click", () => {
+        $$(".score-btn", container).forEach((b) => b.classList.remove("is-active"));
+        btn.classList.add("is-active");
+        onPick(s);
+      });
+      container.appendChild(btn);
+    });
+  }
+
+  function countdown(dateStr: string): string {
+    const diff = new Date(dateStr).getTime() - Date.now();
+    if (diff <= 0) return "Passé";
+    const d = Math.floor(diff / 86400000);
+    const h = Math.floor((diff % 86400000) / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    if (d > 0) return `J-${d}`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
+
+  // ── Render a single exam card ───────────────────────────────────────────
+  function renderCard(exam: any, existingBet: any | null, container: HTMLElement) {
+    container.innerHTML = "";
+
+    const type   = examType(exam);
+    const scores = SCORES[type];
+    const date   = new Date(exam.exam_date).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
+    const locked = exam.locked || new Date(exam.exam_date) < new Date();
+
+    // Header
+    const hdr = document.createElement("div");
+    hdr.className = "ec-header";
+    hdr.innerHTML = `
+      <div class="ec-title">${exam.label}</div>
+      <div class="ec-meta">
+        <span class="ec-type ${type}">${exam.is_final ? "Final" : "Standard"}</span>
+        <span class="ec-date">${date}</span>
+        ${!locked ? `<span class="ec-countdown">${countdown(exam.exam_date)}</span>` : ""}
+      </div>`;
+    container.appendChild(hdr);
+
+    if (locked) {
+      const badge = document.createElement("div");
+      badge.className = "ec-locked";
+      badge.textContent = existingBet
+        ? `Pari déposé — en attente de ta note…`
+        : "Verrouillé — paris fermés";
+      container.appendChild(badge);
+      if (existingBet) {
+        const info = document.createElement("div");
+        info.className = "ec-pending-info";
+        info.innerHTML = `<span>Prédit : <b>${existingBet.predicted}/100</b></span><span>Mise : <b>${fmt(existingBet.stake)} pts</b></span>`;
+        container.appendChild(info);
+      }
       return;
     }
-    betbox.innerHTML = `
-      <label class="lbl">Ta prédiction</label>
-      <div class="predrow">
-        <input class="input" data-pred type="number" min="0" max="100" value="80" />
-        <span class="slash">/100</span>
-      </div>
-      <input class="range" data-range type="range" min="0" max="100" value="80" />
-      <label class="lbl">Mise</label>
-      <input class="input" data-stake type="number" min="10" value="100" />
-      <button class="btn" data-place>Parier</button>
-      <p class="err" data-err></p>`;
 
-    const pred = $<HTMLInputElement>("[data-pred]");
-    const range = $<HTMLInputElement>("[data-range]");
-    range.addEventListener("input", () => (pred.value = range.value));
-    pred.addEventListener("input", () => (range.value = pred.value));
-    $("[data-place]").addEventListener("click", async () => {
-      const err = $("[data-err]");
-      err.textContent = "";
+    if (existingBet) {
+      renderBetManage(container, exam, existingBet);
+    } else {
+      renderBetForm(container, exam);
+    }
+  }
+
+  function renderBetForm(container: HTMLElement, exam: any) {
+    const type   = examType(exam);
+    const scores = SCORES[type];
+    let predicted = scores[Math.floor(scores.length / 2)];
+
+    const body = document.createElement("div");
+    body.className = "ec-body";
+    body.innerHTML = `
+      <label class="ec-lbl">Prédiction</label>
+      <div class="score-grid" data-picker></div>
+      <div class="pred-display"><span data-predval>${predicted}</span><small>/100</small></div>
+      <label class="ec-lbl">Mise</label>
+      <input class="input" data-stake type="number" min="10" value="100" />
+      <div class="chips" style="margin-top:6px">
+        <button data-amt="half">½</button>
+        <button data-amt="double">2×</button>
+        <button data-amt="max">Max</button>
+      </div>
+      <button class="btn" data-place style="margin-top:14px">Parier</button>
+      <p class="ec-err" data-err></p>`;
+    container.appendChild(body);
+
+    const picker  = $<HTMLDivElement>("[data-picker]", body);
+    const predVal = $<HTMLSpanElement>("[data-predval]", body);
+    const stakeEl = $<HTMLInputElement>("[data-stake]", body);
+    const errEl   = $<HTMLParagraphElement>("[data-err]", body);
+
+    renderPicker(picker, scores, predicted, (v) => { predicted = v; predVal.textContent = String(v); });
+
+    $$("[data-amt]", body).forEach((b) => {
+      b.addEventListener("click", () => {
+        const cur = Math.max(10, Math.floor(Number(stakeEl.value) || 10));
+        const m = (b as HTMLButtonElement).dataset.amt;
+        if (m === "half")   stakeEl.value = String(Math.max(10, Math.floor(cur / 2)));
+        else if (m === "double") stakeEl.value = String(Math.min(1_000_000, cur * 2));
+        else if (m === "max")    stakeEl.value = String(Math.max(10, getBalance()));
+      });
+    });
+
+    $("[data-place]", body).addEventListener("click", async () => {
+      errEl.textContent = "";
+      const stake = Math.floor(Number(stakeEl.value));
+      if (stake < 10) { errEl.textContent = "Mise min 10 pts"; return; }
+      const btn = $<HTMLButtonElement>("[data-place]", body);
+      btn.disabled = true;
       try {
-        await placeExamBet(Number(pred.value), Number($<HTMLInputElement>("[data-stake]").value));
-        refresh();
+        await placeExamBet(exam.id, predicted, stake);
+        await refresh();
       } catch (e: any) {
-        err.textContent = e?.message ?? "Erreur";
+        errEl.textContent = e?.message ?? "Erreur";
+        btn.disabled = false;
       }
     });
   }
 
+  function renderBetManage(container: HTMLElement, exam: any, bet: any, editing = false) {
+    const type   = examType(exam);
+    const scores = SCORES[type];
+
+    if (!editing) {
+      const body = document.createElement("div");
+      body.className = "ec-body ec-manage";
+      body.innerHTML = `
+        <div class="ec-pending-info">
+          <div class="pred-big">${bet.predicted}<small>/100</small></div>
+          <span class="stake-info">Mise : <b>${fmt(bet.stake)} pts</b></span>
+          <span class="wait">En attente de ta note d'exam…</span>
+        </div>
+        <div class="manage-btns">
+          <button class="btn btn-outline" data-edit>Modifier</button>
+          <button class="btn btn-danger" data-cancel>Annuler (+${fmt(bet.stake)} remboursés)</button>
+        </div>
+        <p class="ec-err" data-err></p>`;
+      container.appendChild(body);
+
+      $("[data-edit]", body).addEventListener("click", () => {
+        const newBody = container.querySelector(".ec-body");
+        if (newBody) newBody.remove();
+        renderBetManage(container, exam, bet, true);
+      });
+      $("[data-cancel]", body).addEventListener("click", async () => {
+        const btn = $<HTMLButtonElement>("[data-cancel]", body);
+        btn.disabled = true;
+        try {
+          await cancelExamBet(bet.id);
+          await refresh();
+        } catch (e: any) {
+          ($("[data-err]", body) as HTMLElement).textContent = e?.message ?? "Erreur";
+          btn.disabled = false;
+        }
+      });
+    } else {
+      let predicted = scores.includes(bet.predicted) ? bet.predicted : scores[Math.floor(scores.length / 2)];
+
+      const body = document.createElement("div");
+      body.className = "ec-body";
+      body.innerHTML = `
+        <div class="edit-header">
+          <span class="ec-lbl" style="margin:0">Modifier</span>
+          <button class="back-link" data-back>← Annuler modif</button>
+        </div>
+        <label class="ec-lbl">Prédiction</label>
+        <div class="score-grid" data-picker></div>
+        <div class="pred-display"><span data-predval>${predicted}</span><small>/100</small></div>
+        <label class="ec-lbl">Mise</label>
+        <input class="input" data-stake type="number" min="10" value="${bet.stake}" />
+        <div class="chips" style="margin-top:6px">
+          <button data-amt="half">½</button>
+          <button data-amt="double">2×</button>
+        </div>
+        <button class="btn" data-save style="margin-top:14px">Enregistrer</button>
+        <p class="ec-err" data-err></p>`;
+      container.appendChild(body);
+
+      const picker  = $<HTMLDivElement>("[data-picker]", body);
+      const predVal = $<HTMLSpanElement>("[data-predval]", body);
+      const stakeEl = $<HTMLInputElement>("[data-stake]", body);
+      const errEl   = $<HTMLParagraphElement>("[data-err]", body);
+
+      renderPicker(picker, scores, predicted, (v) => { predicted = v; predVal.textContent = String(v); });
+
+      $$("[data-amt]", body).forEach((b) => {
+        b.addEventListener("click", () => {
+          const cur = Math.max(10, Math.floor(Number(stakeEl.value) || 10));
+          const m = (b as HTMLButtonElement).dataset.amt;
+          if (m === "half")   stakeEl.value = String(Math.max(10, Math.floor(cur / 2)));
+          else if (m === "double") stakeEl.value = String(Math.min(1_000_000, cur * 2));
+        });
+      });
+
+      $("[data-back]", body).addEventListener("click", () => {
+        body.remove();
+        renderBetManage(container, exam, bet, false);
+      });
+      $("[data-save]", body).addEventListener("click", async () => {
+        errEl.textContent = "";
+        const stake = Math.floor(Number(stakeEl.value));
+        if (stake < 10) { errEl.textContent = "Mise min 10 pts"; return; }
+        const btn = $<HTMLButtonElement>("[data-save]", body);
+        btn.disabled = true;
+        try {
+          await modifyExamBet(bet.id, predicted, stake);
+          await refresh();
+        } catch (e: any) {
+          errEl.textContent = e?.message ?? "Erreur";
+          btn.disabled = false;
+        }
+      });
+    }
+  }
+
+  // ── Render all exam cards ───────────────────────────────────────────────
+  function renderExamCards(exams: any[], pendingBets: any[]) {
+    // Filter to upcoming or recently locked (last 7 days)
+    const cutoff = Date.now() - 7 * 86400000;
+    const visible = exams.filter((e) => !e.locked || new Date(e.exam_date).getTime() > cutoff);
+
+    if (!visible.length) {
+      cardsEl.innerHTML = `<p class="empty-state">Aucun exam planifié pour l'instant.</p>`;
+      return;
+    }
+
+    cardsEl.innerHTML = "";
+    const betByExam = new Map(pendingBets.map((b: any) => [b.exam_id, b]));
+
+    visible.forEach((exam) => {
+      const card = document.createElement("div");
+      card.className = `exam-card panel${exam.locked ? " locked" : ""}`;
+      cardsEl.appendChild(card);
+      renderCard(exam, betByExam.get(exam.id) ?? null, card);
+    });
+  }
+
+  // ── History & feed ──────────────────────────────────────────────────────
+  function renderHistory(history: any[]) {
+    histEl.innerHTML = history.length
+      ? history.map((h) => {
+          const win = h.payout > 0;
+          const label = h.exam_label ?? (h.exam_type === "final" ? "Final" : "Standard");
+          return `<li class="frow">
+            <div class="frow-main">
+              <span class="fn">${label}</span>
+              <span class="fp">Prédit <b>${h.predicted}</b> · Réel <b>${h.actual}</b></span>
+            </div>
+            <div class="frow-right">
+              <span class="fr ${win ? "win" : "lose"}">${win ? "+" + fmt(h.payout) + " pts" : "−" + fmt(h.stake) + " pts"}</span>
+              <span class="fmult">${h.multiplier}×</span>
+            </div>
+          </li>`;
+        }).join("")
+      : `<li class="empty">Aucun pari réglé.</li>`;
+  }
+
   function renderFeed(feed: any[]) {
     feedEl.innerHTML = feed.length
-      ? feed
-          .map((f) => {
-            const av = f.image_url
-              ? `<img class="fav" src="${f.image_url}" width="28" height="28" alt="" />`
-              : `<span class="fav fb">${initial(f.login)}</span>`;
-            const win = f.payout > 0;
-            return `<li class="frow">
-              ${av}
-              <span class="fn">${f.display_name || f.login}</span>
-              <span class="fp">prédit ${f.predicted} · réel ${f.actual}</span>
-              <span class="fr ${win ? "win" : "lose"}">${win ? "+" + fmt(f.payout) : "perdu"}</span>
-            </li>`;
-          })
-          .join("")
-      : `<li class="empty">Aucun pari réglé pour l'instant.</li>`;
+      ? feed.map((f) => {
+          const av = f.image_url
+            ? `<img class="fav" src="${f.image_url}" width="28" height="28" alt="" />`
+            : `<span class="fav fb">${f.login.charAt(0).toUpperCase()}</span>`;
+          const win = f.payout > 0;
+          const label = f.exam_label ?? (f.exam_type === "final" ? "Final" : "Standard");
+          return `<li class="frow">
+            ${av}
+            <div class="frow-main">
+              <span class="fn">@${f.login}</span>
+              <span class="fp">${label} · prédit ${f.predicted} · réel ${f.actual}</span>
+            </div>
+            <span class="fr ${win ? "win" : "lose"}">${win ? "+" + fmt(f.payout) : "−" + fmt(f.stake ?? 0)}</span>
+          </li>`;
+        }).join("")
+      : `<li class="empty">Aucun résultat pour l'instant.</li>`;
   }
 
   async function refresh() {
-    const [me, feed] = await Promise.all([getExamBets(), getExamFeed()]);
-    renderBetbox(me);
+    const [exams, myBets, feed] = await Promise.all([getExams(), getExamBets(), getExamFeed()]);
+    renderExamCards(exams, myBets.pending ?? []);
+    renderHistory(myBets.history ?? []);
     renderFeed(feed);
   }
 
@@ -126,9 +384,8 @@ import Footer from "../components/Footer.astro";
 
 <style>
   .wrap {
-    width: 100%;
-    margin: 0 auto;
     max-width: 1100px;
+    margin: 0 auto;
     padding: clamp(20px, 4vw, 40px) clamp(16px, 4vw, 40px);
   }
   .head h1 {
@@ -142,129 +399,195 @@ import Footer from "../components/Footer.astro";
     color: var(--muted);
     max-width: 640px;
   }
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 18px;
-  }
-  .col {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-  .bet-card,
-  .bareme {
-    padding: 22px;
-  }
-  .loading {
-    color: var(--muted);
-  }
-  .lbl {
-    display: block;
-    color: var(--muted);
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin: 14px 0 8px;
-  }
-  .lbl:first-child {
-    margin-top: 0;
-  }
-  .predrow {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-  .predrow .input {
-    width: 110px;
-    font-size: 22px;
-    font-weight: 800;
-  }
-  .slash {
-    color: var(--muted);
-  }
-  .range {
-    width: 100%;
-    accent-color: var(--accent);
-    margin: 6px 0 4px;
-  }
-  .btn {
-    width: 100%;
-    margin-top: 16px;
-  }
-  .err {
-    color: var(--lose);
-    font-size: 13px;
-    min-height: 18px;
-    margin: 10px 0 0;
-  }
-  .pending {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    text-align: center;
-  }
-  .pred {
-    font-size: 64px;
-    font-weight: 800;
-    line-height: 1;
-    color: var(--accent);
-  }
-  .pred small {
-    font-size: 22px;
-    color: var(--muted);
-  }
-  .stake {
-    color: var(--muted);
-  }
-  .wait {
-    margin-top: 8px;
-    color: var(--muted);
-    font-size: 13px;
-  }
 
+  /* ── Barème row ── */
+  .baremes-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+  }
+  .bareme-card {
+    flex: 1;
+    min-width: 180px;
+    padding: 16px 18px;
+  }
   .bt {
     color: var(--muted);
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
+    font-weight: 700;
   }
   .br {
     display: flex;
     justify-content: space-between;
-    padding: 5px 0;
-    font-size: 14px;
+    padding: 4px 0;
+    font-size: 13px;
+    border-bottom: 1px solid var(--line);
   }
-  .br b {
-    color: var(--accent);
-  }
-  .br.dim {
-    color: var(--muted);
-  }
-  .br.dim b {
-    color: var(--lose);
-  }
+  .br:last-child { border-bottom: none; }
+  .br b { color: var(--accent); }
+  .br.dim { color: var(--muted); }
+  .br.dim b { color: var(--lose); }
 
+  /* ── Sections ── */
+  .exams-section, .history-section, .feed-section {
+    margin-bottom: 32px;
+  }
   .section-title {
-    margin: 0;
-    font-size: 18px;
+    margin: 0 0 14px;
+    font-size: 17px;
     font-weight: 800;
   }
+  .loading, .empty-state {
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  /* ── Exam cards grid ── */
+  .exam-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 460px));
+    gap: 14px;
+    justify-content: center;
+  }
+  .exam-cards :global(.exam-card) {
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color 0.15s;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .exam-cards :global(.exam-card.locked) {
+    opacity: 0.72;
+    border-color: var(--raise);
+  }
+
+  /* ── Card header ── */
+  .exam-cards :global(.ec-header) { display: flex; flex-direction: column; gap: 6px; }
+  .exam-cards :global(.ec-title)  { font-weight: 800; font-size: 16px; }
+  .exam-cards :global(.ec-meta)   {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .exam-cards :global(.ec-type) {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+  .exam-cards :global(.ec-type.standard) { background: rgba(59,130,246,0.15); color: var(--accent); }
+  .exam-cards :global(.ec-type.final)    { background: rgba(168,85,247,0.15); color: #a855f7; }
+  .exam-cards :global(.ec-countdown)     { font-weight: 700; color: var(--win); }
+  .exam-cards :global(.ec-locked) {
+    font-size: 13px;
+    color: var(--muted);
+    font-style: italic;
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+  }
+
+  /* ── Form body ── */
+  .exam-cards :global(.ec-body) {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+  .exam-cards :global(.ec-lbl) {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 8px 0 4px;
+  }
+  .exam-cards :global(.ec-err) { color: var(--lose); font-size: 12px; min-height: 16px; margin: 4px 0 0; }
+
+  /* ── Score picker ── */
+  .exam-cards :global(.score-grid) { display: flex; flex-wrap: wrap; gap: 4px; }
+  .exam-cards :global(.score-btn) {
+    background: var(--raise);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 5px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 7px;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+    min-width: 34px;
+    text-align: center;
+  }
+  .exam-cards :global(.score-btn:hover)     { color: var(--fg); border-color: var(--accent); }
+  .exam-cards :global(.score-btn.is-active) { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .exam-cards :global(.pred-display) {
+    font-size: 42px;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--accent);
+    margin: 6px 0 4px;
+  }
+  .exam-cards :global(.pred-display small) { font-size: 16px; color: var(--muted); }
+
+  /* ── Pending manage ── */
+  .exam-cards :global(.ec-manage)       { align-items: center; text-align: center; }
+  .exam-cards :global(.ec-pending-info) { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .exam-cards :global(.pred-big)        { font-size: 56px; font-weight: 800; line-height: 1; color: var(--accent); }
+  .exam-cards :global(.pred-big small)  { font-size: 20px; color: var(--muted); }
+  .exam-cards :global(.stake-info)      { color: var(--muted); font-size: 13px; }
+  .exam-cards :global(.stake-info b)    { color: var(--fg); }
+  .exam-cards :global(.wait)            { color: var(--muted); font-size: 12px; font-style: italic; }
+  .exam-cards :global(.manage-btns)     { display: flex; flex-direction: column; gap: 7px; width: 100%; margin-top: 8px; }
+
+  .exam-cards :global(.btn-outline) {
+    background: transparent !important;
+    border: 1px solid var(--accent) !important;
+    color: var(--accent) !important;
+  }
+  .exam-cards :global(.btn-outline:hover) { background: var(--accent) !important; color: #fff !important; }
+  .exam-cards :global(.btn-danger)        { background: var(--lose) !important; }
+  .exam-cards :global(.btn-danger:hover)  { filter: brightness(1.15); }
+
+  .exam-cards :global(.edit-header) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .exam-cards :global(.back-link) {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+  }
+  .exam-cards :global(.back-link:hover) { color: var(--fg); }
+
+  /* ── Feed & history ── */
   .feed {
     list-style: none;
     margin: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
-  .feed :global(.empty) {
-    color: var(--muted);
-    text-align: center;
-    padding: 24px 0;
-  }
+  .feed :global(.empty) { color: var(--muted); font-size: 13px; padding: 12px 0; }
   .feed :global(.frow) {
     display: flex;
     align-items: center;
@@ -275,11 +598,11 @@ import Footer from "../components/Footer.astro";
     padding: 10px 12px;
   }
   .feed :global(.fav) {
-    width: 28px;
-    height: 28px;
+    width: 28px; height: 28px;
     border-radius: 50%;
     object-fit: cover;
     background: var(--raise);
+    flex-shrink: 0;
   }
   .feed :global(.fav.fb) {
     display: inline-flex;
@@ -290,30 +613,12 @@ import Footer from "../components/Footer.astro";
     color: #fff;
     background: var(--accent);
   }
-  .feed :global(.fn) {
-    font-weight: 600;
-    font-size: 14px;
-  }
-  .feed :global(.fp) {
-    color: var(--muted);
-    font-size: 12px;
-    margin-left: auto;
-  }
-  .feed :global(.fr) {
-    font-weight: 800;
-    font-size: 13px;
-    font-variant-numeric: tabular-nums;
-  }
-  .feed :global(.fr.win) {
-    color: var(--win);
-  }
-  .feed :global(.fr.lose) {
-    color: var(--lose);
-  }
-
-  @media (max-width: 760px) {
-    .grid {
-      grid-template-columns: 1fr;
-    }
-  }
+  .feed :global(.frow-main) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .feed :global(.fn)  { font-weight: 600; font-size: 14px; }
+  .feed :global(.fp)  { color: var(--muted); font-size: 12px; }
+  .feed :global(.frow-right) { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .feed :global(.fr)  { font-weight: 800; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .feed :global(.fmult)    { font-size: 11px; color: var(--muted); }
+  .feed :global(.fr.win)   { color: var(--win);  }
+  .feed :global(.fr.lose)  { color: var(--lose); }
 </style>

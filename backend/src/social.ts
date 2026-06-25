@@ -3,6 +3,7 @@ import { jwt } from "@elysiajs/jwt";
 import { sql } from "./db";
 import { isOnline, onlineList, publishToUser } from "./realtime";
 import { pushNotif } from "./notifications";
+import { rl, BUCKETS } from "./ratelimit";
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? "dev-insecure-change-me";
 
@@ -32,6 +33,7 @@ export const social = new Elysia({ prefix: "/api" })
       return { error: "non authentifie" };
     }
   })
+  .onBeforeHandle(({ userId, set }) => rl(`friends:${userId}`, BUCKETS.friends, set))
 
   // Who is online right now (excluding self).
   .get("/presence", ({ userId }) => ({

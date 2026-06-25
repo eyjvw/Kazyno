@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { jwt } from "@elysiajs/jwt";
 import { sql, type PublicUser } from "./db";
+import { rl, BUCKETS } from "./ratelimit";
 
 const FT_AUTHORIZE = "https://api.intra.42.fr/oauth/authorize";
 const FT_TOKEN = "https://api.intra.42.fr/oauth/token";
@@ -33,7 +34,10 @@ export const auth = new Elysia({ prefix: "/api/auth" })
   .use(jwt({ name: "jwt", secret: SESSION_SECRET }))
 
   // ── 42 OAuth: step 1, redirect to intra ──────────────────────────────────
-  .get("/42", ({ redirect, cookie: { oauth_state } }) => {
+  .get("/42", ({ headers, set, redirect, cookie: { oauth_state } }) => {
+    const ip = headers["x-real-ip"] ?? "unknown";
+    const limited = rl(`auth:${ip}`, BUCKETS.auth, set);
+    if (limited) return limited;
     if (!FT_UID) return new Response("FT_UID not configured", { status: 500 });
     const state = crypto.randomUUID();
     oauth_state.set({
@@ -59,7 +63,10 @@ export const auth = new Elysia({ prefix: "/api/auth" })
   // ── 42 OAuth: step 2, callback ───────────────────────────────────────────
   .get(
     "/callback",
-    async ({ query, jwt, redirect, cookie: { session, oauth_state } }) => {
+    async ({ headers, set, query, jwt, redirect, cookie: { session, oauth_state } }) => {
+      const ip = headers["x-real-ip"] ?? "unknown";
+      const limited = rl(`auth:${ip}`, BUCKETS.auth, set);
+      if (limited) return limited;
       const code = query.code as string | undefined;
       const state = query.state as string | undefined;
       if (!code) return redirect(`${FRONTEND_ORIGIN}/?error=missing_code`);

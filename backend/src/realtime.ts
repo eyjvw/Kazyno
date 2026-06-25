@@ -76,6 +76,19 @@ export function publishBroadcast(payload: unknown) {
   server?.publish("broadcast", JSON.stringify(payload));
 }
 
+/** Push a structured log event to all connected admins and persist to DB. */
+export function publishAdminLog(event: Record<string, unknown>) {
+  const ts = Date.now();
+  server?.publish(
+    "admin-log",
+    JSON.stringify({ type: "admin-log", ts, ...event }),
+  );
+  void sql`
+    INSERT INTO admin_logs (ts, action, payload)
+    VALUES (to_timestamp(${ts / 1000}), ${event.action as string}, ${event})
+  `.catch(() => {});
+}
+
 /** Push the refreshed leaderboard to everyone watching. */
 export async function publishLeaderboard() {
   if (!server) return;

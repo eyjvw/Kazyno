@@ -1,7 +1,7 @@
 import { Elysia, t } from "elysia";
 import { jwt } from "@elysiajs/jwt";
 import { sql } from "./db";
-import { publishBalance, publishLeaderboard } from "./realtime";
+import { publishBalance, publishLeaderboard, publishAdminLog, publishBroadcast } from "./realtime";
 import { pushNotif, pushNotifAll, type Sender } from "./notifications";
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? "dev-insecure-change-me";
@@ -41,8 +41,8 @@ export const admin = new Elysia({ prefix: "/api/admin" })
     if (q.length < 1) return { results: [] };
     const results = (await sql`
       SELECT id, login, display_name, image_url, points FROM users
-      WHERE lower(login) LIKE ${q + "%"} OR lower(display_name) LIKE ${"%" + q + "%"}
-      ORDER BY login LIMIT 8
+      WHERE lower(login) LIKE ${"%" + q + "%"}
+      ORDER BY login LIMIT 20
     `) as unknown[];
     return { results };
   })
@@ -83,6 +83,7 @@ export const admin = new Elysia({ prefix: "/api/admin" })
       `) as Array<{ id: number; points: number }>;
       if (!rows[0]) return err(set, 404, "joueur introuvable");
       publishBalance(rows[0].id, rows[0].points);
+      publishAdminLog({ action: "points", target: body.login, amount, newBalance: rows[0].points });
       const me = await senderCard(userId!);
       await pushNotif(rows[0].id, {
         kind: "admin",
@@ -96,7 +97,53 @@ export const admin = new Elysia({ prefix: "/api/admin" })
       return { ok: true, points: rows[0].points };
     },
     { body: t.Object({ login: t.String(), amount: t.Integer() }) },
-  );
+  )
+
+  // Query persisted admin logs with optional filters.
+  .get("/logs", async ({ isAdmin, query, set }) => {
+    if (!isAdmin) return forbid(set);
+    const loginRaw = (query.login  as string | undefined)?.trim() || null;
+    const action   = (query.action as string | undefined)?.trim() || null;
+    const from     = (query.from   as string | undefined)?.trim() || null;
+    const to       = (query.to     as string | undefined)?.trim() || null;
+    const limit    = Math.min(Number(query.limit  ?? 100), 500);
+    const offset   = Number(query.offset ?? 0);
+    const loginPat = loginRaw ? `%${loginRaw}%` : null;
+
+    const logs = await sql`
+      SELECT id, ts, action, payload FROM admin_logs
+      WHERE (CAST(${loginPat} AS text) IS NULL
+             OR payload->>'login'  ILIKE CAST(${loginPat} AS text)
+             OR payload->>'target' ILIKE CAST(${loginPat} AS text))
+        AND (CAST(${action} AS text) IS NULL OR action = CAST(${action} AS text))
+        AND (CAST(${from} AS text) IS NULL OR ts >= CAST(${from} AS timestamptz))
+        AND (CAST(${to}   AS text) IS NULL OR ts <= (CAST(${to} AS timestamptz) + interval '1 day'))
+      ORDER BY ts DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+    const [{ count }] = await sql`
+      SELECT COUNT(*)::int AS count FROM admin_logs
+      WHERE (CAST(${loginPat} AS text) IS NULL
+             OR payload->>'login'  ILIKE CAST(${loginPat} AS text)
+             OR payload->>'target' ILIKE CAST(${loginPat} AS text))
+        AND (CAST(${action} AS text) IS NULL OR action = CAST(${action} AS text))
+        AND (CAST(${from} AS text) IS NULL OR ts >= CAST(${from} AS timestamptz))
+        AND (CAST(${to}   AS text) IS NULL OR ts <= (CAST(${to} AS timestamptz) + interval '1 day'))
+    ` as Array<{ count: number }>;
+    return { logs, total: count };
+  })
+
+  // Reset all users' points to 1000.
+  .post("/reset-all", async ({ isAdmin, userId, set }) => {
+    if (!isAdmin) return forbid(set);
+    await sql`UPDATE users SET points = 1000`;
+    publishBroadcast({ type: "balance", points: 1000 });
+    const me = await senderCard(userId!);
+    await pushNotifAll({ kind: "admin", message: "🔄 Reset général — tout le monde repart à 1 000 pts !", from: me });
+    publishAdminLog({ action: "reset-all" });
+    void publishLeaderboard();
+    return { ok: true };
+  });
 
 async function senderCard(userId: number): Promise<Sender | null> {
   const r = (await sql`

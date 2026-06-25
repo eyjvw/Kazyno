@@ -6,6 +6,8 @@ import { stats } from "./stats";
 import { social } from "./social";
 import { blackjack } from "./blackjack";
 import { exambets } from "./exambets";
+import { exams } from "./exams";
+import { tracker } from "./tracker";
 import { admin } from "./admin";
 import { notifications } from "./notifications";
 import { realtimeWs } from "./ws";
@@ -21,6 +23,8 @@ const app = new Elysia()
   .use(social)
   .use(blackjack)
   .use(exambets)
+  .use(exams)
+  .use(tracker)
   .use(admin)
   .use(notifications)
   .use(realtimeWs)

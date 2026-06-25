@@ -1,7 +1,8 @@
 import { Elysia, t } from "elysia";
 import { jwt } from "@elysiajs/jwt";
 import { sql } from "./db";
-import { publishBalance, publishLeaderboard } from "./realtime";
+import { publishBalance, publishLeaderboard, publishAdminLog } from "./realtime";
+import { rl, BUCKETS } from "./ratelimit";
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? "dev-insecure-change-me";
 const EDGE = 0.99; // 1% house edge
@@ -18,18 +19,20 @@ class InsufficientFunds extends Error {}
 
 // Apply a bet result atomically: debit the wager, credit the payout, but only
 // if the balance covers the wager. Returns the new balance.
-async function settle(userId: number, bet: number, payout: number): Promise<number> {
+async function settle(userId: number, bet: number, payout: number, game?: string): Promise<number> {
   const rows = (await sql`
     UPDATE users
     SET points = points - ${bet} + ${payout}
     WHERE id = ${userId} AND points >= ${bet}
-    RETURNING points
-  `) as Array<{ points: number }>;
+    RETURNING points, login
+  `) as Array<{ points: number; login: string }>;
   if (!rows[0]) throw new InsufficientFunds();
-  const points = rows[0].points;
-  // Live push: this user's balance + the shared leaderboard.
+  const { points, login } = rows[0];
   publishBalance(userId, points);
   void publishLeaderboard();
+  if (game) {
+    publishAdminLog({ action: "bet", game, login, bet, payout, win: payout > 0, balance: points });
+  }
   return points;
 }
 
@@ -49,6 +52,7 @@ export const games = new Elysia({ prefix: "/api/games" })
       return { error: "non authentifie" };
     }
   })
+  .onBeforeHandle(({ userId, set }) => rl(`games:${userId}`, BUCKETS.games, set))
   .error({ InsufficientFunds })
   .onError(({ code, error, set }) => {
     if (code === "InsufficientFunds") {
@@ -65,7 +69,7 @@ export const games = new Elysia({ prefix: "/api/games" })
       const outcome = rand() < 0.5 ? "heads" : "tails";
       const win = outcome === body.side;
       const payout = win ? Math.floor(body.bet * mult) : 0;
-      const balance = await settle(userId!, body.bet, payout);
+      const balance = await settle(userId!, body.bet, payout, "coinflip");
       return { win, outcome, multiplier: win ? mult : 0, payout, balance };
     },
     {
@@ -86,7 +90,7 @@ export const games = new Elysia({ prefix: "/api/games" })
       const roll = Math.round(rand() * 10000) / 100; // 0.00 - 100.00
       const win = direction === "under" ? roll < target : roll > target;
       const payout = win ? Math.floor(bet * mult) : 0;
-      const balance = await settle(userId!, bet, payout);
+      const balance = await settle(userId!, bet, payout, "dice");
       return { win, roll, multiplier: Number(mult.toFixed(4)), payout, balance };
     },
     {
@@ -107,7 +111,7 @@ export const games = new Elysia({ prefix: "/api/games" })
       const result = Math.max(1, Math.floor((EDGE / r) * 100) / 100);
       const win = result >= target;
       const payout = win ? Math.floor(bet * target) : 0;
-      const balance = await settle(userId!, bet, payout);
+      const balance = await settle(userId!, bet, payout, "limbo");
       return { win, result, multiplier: target, payout, balance };
     },
     {
@@ -132,7 +136,7 @@ export const games = new Elysia({ prefix: "/api/games" })
       }
       const mult = MULT[bucket];
       const payout = Math.floor(body.bet * mult);
-      const balance = await settle(userId!, body.bet, payout);
+      const balance = await settle(userId!, body.bet, payout, "plinko");
       return {
         win: mult >= 1,
         bucket,
@@ -185,7 +189,7 @@ export const games = new Elysia({ prefix: "/api/games" })
       }
 
       const payout = Math.floor(body.bet * mult);
-      const balance = await settle(userId!, body.bet, payout);
+      const balance = await settle(userId!, body.bet, payout, "slots");
       return { win: mult > 0, reels, multiplier: mult, payout, balance };
     },
     { body: t.Object({ bet: betField }) },

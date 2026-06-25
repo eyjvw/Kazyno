@@ -144,6 +144,9 @@ export function connectRealtime() {
         toast(msg.notif.message, msg.notif.link || undefined);
         notifListeners.forEach((fn) => fn());
         break;
+      case "admin-log":
+        adminLogListeners.forEach((fn) => fn(msg));
+        break;
     }
   };
   sock.onopen = () => resubscribeRooms();
@@ -261,14 +264,26 @@ export function toast(message: string, href?: string) {
   }
   const el = document.createElement(href ? "a" : "div") as HTMLElement;
   el.className = "toast" + (href ? " clickable" : "");
-  el.textContent = message;
   if (href) (el as HTMLAnchorElement).href = href;
-  host.appendChild(el);
-  requestAnimationFrame(() => el.classList.add("show"));
-  setTimeout(() => {
+
+  const txt = document.createElement("span");
+  txt.textContent = message;
+  el.appendChild(txt);
+
+  const dismiss = () => {
     el.classList.remove("show");
     setTimeout(() => el.remove(), 300);
-  }, 6000);
+  };
+
+  const btn = document.createElement("button");
+  btn.className = "toast-close";
+  btn.textContent = "✕";
+  btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); dismiss(); });
+  el.appendChild(btn);
+
+  host.appendChild(el);
+  requestAnimationFrame(() => el.classList.add("show"));
+  setTimeout(dismiss, 6000);
 }
 
 // ── Blackjack realtime + API ──────────────────────────────────────────────
@@ -373,6 +388,12 @@ const notifListeners = new Set<NotifListener>();
 export function onNotification(fn: NotifListener) {
   notifListeners.add(fn);
 }
+
+type AdminLogListener = (event: any) => void;
+const adminLogListeners = new Set<AdminLogListener>();
+export function onAdminLog(fn: AdminLogListener) {
+  adminLogListeners.add(fn);
+}
 export async function getNotifications(): Promise<{ items: Notif[]; unread: number }> {
   try {
     const r = await fetch("/api/notifications");
@@ -422,13 +443,75 @@ export const adminNotify = (message: string, login?: string) =>
   adminPost("/notify", login ? { message, login } : { message });
 export const adminAddPoints = (login: string, amount: number) =>
   adminPost("/points", { login, amount });
+export const adminResetAll = () => adminPost("/reset-all", {});
+export async function adminGetLogs(params: {
+  login?: string; action?: string; from?: string; to?: string;
+  limit?: number; offset?: number;
+} = {}) {
+  const q = new URLSearchParams();
+  if (params.login)  q.set("login",  params.login);
+  if (params.action) q.set("action", params.action);
+  if (params.from)   q.set("from",   params.from);
+  if (params.to)     q.set("to",     params.to);
+  if (params.limit)  q.set("limit",  String(params.limit));
+  if (params.offset) q.set("offset", String(params.offset));
+  const r = await fetch(`/api/admin/logs?${q}`);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json() as Promise<{ logs: any[]; total: number }>;
+}
 
-export async function placeExamBet(predicted: number, stake: number) {
+export async function getExams(): Promise<any[]> {
+  try {
+    const r = await fetch("/api/exams");
+    return r.ok ? (await r.json()).exams : [];
+  } catch { return []; }
+}
+export async function placeExamBet(exam_id: number, predicted: number, stake: number) {
   const r = await fetch("/api/exam-bets", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ exam_id, predicted, stake }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error ?? "Erreur");
+  return data;
+}
+export async function modifyExamBet(betId: number, predicted: number, stake: number) {
+  const r = await fetch(`/api/exam-bets/${betId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ predicted, stake }),
   });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error ?? "Erreur");
+  return data;
+}
+export async function cancelExamBet(betId: number) {
+  const r = await fetch(`/api/exam-bets/${betId}`, { method: "DELETE" });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error ?? "Erreur");
+  return data;
+}
+
+// Admin exam management
+export async function adminCreateExam(label: string, exam_date: string, is_final: boolean) {
+  const r = await fetch("/api/exams", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label, exam_date, is_final }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error ?? "Erreur");
+  return data;
+}
+export async function adminLockExam(id: number) {
+  const r = await fetch(`/api/exams/${id}/lock`, { method: "POST" });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error ?? "Erreur");
+  return data;
+}
+export async function adminDeleteExam(id: number) {
+  const r = await fetch(`/api/exams/${id}`, { method: "DELETE" });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data?.error ?? "Erreur");
   return data;

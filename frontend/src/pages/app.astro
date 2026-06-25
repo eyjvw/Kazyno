@@ -14,7 +14,6 @@ const games = [
 ---
 
 <Layout title="PISCASINO — Lobby">
-  <canvas class="ambient" data-ambient></canvas>
   <Nav />
   <main class="lobby">
     <section class="hero">
@@ -81,25 +80,9 @@ const games = [
     rankEl.textContent = rank ? `#${rank}` : "—";
   });
 
-  // Ambient WebGL background — never let it block the page if WebGL fails.
-  import("../lib/ambient")
-    .then(({ initAmbient }) => {
-      const amb = document.querySelector<HTMLCanvasElement>("[data-ambient]");
-      if (amb) initAmbient(amb);
-    })
-    .catch(() => {});
 </script>
 
 <style>
-  .ambient {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 0;
-    pointer-events: none;
-    opacity: 1;
-  }
   .lobby {
     position: relative;
     z-index: 1;

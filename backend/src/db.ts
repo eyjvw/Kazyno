@@ -75,6 +75,20 @@ export async function initDb(): Promise<void> {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS exam_bets_status_idx ON exam_bets (status)`;
+  await sql`ALTER TABLE exam_bets ADD COLUMN IF NOT EXISTS exam_type TEXT NOT NULL DEFAULT 'standard'`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS exams (
+      id         SERIAL PRIMARY KEY,
+      label      TEXT NOT NULL,
+      exam_date  TIMESTAMPTZ NOT NULL,
+      is_final   BOOLEAN NOT NULL DEFAULT false,
+      locked     BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS exams_date_idx ON exams (exam_date)`;
+  await sql`ALTER TABLE exam_bets ADD COLUMN IF NOT EXISTS exam_id INTEGER REFERENCES exams(id) ON DELETE SET NULL`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS notifications (
@@ -92,4 +106,16 @@ export async function initDb(): Promise<void> {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications (user_id, created_at DESC)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS admin_logs (
+      id      BIGSERIAL PRIMARY KEY,
+      ts      TIMESTAMPTZ NOT NULL DEFAULT now(),
+      action  TEXT NOT NULL,
+      payload JSONB NOT NULL DEFAULT '{}'
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS admin_logs_ts_idx ON admin_logs (ts DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS admin_logs_action_idx ON admin_logs (action)`;
+  await sql`CREATE INDEX IF NOT EXISTS admin_logs_payload_idx ON admin_logs USING gin (payload)`;
 }

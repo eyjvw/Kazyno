@@ -23,9 +23,13 @@ import Footer from "../components/Footer.astro";
           <input class="input" data-search placeholder="Rechercher un joueur…" autocomplete="off" />
           <ul class="presults" data-results hidden></ul>
           <div class="chip" data-chip hidden>
-            <img class="cav" data-chip-av width="26" height="26" alt="" hidden />
+            <img class="cav" data-chip-av width="40" height="40" alt="" hidden />
             <span class="cav fb" data-chip-fb hidden></span>
-            <span data-chip-name></span><button type="button" data-clear>✕</button>
+            <div class="chip-info">
+              <span class="chip-name" data-chip-name></span>
+              <span class="chip-meta" data-chip-meta></span>
+            </div>
+            <button type="button" class="chip-clear" data-clear>✕</button>
           </div>
         </div>
 
@@ -40,9 +44,13 @@ import Footer from "../components/Footer.astro";
           <input class="input" data-search placeholder="Rechercher un joueur…" autocomplete="off" />
           <ul class="presults" data-results hidden></ul>
           <div class="chip" data-chip hidden>
-            <img class="cav" data-chip-av width="26" height="26" alt="" hidden />
+            <img class="cav" data-chip-av width="40" height="40" alt="" hidden />
             <span class="cav fb" data-chip-fb hidden></span>
-            <span data-chip-name></span><button type="button" data-clear>✕</button>
+            <div class="chip-info">
+              <span class="chip-name" data-chip-name></span>
+              <span class="chip-meta" data-chip-meta></span>
+            </div>
+            <button type="button" class="chip-clear" data-clear>✕</button>
           </div>
         </div>
 
@@ -51,7 +59,71 @@ import Footer from "../components/Footer.astro";
         <button class="btn" data-grant>Appliquer</button>
         <p class="msg" data-pts-res></p>
       </section>
+
+      <section class="panel card danger-card">
+        <h2>Zone dangereuse</h2>
+        <p class="danger-desc">Remet tous les joueurs à 1 000 pts. Irréversible.</p>
+        <button class="btn btn-danger" data-reset-all>Reset tout le monde → 1 000 pts</button>
+        <p class="msg" data-reset-res></p>
+      </section>
     </div>
+
+    <section class="panel card exam-card" data-exam-section hidden>
+      <div class="exam-header">
+        <h2>Examens planifiés</h2>
+        <span class="exam-help">Les paris se ferment automatiquement à la date de l'exam.</span>
+      </div>
+
+      <div class="exam-form">
+        <input class="input exam-input" data-exam-label placeholder="Libellé (ex: Exam 01)" maxlength="80" />
+        <input class="input exam-input exam-date" data-exam-date type="date" />
+        <input class="input exam-input exam-time" data-exam-time type="time" value="08:42" />
+        <label class="final-check">
+          <input type="checkbox" data-exam-final />
+          Exam final
+        </label>
+        <button class="btn exam-add-btn" data-exam-add>Ajouter</button>
+      </div>
+      <p class="msg" data-exam-res></p>
+
+      <ul class="exam-list" data-exam-list>
+        <li class="exam-empty">Chargement…</li>
+      </ul>
+    </section>
+
+    <section class="panel log-panel" data-log-panel hidden>
+      <div class="log-head">
+        <span class="log-title">Live log</span>
+        <span class="log-dot" data-log-dot></span>
+        <button class="log-clear" data-log-clear>Vider</button>
+      </div>
+
+      <div class="log-filters">
+        <div class="flt-picker">
+          <input class="input flt-input" data-f-login placeholder="Rechercher un login…" autocomplete="off" />
+          <button class="flt-clear-login" data-f-login-clear hidden>✕</button>
+          <ul class="flt-presults" data-f-results hidden></ul>
+        </div>
+        <select class="input flt-select" data-f-action>
+          <option value="">Toutes actions</option>
+          <option value="bet">Mises</option>
+          <option value="points">Points admin</option>
+          <option value="reset-all">Reset général</option>
+        </select>
+        <input class="input flt-input flt-date" type="date" data-f-from />
+        <input class="input flt-input flt-date" type="date" data-f-to />
+        <button class="btn flt-btn" data-f-search>Chercher</button>
+        <button class="btn flt-btn flt-reset" data-f-reset>Reset</button>
+      </div>
+
+      <p class="log-count" data-log-count hidden></p>
+      <ul class="log-list" data-log-list></ul>
+      <div class="log-pagination" data-log-pagination hidden>
+        <button class="ghost-btn" data-page-prev>← Préc.</button>
+        <span data-page-info></span>
+        <button class="ghost-btn" data-page-next>Suiv. →</button>
+      </div>
+    </section>
 
     <p class="denied" data-denied hidden>Accès réservé aux admins.</p>
   </main>
@@ -65,6 +137,15 @@ import Footer from "../components/Footer.astro";
     adminSearch,
     adminNotify,
     adminAddPoints,
+    adminResetAll,
+    adminGetLogs,
+    getExams,
+    adminCreateExam,
+    adminLockExam,
+    adminDeleteExam,
+    connectRealtime,
+    onAdminLog,
+    fmt,
   } from "../lib/casino";
 
   const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
@@ -74,6 +155,7 @@ import Footer from "../components/Footer.astro";
     const results = root.querySelector<HTMLElement>("[data-results]")!;
     const chip = root.querySelector<HTMLElement>("[data-chip]")!;
     const chipName = root.querySelector<HTMLElement>("[data-chip-name]")!;
+    const chipMeta = root.querySelector<HTMLElement>("[data-chip-meta]")!;
     const chipAv = root.querySelector<HTMLImageElement>("[data-chip-av]")!;
     const chipFb = root.querySelector<HTMLElement>("[data-chip-fb]")!;
     let selected: string | null = null;
@@ -95,10 +177,10 @@ import Footer from "../components/Footer.astro";
                 const name = u.display_name || u.login;
                 const av = u.image_url
                   ? `<img class="pav" src="${u.image_url}" width="32" height="32" alt="" />`
-                  : `<span class="pav fb">${name.charAt(0).toUpperCase()}</span>`;
-                return `<li data-login="${u.login}" data-name="${name}" data-image="${u.image_url || ""}">
+                  : `<span class="pav fb">${u.login.charAt(0).toUpperCase()}</span>`;
+                return `<li data-login="${u.login}" data-name="${name}" data-image="${u.image_url || ""}" data-pts="${u.points}">
                     ${av}
-                    <span class="pinfo"><b>${name}</b><small>@${u.login} · ${u.points} pts</small></span>
+                    <span class="pinfo"><b>@${u.login}</b><small>${Number(u.points).toLocaleString()} pts</small></span>
                   </li>`;
               })
               .join("")
@@ -111,7 +193,8 @@ import Footer from "../components/Footer.astro";
       const li = (e.target as HTMLElement).closest<HTMLElement>("li[data-login]");
       if (!li) return;
       selected = li.dataset.login!;
-      chipName.textContent = li.dataset.name!;
+      chipName.textContent = `@${li.dataset.login}`;
+      chipMeta.textContent = `${Number(li.dataset.pts).toLocaleString()} pts`;
       const img = li.dataset.image;
       if (img) {
         chipAv.src = img;
@@ -144,6 +227,84 @@ import Footer from "../components/Footer.astro";
       return;
     }
     $("[data-panel]").hidden = false;
+    $("[data-exam-section]").hidden = false;
+
+    // ── Exam management ───────────────────────────────────────────────────
+    const examList = $("[data-exam-list]");
+    const examRes  = $("[data-exam-res]");
+
+    function examTypeLabel(e: any): string {
+      return e.is_final ? "Final" : "Standard";
+    }
+
+    function renderExams(exams: any[]) {
+      if (!exams.length) {
+        examList.innerHTML = `<li class="exam-empty">Aucun exam planifié.</li>`;
+        return;
+      }
+      examList.innerHTML = exams.map((e: any) => {
+        const date = new Date(e.exam_date).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
+        const locked = e.locked;
+        return `<li class="exam-row" data-eid="${e.id}">
+          <div class="exam-info">
+            <span class="exam-label">${e.label}</span>
+            <span class="exam-meta">${date} · ${examTypeLabel(e)} · ${e.bet_count} pari${e.bet_count !== 1 ? "s" : ""}</span>
+          </div>
+          <div class="exam-actions">
+            ${!locked ? `<button class="ghost-btn exam-lock-btn" data-lock="${e.id}">🔒 Lock</button>` : `<span class="exam-locked-badge">Verrouillé</span>`}
+            ${e.bet_count === 0 ? `<button class="ghost-btn exam-del-btn" data-del="${e.id}">Suppr.</button>` : ""}
+          </div>
+        </li>`;
+      }).join("");
+
+      examList.querySelectorAll<HTMLButtonElement>("[data-lock]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          if (!confirm(`Verrouiller "${btn.closest("li")?.querySelector(".exam-label")?.textContent}" ? Les paris se ferment.`)) return;
+          try {
+            await adminLockExam(Number(btn.dataset.lock));
+            await refreshExams();
+          } catch (e: any) { alert(e?.message ?? "Erreur"); }
+        });
+      });
+      examList.querySelectorAll<HTMLButtonElement>("[data-del]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          if (!confirm("Supprimer cet exam ?")) return;
+          try {
+            await adminDeleteExam(Number(btn.dataset.del));
+            await refreshExams();
+          } catch (e: any) { alert(e?.message ?? "Erreur"); }
+        });
+      });
+    }
+
+    async function refreshExams() {
+      renderExams(await getExams());
+    }
+    await refreshExams();
+
+    $("[data-exam-add]").addEventListener("click", async () => {
+      examRes.textContent = "";
+      examRes.className = "msg";
+      const label    = $<HTMLInputElement>("[data-exam-label]").value.trim();
+      const dateVal  = $<HTMLInputElement>("[data-exam-date]").value;
+      const timeVal  = $<HTMLInputElement>("[data-exam-time]").value || "08:42";
+      const final    = $<HTMLInputElement>("[data-exam-final]").checked;
+      if (!label)   { examRes.textContent = "Libellé requis"; examRes.className = "msg err"; return; }
+      if (!dateVal) { examRes.textContent = "Date requise";   examRes.className = "msg err"; return; }
+      try {
+        await adminCreateExam(label, new Date(`${dateVal}T${timeVal}`).toISOString(), final);
+        examRes.textContent = "Exam ajouté ✓";
+        examRes.className = "msg ok";
+        $<HTMLInputElement>("[data-exam-label]").value = "";
+        $<HTMLInputElement>("[data-exam-date]").value = "";
+        $<HTMLInputElement>("[data-exam-time]").value = "08:42";
+        $<HTMLInputElement>("[data-exam-final]").checked = false;
+        await refreshExams();
+      } catch (e: any) {
+        examRes.textContent = e?.message ?? "Erreur";
+        examRes.className = "msg err";
+      }
+    });
 
     const notifPicker = makePicker($('[data-picker="notif"]'));
     const ptsPicker = makePicker($('[data-picker="points"]'));
@@ -179,12 +340,204 @@ import Footer from "../components/Footer.astro";
           ptsPicker.login,
           Number($<HTMLInputElement>("[data-pts-amount]").value),
         );
-        res.textContent = `OK — nouveau solde : ${r.points} pts`;
+        res.textContent = `OK — nouveau solde : ${r.points.toLocaleString()} pts`;
         res.classList.add("ok");
       } catch (e: any) {
         res.textContent = e?.message ?? "Erreur";
         res.classList.add("err");
       }
+    });
+
+    $("[data-reset-all]").addEventListener("click", async () => {
+      const res = $("[data-reset-res]");
+      res.textContent = "";
+      res.className = "msg";
+      if (!confirm("Reset TOUS les joueurs à 1 000 pts ? Irréversible.")) return;
+      try {
+        await adminResetAll();
+        res.textContent = "Reset effectué ✓";
+        res.classList.add("ok");
+      } catch (e: any) {
+        res.textContent = e?.message ?? "Erreur";
+        res.classList.add("err");
+      }
+    });
+
+    // ── Live log ──────────────────────────────────────────────────────────
+    const logPanel     = $("[data-log-panel]");
+    const logList      = $("[data-log-list]");
+    const logDot       = $("[data-log-dot]");
+    const logCount     = $("[data-log-count]");
+    const logPagination= $("[data-log-pagination]");
+    const fLoginInput  = $<HTMLInputElement>("[data-f-login]");
+    const fLoginClear  = $<HTMLButtonElement>("[data-f-login-clear]");
+    const fResults     = $("[data-f-results]");
+    logPanel.hidden    = false;
+
+    const LIMIT = 50;
+    let currentPage = 0;
+    let activeLogin = ""; // resolved login from picker
+
+    const GAME_ICON: Record<string, string> = {
+      coinflip: "🪙", dice: "🎲", limbo: "🚀", plinko: "🔻", slots: "🎰", blackjack: "🃏",
+    };
+
+    function getFilters() {
+      return {
+        login:  activeLogin || undefined,
+        action: $<HTMLSelectElement>("[data-f-action]").value || undefined,
+        from:   $<HTMLInputElement>("[data-f-from]").value   || undefined,
+        to:     $<HTMLInputElement>("[data-f-to]").value     || undefined,
+      };
+    }
+
+    function eventMatchesFilters(event: any): boolean {
+      const f = getFilters();
+      if (f.login) {
+        const l = f.login.toLowerCase();
+        const el = ((event.login ?? "") + (event.target ?? "")).toLowerCase();
+        if (!el.includes(l)) return false;
+      }
+      if (f.action && event.action !== f.action) return false;
+      if (f.from || f.to) {
+        const d = new Date(typeof event.ts === "number" ? event.ts : event.ts)
+          .toISOString().slice(0, 10);
+        if (f.from && d < f.from) return false;
+        if (f.to   && d > f.to)   return false;
+      }
+      return true;
+    }
+
+    function renderEntry(event: any): HTMLLIElement {
+      const date = new Date(typeof event.ts === "number" ? event.ts : event.ts);
+      const ts   = date.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "medium" });
+      let text = "";
+      if (event.action === "bet") {
+        const icon = GAME_ICON[event.game] ?? "🎮";
+        const net  = (event.payout ?? 0) - event.bet;
+        const diff = net >= 0 ? `+${net.toLocaleString()}` : `${net.toLocaleString()}`;
+        const cls  = net >= 0 ? "log-win" : "log-lose";
+        text = `${icon} <b>@${event.login}</b> · ${event.game} · mise ${event.bet.toLocaleString()} · <span class="${cls}">${diff} pts</span> · solde ${event.balance.toLocaleString()}`;
+      } else if (event.action === "points") {
+        const sign = event.amount > 0 ? "+" : "";
+        const cls  = event.amount > 0 ? "log-win" : "log-lose";
+        text = `💰 admin → <b>@${event.target}</b> · <span class="${cls}">${sign}${event.amount.toLocaleString()} pts</span> · solde ${event.newBalance.toLocaleString()}`;
+      } else if (event.action === "reset-all") {
+        text = `⚠️ <span class="log-warn">Reset général — tous remis à 1 000 pts</span>`;
+      }
+      const li = document.createElement("li");
+      li.className = "log-entry";
+      li.innerHTML = `<span class="log-ts">${ts}</span>${text || JSON.stringify(event)}`;
+      return li;
+    }
+
+    async function loadHistory(page = 0) {
+      try {
+        const { logs, total } = await adminGetLogs({ ...getFilters(), limit: LIMIT, offset: page * LIMIT });
+        currentPage = page;
+        logList.innerHTML = "";
+        if (!logs.length) {
+          const li = document.createElement("li");
+          li.className = "log-entry log-empty";
+          li.textContent = "Aucun résultat.";
+          logList.append(li);
+        } else {
+          for (const row of logs) logList.append(renderEntry({ ...row.payload, ts: row.ts, action: row.action }));
+        }
+        logCount.textContent = `${total.toLocaleString()} résultat${total !== 1 ? "s" : ""}`;
+        logCount.hidden = false;
+        const totalPages = Math.ceil(total / LIMIT);
+        logPagination.hidden = totalPages <= 1;
+        if (totalPages > 1) {
+          $("[data-page-info]").textContent = `Page ${page + 1} / ${totalPages}`;
+          ($("[data-page-prev]") as HTMLButtonElement).disabled = page === 0;
+          ($("[data-page-next]") as HTMLButtonElement).disabled = page >= totalPages - 1;
+        }
+      } catch {
+        logCount.textContent = "Erreur chargement.";
+        logCount.hidden = false;
+      }
+    }
+
+    // ── Login autocomplete picker ─────────────────────────────────────────
+    let searchTimer: number;
+    fLoginInput.addEventListener("input", () => {
+      clearTimeout(searchTimer);
+      activeLogin = "";
+      fLoginClear.hidden = true;
+      const q = fLoginInput.value.trim();
+      if (!q) { fResults.hidden = true; fResults.innerHTML = ""; return; }
+      searchTimer = window.setTimeout(async () => {
+        const list = await adminSearch(q);
+        fResults.innerHTML = list.length
+          ? list.map((u: any) => {
+              const av = u.image_url
+                ? `<img class="pav" src="${u.image_url}" width="28" height="28" alt="" />`
+                : `<span class="pav fb">${u.login.charAt(0).toUpperCase()}</span>`;
+              return `<li data-login="${u.login}">${av}<span>@${u.login}</span><small>${u.points.toLocaleString()} pts</small></li>`;
+            }).join("")
+          : `<li class="empty">Aucun résultat</li>`;
+        fResults.hidden = false;
+      }, 200);
+    });
+    fResults.addEventListener("click", async (e) => {
+      const li = (e.target as HTMLElement).closest<HTMLElement>("li[data-login]");
+      if (!li) return;
+      activeLogin = li.dataset.login!;
+      fLoginInput.value = `@${activeLogin}`;
+      fResults.hidden = true;
+      fResults.innerHTML = "";
+      fLoginClear.hidden = false;
+      await loadHistory(0);
+    });
+    fLoginClear.addEventListener("click", async () => {
+      activeLogin = "";
+      fLoginInput.value = "";
+      fLoginClear.hidden = true;
+      await loadHistory(0);
+    });
+    document.addEventListener("click", (e) => {
+      if (!(e.target as HTMLElement).closest(".flt-picker")) fResults.hidden = true;
+    });
+
+    // ── Controls ──────────────────────────────────────────────────────────
+    $("[data-log-clear]").addEventListener("click", () => {
+      logList.innerHTML = "";
+      logCount.hidden = true;
+      logPagination.hidden = true;
+    });
+    $("[data-f-search]").addEventListener("click", () => loadHistory(0));
+    $("[data-f-action]").addEventListener("change", () => loadHistory(0));
+    $("[data-f-from]").addEventListener("change", () => loadHistory(0));
+    $("[data-f-to]").addEventListener("change", () => loadHistory(0));
+    $("[data-f-reset]").addEventListener("click", async () => {
+      activeLogin = "";
+      fLoginInput.value = "";
+      fLoginClear.hidden = true;
+      $<HTMLSelectElement>("[data-f-action]").value = "";
+      $<HTMLInputElement>("[data-f-from]").value = "";
+      $<HTMLInputElement>("[data-f-to]").value = "";
+      await loadHistory(0);
+    });
+    $("[data-page-prev]").addEventListener("click", () => loadHistory(currentPage - 1));
+    $("[data-page-next]").addEventListener("click", () => loadHistory(currentPage + 1));
+
+    // Initial load
+    await loadHistory(0);
+
+    connectRealtime();
+
+    // WS events: toujours prepend si matche les filtres actifs
+    onAdminLog((event) => {
+      if (!eventMatchesFilters(event)) return;
+      // remove "no results" placeholder if present
+      logList.querySelector(".log-empty")?.remove();
+      const li = renderEntry(event);
+      logList.prepend(li);
+      while (logList.children.length > 200) logList.lastElementChild?.remove();
+      logDot.classList.remove("pulse");
+      void logDot.offsetWidth;
+      logDot.classList.add("pulse");
     });
   });
 </script>
@@ -250,7 +603,7 @@ import Footer from "../components/Footer.astro";
     max-height: 240px;
     overflow-y: auto;
   }
-  .presults li {
+  .presults :global(li) {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -258,79 +611,116 @@ import Footer from "../components/Footer.astro";
     border-radius: 6px;
     cursor: pointer;
   }
-  .presults li:hover {
+  .presults :global(li:hover) {
     background: var(--panel);
   }
-  .pav {
-    width: 32px;
-    height: 32px;
+  .presults :global(.pav) {
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     object-fit: cover;
     background: var(--raise);
     flex: none;
   }
-  .pav.fb {
+  .presults :global(.pav.fb) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     font-weight: 700;
-    font-size: 13px;
+    font-size: 14px;
     color: #fff;
-    background: var(--accent);
+    background: linear-gradient(135deg, var(--accent), #7c3aed);
   }
-  .pinfo {
+  .presults :global(.pinfo) {
     display: flex;
     flex-direction: column;
+    gap: 2px;
     line-height: 1.2;
     min-width: 0;
   }
-  .pinfo b {
+  .presults :global(.pinfo b) {
     font-size: 14px;
+    font-weight: 700;
+    color: var(--accent-hover);
   }
-  .pinfo small {
+  .presults :global(.pinfo small) {
     color: var(--muted);
     font-size: 12px;
+    font-variant-numeric: tabular-nums;
   }
-  .presults li.empty {
+  .presults :global(li.empty) {
     color: var(--muted);
     cursor: default;
     justify-content: center;
   }
   .chip {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 8px;
-    background: var(--raise);
-    border-radius: 8px;
-    padding: 6px 12px 6px 6px;
-    font-weight: 600;
-    font-size: 14px;
+    gap: 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 10px 12px;
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.12);
+    position: relative;
   }
   .cav {
-    width: 26px;
-    height: 26px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     object-fit: cover;
     flex: none;
+    border: 2px solid var(--line);
   }
   .cav.fb {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-weight: 700;
-    font-size: 12px;
+    font-weight: 800;
+    font-size: 16px;
     color: #fff;
-    background: var(--accent);
+    background: linear-gradient(135deg, var(--accent), #7c3aed);
   }
-  .chip button {
-    background: none;
-    border: none;
+  .chip-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+  .chip-name {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--accent-hover);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .chip-meta {
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+  .chip-clear {
+    background: var(--raise);
+    border: 1px solid var(--line);
     color: var(--muted);
     cursor: pointer;
-    font-size: 13px;
+    font-size: 11px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
   }
-  .chip button:hover {
+  .chip-clear:hover {
     color: var(--lose);
+    border-color: var(--lose);
+    background: rgba(237, 65, 99, 0.1);
   }
   .btn {
     margin-top: 16px;
@@ -354,6 +744,300 @@ import Footer from "../components/Footer.astro";
     text-align: center;
     padding: 60px 0;
   }
+
+  /* Exam section */
+  .exam-card {
+    margin-top: 18px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .exam-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .exam-header h2 { margin: 0; font-size: 18px; }
+  .exam-help { color: var(--muted); font-size: 12px; }
+  .exam-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .exam-input { flex: 1; min-width: 140px; }
+  .exam-date  { flex: 0 1 160px; min-width: 140px; }
+  .exam-time  { flex: 0 1 110px; min-width: 90px; }
+  .final-check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .final-check input { accent-color: var(--accent); cursor: pointer; }
+  .exam-add-btn { margin-top: 0; padding: 12px 18px; white-space: nowrap; }
+  .exam-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .exam-list :global(.exam-empty) { color: var(--muted); font-size: 13px; }
+  .exam-list :global(.exam-row) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 14px;
+  }
+  .exam-list :global(.exam-info) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .exam-list :global(.exam-label) { font-weight: 700; font-size: 14px; }
+  .exam-list :global(.exam-meta) { color: var(--muted); font-size: 12px; }
+  .exam-list :global(.exam-actions) { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+  .exam-list :global(.exam-lock-btn) { font-size: 12px; padding: 5px 10px; }
+  .exam-list :global(.exam-del-btn) { font-size: 12px; padding: 5px 10px; color: var(--lose); border-color: var(--lose); }
+  .exam-list :global(.exam-del-btn:hover) { background: rgba(237,65,99,0.12); color: var(--lose); }
+  .exam-list :global(.exam-locked-badge) {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    background: var(--raise);
+    border-radius: 5px;
+    padding: 3px 8px;
+  }
+
+  /* Danger zone */
+  .danger-card {
+    border-color: var(--lose);
+    grid-column: 1 / -1;
+  }
+  .danger-desc {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .btn-danger {
+    background: var(--lose);
+    margin-top: 14px;
+  }
+  .btn-danger:hover {
+    background: #f56580;
+  }
+
+  /* Live log */
+  .log-panel {
+    margin-top: 18px;
+    padding: 0;
+    overflow: hidden;
+  }
+  .log-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel-2);
+  }
+  .log-title {
+    font-weight: 700;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .log-title { flex: 1; }
+  .log-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--win);
+    opacity: 0.4;
+    transition: opacity 0.2s;
+  }
+  .log-dot.pulse { opacity: 1; }
+  .log-clear {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .log-clear:hover { color: var(--fg); }
+
+  /* Filters */
+  .log-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-2);
+    align-items: center;
+  }
+  .flt-picker {
+    position: relative;
+    flex: 1;
+    min-width: 160px;
+  }
+  .flt-clear-login {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 4px;
+    line-height: 1;
+  }
+  .flt-clear-login:hover { color: var(--lose); }
+  .flt-presults {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 4px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    position: absolute;
+    left: 0; right: 0;
+    z-index: 10;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .flt-presults :global(li) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .flt-presults :global(li:hover) { background: var(--panel); }
+  .flt-presults :global(.pav) {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex: none;
+    background: var(--raise);
+  }
+  .flt-presults :global(.pav.fb) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+    color: #fff;
+    background: linear-gradient(135deg, var(--accent), #7c3aed);
+  }
+  .flt-presults :global(span) { flex: 1; font-weight: 600; }
+  .flt-presults :global(small) { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .flt-presults :global(li.empty) { color: var(--muted); cursor: default; justify-content: center; }
+  .flt-input {
+    width: 100%;
+    font-size: 13px;
+    padding: 7px 10px;
+  }
+  .flt-select {
+    flex: 1;
+    min-width: 140px;
+    font-size: 13px;
+    padding: 7px 10px;
+    background: var(--bg-2);
+    color: var(--fg);
+    cursor: pointer;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .flt-date { flex: 0 1 130px; min-width: 110px; }
+  .flt-btn {
+    padding: 7px 14px;
+    font-size: 13px;
+    margin-top: 0;
+    white-space: nowrap;
+  }
+  .flt-reset {
+    background: var(--raise);
+    color: var(--muted);
+  }
+  .flt-reset:hover { background: var(--panel-2); color: var(--fg); }
+
+  .log-count {
+    margin: 0;
+    padding: 6px 16px;
+    font-size: 12px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-2);
+  }
+
+  .log-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 380px;
+    overflow-y: auto;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .log-list :global(.log-entry) {
+    display: flex;
+    gap: 10px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--line);
+    line-height: 1.5;
+    animation: fadeIn 0.15s ease;
+  }
+  .log-list :global(.log-entry:last-child) { border-bottom: none; }
+  .log-list :global(.log-empty) {
+    color: var(--muted);
+    justify-content: center;
+    font-style: italic;
+  }
+  .log-list :global(.log-ts) {
+    color: var(--muted);
+    font-size: 11px;
+    white-space: nowrap;
+    padding-top: 2px;
+    flex: none;
+    min-width: 130px;
+  }
+  .log-list :global(.log-win)  { color: var(--win);  font-weight: 700; }
+  .log-list :global(.log-lose) { color: var(--lose); font-weight: 700; }
+  .log-list :global(.log-warn) { color: #f59e0b; font-weight: 700; }
+
+  .log-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-3px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
   @media (max-width: 700px) {
     .grid {
       grid-template-columns: 1fr;
