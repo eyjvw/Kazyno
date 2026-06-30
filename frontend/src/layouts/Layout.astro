@@ -1,6 +1,7 @@
 ---
-interface Props {
-  title?: string;
+interface Props
+{
+	title?: string;
 }
 const { title = "PISCASINO" } = Astro.props;
 ---
@@ -21,12 +22,13 @@ const { title = "PISCASINO" } = Astro.props;
 </html>
 
 <script>
-  import("../lib/ambient")
-    .then(({ initAmbient }) => {
-      const c = document.getElementById("ambient-canvas") as HTMLCanvasElement | null;
-      if (c) initAmbient(c);
-    })
-    .catch(() => {});
+	import("../lib/ambient")
+		.then(({ initAmbient }) =>
+		{
+			const c = document.getElementById("ambient-canvas") as HTMLCanvasElement | null;
+			if (c) initAmbient(c);
+		})
+		.catch(() => {});
 </script>
 
 <style is:global>
@@ -248,10 +250,34 @@ const { title = "PISCASINO" } = Astro.props;
   }
 
   /* ── Game shell (bet panel + stage) ─────────────────────────────────── */
+  .game-header {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px clamp(16px, 4vw, 40px) 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .game-header .gh-icon {
+    font-size: 28px;
+    line-height: 1;
+  }
+  .game-header h1 {
+    margin: 0;
+    font-size: clamp(20px, 3.5vw, 28px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  .game-header .gh-sub {
+    margin: 0 0 0 4px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 400;
+  }
   .shell {
     max-width: 1100px;
     margin: 0 auto;
-    padding: clamp(16px, 3vw, 32px) clamp(16px, 4vw, 40px);
+    padding: clamp(12px, 2vw, 20px) clamp(16px, 4vw, 40px) clamp(16px, 3vw, 32px);
     display: grid;
     grid-template-columns: 320px 1fr;
     gap: 16px;
@@ -262,7 +288,6 @@ const { title = "PISCASINO" } = Astro.props;
     display: flex;
     flex-direction: column;
     gap: 16px;
-    height: fit-content;
   }
   .bet-btn {
     width: 100%;
@@ -276,7 +301,7 @@ const { title = "PISCASINO" } = Astro.props;
     align-items: center;
     justify-content: center;
     gap: 22px;
-    min-height: 440px;
+    min-height: 520px;
     position: relative;
     overflow: hidden;
   }
@@ -391,6 +416,48 @@ const { title = "PISCASINO" } = Astro.props;
     25% { box-shadow: 0 0 22px rgba(237, 65, 99, 0.5); border-color: var(--lose); }
     100% { box-shadow: 0 0 0 rgba(237, 65, 99, 0); }
   }
+
+  /* ── Session tracker ────────────────────────────────────────────────── */
+  .hist-bar {
+    align-self: stretch;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-height: 28px;
+  }
+  .hchip {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .hw { background: rgba(0, 231, 1, 0.12); color: var(--win); }
+  .hl { background: rgba(237, 65, 99, 0.12); color: var(--lose); }
+  .hempty { color: var(--muted); font-size: 12px; }
+  .sess-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .ss {
+    background: var(--bg-2);
+    border-radius: 7px;
+    padding: 7px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .ss span { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .ss b { font-size: 12px; font-variant-numeric: tabular-nums; }
+  .spos { color: var(--win); }
+  .sneg { color: var(--lose); }
 
   /* ── Shared footer ──────────────────────────────────────────────────── */
   .site-foot {

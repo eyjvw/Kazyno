@@ -5,6 +5,11 @@ import Nav from "../../components/Nav.astro";
 
 <Layout title="PISCASINO — Limbo">
   <Nav />
+  <header class="game-header">
+    <span class="gh-icon">🎯</span>
+    <h1>Limbo</h1>
+    <span class="gh-sub">· Plus ton multiplicateur cible est élevé, plus c'est risqué</span>
+  </header>
   <div class="shell">
     <aside class="panel betpanel">
       <div class="field">
@@ -29,73 +34,90 @@ import Nav from "../../components/Nav.astro";
 
       <button class="btn bet-btn" data-play>Miser</button>
       <p class="result" data-result></p>
+      <div class="sess-stats" data-sess></div>
     </aside>
 
     <main class="panel stage">
       <div class="big" data-big>1.00×</div>
       <div class="hint">Bust avant ta cible = perdu</div>
+      <div class="hist-bar" data-hist></div>
     </main>
   </div>
 </Layout>
 
 <script>
-  import { bet, setupAmount, fmt, getBalance, BetError } from "../../lib/casino";
+	import { bet, setupAmount, fmt, getBalance, BetError } from "../../lib/casino";
+	import { GameSession } from "../../lib/session";
 
-  const EDGE = 0.99;
-  const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
-  const target = document.querySelector<HTMLInputElement>("[data-target]")!;
-  const payoutEl = document.querySelector<HTMLElement>("[data-payout]")!;
-  const chanceEl = document.querySelector<HTMLElement>("[data-chance]")!;
-  const result = document.querySelector<HTMLElement>("[data-result]")!;
-  const play = document.querySelector<HTMLButtonElement>("[data-play]")!;
-  const big = document.querySelector<HTMLElement>("[data-big]")!;
+	const EDGE = 0.99;
+	const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
+	const target = document.querySelector<HTMLInputElement>("[data-target]")!;
+	const payoutEl = document.querySelector<HTMLElement>("[data-payout]")!;
+	const chanceEl = document.querySelector<HTMLElement>("[data-chance]")!;
+	const result = document.querySelector<HTMLElement>("[data-result]")!;
+	const play = document.querySelector<HTMLButtonElement>("[data-play]")!;
+	const big = document.querySelector<HTMLElement>("[data-big]")!;
+	const session = new GameSession(
+		document.querySelector("[data-hist]"),
+		document.querySelector("[data-sess]"),
+	);
 
-  setupAmount(betInput);
+	setupAmount(betInput);
 
-  function refresh() {
-    const t = Math.max(1.01, Number(target.value) || 1.01);
-    payoutEl.textContent = fmt(Math.floor(Number(betInput.value) * t));
-    chanceEl.textContent = ((EDGE / t) * 100).toFixed(2) + "%";
-  }
-  target.addEventListener("input", refresh);
-  betInput.addEventListener("input", refresh);
-  refresh();
+	function refresh()
+	{
+		const t = Math.max(1.01, Number(target.value) || 1.01);
+		payoutEl.textContent = fmt(Math.floor(Number(betInput.value) * t));
+		chanceEl.textContent = ((EDGE / t) * 100).toFixed(2) + "%";
+	}
+	target.addEventListener("input", refresh);
+	betInput.addEventListener("input", refresh);
+	refresh();
 
-  function animateTo(value: number, win: boolean) {
-    const start = performance.now();
-    const dur = 700;
-    function step(now: number) {
-      const p = Math.min(1, (now - start) / dur);
-      const eased = 1 - Math.pow(1 - p, 3);
-      big.textContent = (1 + (value - 1) * eased).toFixed(2) + "×";
-      if (p < 1) requestAnimationFrame(step);
-      else big.style.color = win ? "var(--win)" : "var(--lose)";
-    }
-    requestAnimationFrame(step);
-  }
+	function animateTo(value: number, win: boolean)
+	{
+		const start = performance.now();
+		const dur = 700;
+		function step(now: number)
+		{
+			const p = Math.min(1, (now - start) / dur);
+			const eased = 1 - Math.pow(1 - p, 3);
+			big.textContent = (1 + (value - 1) * eased).toFixed(2) + "×";
+			if (p < 1) requestAnimationFrame(step);
+			else big.style.color = win ? "var(--win)" : "var(--lose)";
+		}
+		requestAnimationFrame(step);
+	}
 
-  play.addEventListener("click", async () => {
-    play.disabled = true;
-    result.textContent = "";
-    result.className = "result";
-    big.style.color = "";
-    try {
-      const r: any = await bet("limbo", {
-        bet: Number(betInput.value),
-        target: Math.max(1.01, Number(target.value)),
-      });
-      animateTo(r.result, r.win);
-      result.textContent = r.win
-        ? `Gagne +${fmt(r.payout)} pts`
-        : `Perdu -${fmt(Number(betInput.value))} pts`;
-      result.classList.add(r.win ? "win" : "lose");
-    } catch (e) {
-      result.textContent = e instanceof BetError ? e.message : "Erreur";
-      result.classList.add("lose");
-    } finally {
-      play.disabled = false;
-    }
-  });
+	play.addEventListener("click", async () =>
+	{
+		play.disabled = true;
+		result.textContent = "";
+		result.className = "result";
+		big.style.color = "";
+		try
+		{
+			const r: any = await bet("limbo", {
+				bet: Number(betInput.value),
+				target: Math.max(1.01, Number(target.value)),
+			});
+			animateTo(r.result, r.win);
+			result.textContent = r.win
+				? `Gagne +${fmt(r.payout)} pts`
+				: `Perdu -${fmt(Number(betInput.value))} pts`;
+			result.classList.add(r.win ? "win" : "lose");
+			session.record(r.win, Number(betInput.value), r.payout);
+		}
+		catch (e)
+		{
+			result.textContent = e instanceof BetError ? e.message : "Erreur";
+			result.classList.add("lose");
+		}
+		finally
+		{
+			play.disabled = false;
+		}
+	});
 </script>
 
 <style>

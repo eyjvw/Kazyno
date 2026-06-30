@@ -1,0 +1,427 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+---
+
+<Layout title="PISCASINO — Mines">
+  <Nav />
+  <header class="game-header">
+    <span class="gh-icon">💣</span>
+    <h1>Mines</h1>
+    <span class="gh-sub">· Révèle des cases sans tomber sur une mine</span>
+  </header>
+  <div class="shell">
+    <aside class="panel betpanel">
+      <div class="field">
+        <label>Mise</label>
+        <input class="input" data-bet type="number" min="1" value="100" />
+        <div class="chips">
+          <button data-amt="half">½</button>
+          <button data-amt="double">2×</button>
+          <button data-amt="max">Max</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Mines</label>
+        <div class="mines-row">
+          {[1, 3, 5, 10, 15, 24].map((n) => (
+            <button class={`mcnt${n === 3 ? " active" : ""}`} data-m={n}>
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div class="mult-info" data-mult-box hidden>
+        <span class="mult-lbl">Multiplicateur</span>
+        <span class="mult-big" data-cur-mult>1.00×</span>
+      </div>
+
+      <button class="btn bet-btn" data-play>Jouer</button>
+      <button class="btn cashout-btn" data-cashout hidden>Cashout</button>
+      <p class="result" data-result></p>
+
+      <div class="stat-row">
+        <div class="stat"><span>Mines</span><b data-stat-mines>3</b></div>
+        <div class="stat"><span>Sûres</span><b data-stat-safe>22</b></div>
+      </div>
+      <div class="sess-stats" data-sess></div>
+    </aside>
+
+    <main class="panel stage mines-stage">
+      <div class="grid" data-grid></div>
+    </main>
+  </div>
+</Layout>
+
+<script>
+	import { loadMe, setupAmount, fmt, getBalance, minesStart, minesReveal, minesCashout, getMinesSession } from "../../lib/casino";
+	import { GameSession } from "../../lib/session";
+
+	const betInput  = document.querySelector<HTMLInputElement>("[data-bet]")!;
+	const playBtn   = document.querySelector<HTMLButtonElement>("[data-play]")!;
+	const cashBtn   = document.querySelector<HTMLButtonElement>("[data-cashout]")!;
+	const resultEl  = document.querySelector<HTMLElement>("[data-result]")!;
+	const gridEl    = document.querySelector<HTMLElement>("[data-grid]")!;
+	const multBox   = document.querySelector<HTMLElement>("[data-mult-box]")!;
+	const curMult   = document.querySelector<HTMLElement>("[data-cur-mult]")!;
+	const statMines = document.querySelector<HTMLElement>("[data-stat-mines]")!;
+	const statSafe  = document.querySelector<HTMLElement>("[data-stat-safe]")!;
+	const session   = new GameSession(null, document.querySelector("[data-sess]"));
+
+	setupAmount(betInput);
+
+	// ── State ─────────────────────────────────────────────────────────────────
+	const GRID = 25;
+	let minesN   = 3;
+	let active   = false;
+	let revealed = new Set<number>();
+	let mines    = new Set<number>();
+	let gameBet  = 0;
+	let gameOver = false;
+
+	// ── Mine count selector ───────────────────────────────────────────────────
+	document.querySelectorAll<HTMLElement>("[data-m]").forEach(btn =>
+	{
+		btn.addEventListener("click", () =>
+		{
+			if (active) return;
+			document.querySelectorAll("[data-m]").forEach(b => b.classList.remove("active"));
+			btn.classList.add("active");
+			minesN = Number(btn.dataset.m);
+			statMines.textContent = String(minesN);
+			statSafe.textContent  = String(GRID - minesN);
+			buildGrid();
+		});
+	});
+
+	// ── Grid ─────────────────────────────────────────────────────────────────
+	function buildGrid(revealMines = false)
+	{
+		gridEl.innerHTML = "";
+		for (let i = 0; i < GRID; i++)
+		{
+			const tile = document.createElement("button");
+			tile.className  = "tile";
+			tile.dataset.i  = String(i);
+
+			if (revealMines && mines.has(i))
+			{
+				tile.className += " mine";
+				tile.textContent = "💣";
+			}
+			else if (revealed.has(i))
+			{
+				tile.className += " safe";
+				tile.textContent = "💎";
+			}
+			else
+			{
+				tile.addEventListener("click", () => void onTileClick(i));
+			}
+
+			gridEl.appendChild(tile);
+		}
+	}
+
+	function markTile(i: number, type: "safe" | "mine" | "cashout-safe")
+	{
+		const tile = gridEl.querySelector<HTMLElement>(`[data-i="${i}"]`);
+		if (!tile) return;
+		tile.className   = `tile ${type}`;
+		tile.textContent = type === "mine" ? "💣" : "💎";
+		tile.onclick     = null;
+	}
+
+	function setAllClickable(enabled: boolean)
+	{
+		gridEl.querySelectorAll<HTMLElement>(".tile:not(.safe):not(.mine)").forEach(t =>
+		{
+			(t as HTMLButtonElement).disabled = !enabled;
+		});
+	}
+
+	// ── Tile click ────────────────────────────────────────────────────────────
+	async function onTileClick(i: number)
+	{
+		if (!active || revealed.has(i) || mines.has(i)) return;
+		setAllClickable(false);
+
+		try
+		{
+			const r = await minesReveal(i);
+
+			if (r.hit)
+			{
+				// Mine hit
+				mines   = new Set(r.mines as number[]);
+				active  = false;
+				gameOver = true;
+				markTile(i, "mine");
+				buildGrid(true);
+				resultEl.textContent = `💥 Mine ! −${fmt(gameBet)} pts`;
+				resultEl.className   = "result lose";
+				session.record(false, gameBet, 0);
+				cashBtn.hidden = true;
+				playBtn.hidden = false;
+				multBox.hidden = true;
+				updateStatSafe(0);
+			}
+			else
+			{
+				revealed.add(i);
+				markTile(i, "safe");
+				const mult = r.multiplier as number;
+				curMult.textContent = mult.toFixed(2) + "×";
+				cashBtn.textContent = `Cashout ${mult.toFixed(2)}× · +${fmt(Math.floor(gameBet * mult))} pts`;
+				cashBtn.hidden      = false;
+				updateStatSafe(r.safeLeft as number);
+				setAllClickable(true);
+			}
+		}
+		catch (e: any)
+		{
+			resultEl.textContent = e.message ?? "Erreur";
+			resultEl.className   = "result lose";
+			setAllClickable(true);
+		}
+	}
+
+	function updateStatSafe(n: number)
+	{
+		statSafe.textContent = String(n);
+	}
+
+	// ── Cashout ───────────────────────────────────────────────────────────────
+	cashBtn.addEventListener("click", async () =>
+	{
+		cashBtn.disabled = true;
+		try
+		{
+			const r = await minesCashout();
+			mines    = new Set(r.mines as number[]);
+			active   = false;
+			gameOver = true;
+			buildGrid(true);
+			// Re-mark revealed tiles as cashout-safe (already green, just keep)
+			revealed.forEach(i => markTile(i, "cashout-safe"));
+			resultEl.textContent = `${(r.multiplier as number).toFixed(2)}× · +${fmt(r.payout as number)} pts`;
+			resultEl.className   = "result win";
+			session.record(true, gameBet, r.payout as number);
+			cashBtn.hidden  = true;
+			playBtn.hidden  = false;
+			multBox.hidden  = true;
+		}
+		catch (e: any)
+		{
+			resultEl.textContent = e.message ?? "Erreur";
+			resultEl.className   = "result lose";
+			cashBtn.disabled = false;
+		}
+	});
+
+	// ── Play ─────────────────────────────────────────────────────────────────
+	playBtn.addEventListener("click", async () =>
+	{
+		const amount = Math.max(1, Math.floor(Number(betInput.value)));
+		playBtn.disabled = true;
+		resultEl.textContent = "";
+		resultEl.className = "result";
+
+		try
+		{
+			await minesStart(amount, minesN);
+			gameBet  = amount;
+			active   = true;
+			gameOver = false;
+			revealed = new Set();
+			mines    = new Set();
+
+			playBtn.hidden  = true;
+			cashBtn.hidden  = true;
+			multBox.hidden  = false;
+			curMult.textContent = "1.00×";
+			statMines.textContent = String(minesN);
+			statSafe.textContent  = String(GRID - minesN);
+			buildGrid();
+		}
+		catch (e: any)
+		{
+			resultEl.textContent = e.message ?? "Erreur";
+			resultEl.className   = "result lose";
+			playBtn.disabled = false;
+		}
+		finally
+		{
+			playBtn.disabled = false;
+		}
+	});
+
+	// ── Boot ─────────────────────────────────────────────────────────────────
+	buildGrid();
+	statMines.textContent = String(minesN);
+	statSafe.textContent  = String(GRID - minesN);
+
+	loadMe().then(async () =>
+	{
+		// Restore active session if any
+		const session = await getMinesSession();
+		if (session)
+		{
+			active   = true;
+			minesN   = session.mines_n;
+			gameBet  = session.bet;
+			revealed = new Set(session.revealed as number[]);
+
+			// Update mine count selector UI
+			document.querySelectorAll("[data-m]").forEach(b =>
+			{
+				b.classList.toggle("active", Number((b as HTMLElement).dataset.m) === minesN);
+			});
+
+			const mult = session.multiplier as number;
+			curMult.textContent = mult.toFixed(2) + "×";
+			cashBtn.textContent = `Cashout ${mult.toFixed(2)}×`;
+			cashBtn.hidden  = false;
+			playBtn.hidden  = true;
+			multBox.hidden  = false;
+			statMines.textContent = String(minesN);
+			statSafe.textContent  = String(GRID - minesN - revealed.size);
+			buildGrid();
+			revealed.forEach(i => markTile(i, "safe"));
+		}
+	});
+</script>
+
+<style>
+  .mines-stage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    width: min(440px, 100%);
+  }
+
+  :global(.tile) {
+    aspect-ratio: 1;
+    border-radius: 10px;
+    background: var(--raise);
+    border: 1px solid var(--line);
+    font-size: 22px;
+    cursor: pointer;
+    transition: background 0.12s, transform 0.1s, border-color 0.12s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  :global(.tile:hover:not(:disabled):not(.safe):not(.mine)) {
+    background: var(--panel-2, #213743);
+    border-color: var(--accent);
+    transform: scale(1.04);
+  }
+
+  :global(.tile:disabled:not(.safe):not(.mine)) {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  :global(.tile.safe) {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: #22c55e;
+    color: #22c55e;
+    animation: popIn 0.2s cubic-bezier(0.34,1.56,0.64,1);
+  }
+
+  :global(.tile.cashout-safe) {
+    background: rgba(34, 197, 94, 0.22);
+    border-color: #22c55e;
+  }
+
+  :global(.tile.mine) {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: #ef4444;
+    animation: shakeIn 0.3s ease;
+  }
+
+  @keyframes popIn {
+    from { transform: scale(0.8); opacity: 0.6; }
+    to   { transform: scale(1);   opacity: 1; }
+  }
+
+  @keyframes shakeIn {
+    0%,100% { transform: translateX(0); }
+    25%      { transform: translateX(-4px); }
+    75%      { transform: translateX(4px); }
+  }
+
+  /* Mine count selector */
+  .mines-row {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+
+  .mcnt {
+    flex: 1;
+    min-width: 36px;
+    padding: 6px 4px;
+    border-radius: 7px;
+    background: var(--raise);
+    border: 1px solid transparent;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+    font-family: inherit;
+  }
+
+  .mcnt:hover { color: var(--fg); }
+  .mcnt.active {
+    background: #1d3a52;
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* Cashout button */
+  .cashout-btn {
+    background: #16a34a !important;
+    margin-top: 4px;
+    font-size: 13px;
+  }
+
+  .cashout-btn:hover { filter: brightness(1.12); }
+
+  [hidden] { display: none !important; }
+
+  /* Multiplier display */
+  .mult-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 10px 0 4px;
+  }
+
+  .mult-lbl {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+
+  .mult-big {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+</style>

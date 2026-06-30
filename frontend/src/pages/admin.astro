@@ -131,415 +131,480 @@ import Footer from "../components/Footer.astro";
 </Layout>
 
 <script>
-  import {
-    loadMe,
-    adminMe,
-    adminSearch,
-    adminNotify,
-    adminAddPoints,
-    adminResetAll,
-    adminGetLogs,
-    getExams,
-    adminCreateExam,
-    adminLockExam,
-    adminDeleteExam,
-    connectRealtime,
-    onAdminLog,
-    fmt,
-  } from "../lib/casino";
+	import {
+		loadMe,
+		adminMe,
+		adminSearch,
+		adminNotify,
+		adminAddPoints,
+		adminResetAll,
+		adminGetLogs,
+		getExams,
+		adminCreateExam,
+		adminLockExam,
+		adminDeleteExam,
+		connectRealtime,
+		onAdminLog,
+		fmt,
+	} from "../lib/casino";
 
-  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
+	const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
 
-  function makePicker(root: HTMLElement) {
-    const input = root.querySelector<HTMLInputElement>("[data-search]")!;
-    const results = root.querySelector<HTMLElement>("[data-results]")!;
-    const chip = root.querySelector<HTMLElement>("[data-chip]")!;
-    const chipName = root.querySelector<HTMLElement>("[data-chip-name]")!;
-    const chipMeta = root.querySelector<HTMLElement>("[data-chip-meta]")!;
-    const chipAv = root.querySelector<HTMLImageElement>("[data-chip-av]")!;
-    const chipFb = root.querySelector<HTMLElement>("[data-chip-fb]")!;
-    let selected: string | null = null;
-    let timer: number;
+	function makePicker(root: HTMLElement)
+	{
+		const input = root.querySelector<HTMLInputElement>("[data-search]")!;
+		const results = root.querySelector<HTMLElement>("[data-results]")!;
+		const chip = root.querySelector<HTMLElement>("[data-chip]")!;
+		const chipName = root.querySelector<HTMLElement>("[data-chip-name]")!;
+		const chipMeta = root.querySelector<HTMLElement>("[data-chip-meta]")!;
+		const chipAv = root.querySelector<HTMLImageElement>("[data-chip-av]")!;
+		const chipFb = root.querySelector<HTMLElement>("[data-chip-fb]")!;
+		let selected: string | null = null;
+		let timer: number;
 
-    input.addEventListener("input", () => {
-      clearTimeout(timer);
-      const q = input.value.trim();
-      if (!q) {
-        results.hidden = true;
-        results.innerHTML = "";
-        return;
-      }
-      timer = window.setTimeout(async () => {
-        const list = await adminSearch(q);
-        results.innerHTML = list.length
-          ? list
-              .map((u: any) => {
-                const name = u.display_name || u.login;
-                const av = u.image_url
-                  ? `<img class="pav" src="${u.image_url}" width="32" height="32" alt="" />`
-                  : `<span class="pav fb">${u.login.charAt(0).toUpperCase()}</span>`;
-                return `<li data-login="${u.login}" data-name="${name}" data-image="${u.image_url || ""}" data-pts="${u.points}">
-                    ${av}
-                    <span class="pinfo"><b>@${u.login}</b><small>${Number(u.points).toLocaleString()} pts</small></span>
-                  </li>`;
-              })
-              .join("")
-          : `<li class="empty">aucun résultat</li>`;
-        results.hidden = false;
-      }, 200);
-    });
+		input.addEventListener("input", () =>
+		{
+			clearTimeout(timer);
+			const q = input.value.trim();
+			if (!q)
+			{
+				results.hidden = true;
+				results.innerHTML = "";
+				return;
+			}
+			timer = window.setTimeout(async () =>
+			{
+				const list = await adminSearch(q);
+				results.innerHTML = list.length
+					? list
+							.map((u: any) =>
+							{
+								const name = u.display_name || u.login;
+								const av = u.image_url
+									? `<img class="pav" src="${u.image_url}" width="32" height="32" alt="" />`
+									: `<span class="pav fb">${u.login.charAt(0).toUpperCase()}</span>`;
+								return `<li data-login="${u.login}" data-name="${name}" data-image="${u.image_url || ""}" data-pts="${u.points}">
+										${av}
+										<span class="pinfo"><b>@${u.login}</b><small>${Number(u.points).toLocaleString()} pts</small></span>
+									</li>`;
+							})
+							.join("")
+					: `<li class="empty">aucun résultat</li>`;
+				results.hidden = false;
+			}, 200);
+		});
 
-    results.addEventListener("click", (e) => {
-      const li = (e.target as HTMLElement).closest<HTMLElement>("li[data-login]");
-      if (!li) return;
-      selected = li.dataset.login!;
-      chipName.textContent = `@${li.dataset.login}`;
-      chipMeta.textContent = `${Number(li.dataset.pts).toLocaleString()} pts`;
-      const img = li.dataset.image;
-      if (img) {
-        chipAv.src = img;
-        chipAv.hidden = false;
-        chipFb.hidden = true;
-      } else {
-        chipFb.textContent = li.dataset.name!.charAt(0).toUpperCase();
-        chipFb.hidden = false;
-        chipAv.hidden = true;
-      }
-      chip.hidden = false;
-      input.value = "";
-      input.hidden = true;
-      results.hidden = true;
-    });
-    root.querySelector("[data-clear]")!.addEventListener("click", () => {
-      selected = null;
-      chip.hidden = true;
-      input.hidden = false;
-      input.focus();
-    });
+		results.addEventListener("click", (e) =>
+		{
+			const li = (e.target as HTMLElement).closest<HTMLElement>("li[data-login]");
+			if (!li) return;
+			selected = li.dataset.login!;
+			chipName.textContent = `@${li.dataset.login}`;
+			chipMeta.textContent = `${Number(li.dataset.pts).toLocaleString()} pts`;
+			const img = li.dataset.image;
+			if (img)
+			{
+				chipAv.src = img;
+				chipAv.hidden = false;
+				chipFb.hidden = true;
+			}
+			else
+			{
+				chipFb.textContent = li.dataset.name!.charAt(0).toUpperCase();
+				chipFb.hidden = false;
+				chipAv.hidden = true;
+			}
+			chip.hidden = false;
+			input.value = "";
+			input.hidden = true;
+			results.hidden = true;
+		});
+		root.querySelector("[data-clear]")!.addEventListener("click", () =>
+		{
+			selected = null;
+			chip.hidden = true;
+			input.hidden = false;
+			input.focus();
+		});
 
-    return { get login() { return selected; } };
-  }
+		return { get login() { return selected; } };
+	}
 
-  loadMe().then(async (me) => {
-    if (!me) return;
-    if (!(await adminMe())) {
-      $("[data-denied]").hidden = false;
-      return;
-    }
-    $("[data-panel]").hidden = false;
-    $("[data-exam-section]").hidden = false;
+	loadMe().then(async (me) =>
+	{
+		if (!me) return;
+		if (!(await adminMe()))
+		{
+			$("[data-denied]").hidden = false;
+			return;
+		}
+		$("[data-panel]").hidden = false;
+		$("[data-exam-section]").hidden = false;
 
-    // ── Exam management ───────────────────────────────────────────────────
-    const examList = $("[data-exam-list]");
-    const examRes  = $("[data-exam-res]");
+		// ── Exam management ───────────────────────────────────────────────────
+		const examList = $("[data-exam-list]");
+		const examRes  = $("[data-exam-res]");
 
-    function examTypeLabel(e: any): string {
-      return e.is_final ? "Final" : "Standard";
-    }
+		function examTypeLabel(e: any): string
+		{
+			return e.is_final ? "Final" : "Standard";
+		}
 
-    function renderExams(exams: any[]) {
-      if (!exams.length) {
-        examList.innerHTML = `<li class="exam-empty">Aucun exam planifié.</li>`;
-        return;
-      }
-      examList.innerHTML = exams.map((e: any) => {
-        const date = new Date(e.exam_date).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
-        const locked = e.locked;
-        return `<li class="exam-row" data-eid="${e.id}">
-          <div class="exam-info">
-            <span class="exam-label">${e.label}</span>
-            <span class="exam-meta">${date} · ${examTypeLabel(e)} · ${e.bet_count} pari${e.bet_count !== 1 ? "s" : ""}</span>
-          </div>
-          <div class="exam-actions">
-            ${!locked ? `<button class="ghost-btn exam-lock-btn" data-lock="${e.id}">🔒 Lock</button>` : `<span class="exam-locked-badge">Verrouillé</span>`}
-            ${e.bet_count === 0 ? `<button class="ghost-btn exam-del-btn" data-del="${e.id}">Suppr.</button>` : ""}
-          </div>
-        </li>`;
-      }).join("");
+		function renderExams(exams: any[])
+		{
+			if (!exams.length)
+			{
+				examList.innerHTML = `<li class="exam-empty">Aucun exam planifié.</li>`;
+				return;
+			}
+			examList.innerHTML = exams.map((e: any) =>
+			{
+				const date = new Date(e.exam_date).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
+				const locked = e.locked;
+				return `<li class="exam-row" data-eid="${e.id}">
+					<div class="exam-info">
+						<span class="exam-label">${e.label}</span>
+						<span class="exam-meta">${date} · ${examTypeLabel(e)} · ${e.bet_count} pari${e.bet_count !== 1 ? "s" : ""}</span>
+					</div>
+					<div class="exam-actions">
+						${!locked ? `<button class="ghost-btn exam-lock-btn" data-lock="${e.id}">🔒 Lock</button>` : `<span class="exam-locked-badge">Verrouillé</span>`}
+						${e.bet_count === 0 ? `<button class="ghost-btn exam-del-btn" data-del="${e.id}">Suppr.</button>` : ""}
+					</div>
+				</li>`;
+			}).join("");
 
-      examList.querySelectorAll<HTMLButtonElement>("[data-lock]").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          if (!confirm(`Verrouiller "${btn.closest("li")?.querySelector(".exam-label")?.textContent}" ? Les paris se ferment.`)) return;
-          try {
-            await adminLockExam(Number(btn.dataset.lock));
-            await refreshExams();
-          } catch (e: any) { alert(e?.message ?? "Erreur"); }
-        });
-      });
-      examList.querySelectorAll<HTMLButtonElement>("[data-del]").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          if (!confirm("Supprimer cet exam ?")) return;
-          try {
-            await adminDeleteExam(Number(btn.dataset.del));
-            await refreshExams();
-          } catch (e: any) { alert(e?.message ?? "Erreur"); }
-        });
-      });
-    }
+			examList.querySelectorAll<HTMLButtonElement>("[data-lock]").forEach((btn) =>
+			{
+				btn.addEventListener("click", async () =>
+				{
+					if (!confirm(`Verrouiller "${btn.closest("li")?.querySelector(".exam-label")?.textContent}" ? Les paris se ferment.`)) return;
+					try
+					{
+						await adminLockExam(Number(btn.dataset.lock));
+						await refreshExams();
+					} catch (e: any) { alert(e?.message ?? "Erreur"); }
+				});
+			});
+			examList.querySelectorAll<HTMLButtonElement>("[data-del]").forEach((btn) =>
+			{
+				btn.addEventListener("click", async () =>
+				{
+					if (!confirm("Supprimer cet exam ?")) return;
+					try
+					{
+						await adminDeleteExam(Number(btn.dataset.del));
+						await refreshExams();
+					} catch (e: any) { alert(e?.message ?? "Erreur"); }
+				});
+			});
+		}
 
-    async function refreshExams() {
-      renderExams(await getExams());
-    }
-    await refreshExams();
+		async function refreshExams()
+		{
+			renderExams(await getExams());
+		}
+		await refreshExams();
 
-    $("[data-exam-add]").addEventListener("click", async () => {
-      examRes.textContent = "";
-      examRes.className = "msg";
-      const label    = $<HTMLInputElement>("[data-exam-label]").value.trim();
-      const dateVal  = $<HTMLInputElement>("[data-exam-date]").value;
-      const timeVal  = $<HTMLInputElement>("[data-exam-time]").value || "08:42";
-      const final    = $<HTMLInputElement>("[data-exam-final]").checked;
-      if (!label)   { examRes.textContent = "Libellé requis"; examRes.className = "msg err"; return; }
-      if (!dateVal) { examRes.textContent = "Date requise";   examRes.className = "msg err"; return; }
-      try {
-        await adminCreateExam(label, new Date(`${dateVal}T${timeVal}`).toISOString(), final);
-        examRes.textContent = "Exam ajouté ✓";
-        examRes.className = "msg ok";
-        $<HTMLInputElement>("[data-exam-label]").value = "";
-        $<HTMLInputElement>("[data-exam-date]").value = "";
-        $<HTMLInputElement>("[data-exam-time]").value = "08:42";
-        $<HTMLInputElement>("[data-exam-final]").checked = false;
-        await refreshExams();
-      } catch (e: any) {
-        examRes.textContent = e?.message ?? "Erreur";
-        examRes.className = "msg err";
-      }
-    });
+		$("[data-exam-add]").addEventListener("click", async () =>
+		{
+			examRes.textContent = "";
+			examRes.className = "msg";
+			const label    = $<HTMLInputElement>("[data-exam-label]").value.trim();
+			const dateVal  = $<HTMLInputElement>("[data-exam-date]").value;
+			const timeVal  = $<HTMLInputElement>("[data-exam-time]").value || "08:42";
+			const final    = $<HTMLInputElement>("[data-exam-final]").checked;
+			if (!label)   { examRes.textContent = "Libellé requis"; examRes.className = "msg err"; return; }
+			if (!dateVal) { examRes.textContent = "Date requise";   examRes.className = "msg err"; return; }
+			try
+			{
+				await adminCreateExam(label, new Date(`${dateVal}T${timeVal}`).toISOString(), final);
+				examRes.textContent = "Exam ajouté ✓";
+				examRes.className = "msg ok";
+				$<HTMLInputElement>("[data-exam-label]").value = "";
+				$<HTMLInputElement>("[data-exam-date]").value = "";
+				$<HTMLInputElement>("[data-exam-time]").value = "08:42";
+				$<HTMLInputElement>("[data-exam-final]").checked = false;
+				await refreshExams();
+			}
+			catch (e: any)
+			{
+				examRes.textContent = e?.message ?? "Erreur";
+				examRes.className = "msg err";
+			}
+		});
 
-    const notifPicker = makePicker($('[data-picker="notif"]'));
-    const ptsPicker = makePicker($('[data-picker="points"]'));
+		const notifPicker = makePicker($('[data-picker="notif"]'));
+		const ptsPicker = makePicker($('[data-picker="points"]'));
 
-    $("[data-send]").addEventListener("click", async () => {
-      const res = $("[data-msg-res]");
-      res.textContent = "";
-      res.className = "msg";
-      try {
-        await adminNotify($<HTMLTextAreaElement>("[data-msg]").value, notifPicker.login ?? undefined);
-        res.textContent = notifPicker.login
-          ? "Notification envoyée au joueur ✓"
-          : "Notification envoyée à tout le monde ✓";
-        res.classList.add("ok");
-        $<HTMLTextAreaElement>("[data-msg]").value = "";
-      } catch (e: any) {
-        res.textContent = e?.message ?? "Erreur";
-        res.classList.add("err");
-      }
-    });
+		$("[data-send]").addEventListener("click", async () =>
+		{
+			const res = $("[data-msg-res]");
+			res.textContent = "";
+			res.className = "msg";
+			try
+			{
+				await adminNotify($<HTMLTextAreaElement>("[data-msg]").value, notifPicker.login ?? undefined);
+				res.textContent = notifPicker.login
+					? "Notification envoyée au joueur ✓"
+					: "Notification envoyée à tout le monde ✓";
+				res.classList.add("ok");
+				$<HTMLTextAreaElement>("[data-msg]").value = "";
+			}
+			catch (e: any)
+			{
+				res.textContent = e?.message ?? "Erreur";
+				res.classList.add("err");
+			}
+		});
 
-    $("[data-grant]").addEventListener("click", async () => {
-      const res = $("[data-pts-res]");
-      res.textContent = "";
-      res.className = "msg";
-      if (!ptsPicker.login) {
-        res.textContent = "Choisis un joueur";
-        res.classList.add("err");
-        return;
-      }
-      try {
-        const r = await adminAddPoints(
-          ptsPicker.login,
-          Number($<HTMLInputElement>("[data-pts-amount]").value),
-        );
-        res.textContent = `OK — nouveau solde : ${r.points.toLocaleString()} pts`;
-        res.classList.add("ok");
-      } catch (e: any) {
-        res.textContent = e?.message ?? "Erreur";
-        res.classList.add("err");
-      }
-    });
+		$("[data-grant]").addEventListener("click", async () =>
+		{
+			const res = $("[data-pts-res]");
+			res.textContent = "";
+			res.className = "msg";
+			if (!ptsPicker.login)
+			{
+				res.textContent = "Choisis un joueur";
+				res.classList.add("err");
+				return;
+			}
+			try
+			{
+				const r = await adminAddPoints(
+					ptsPicker.login,
+					Number($<HTMLInputElement>("[data-pts-amount]").value),
+				);
+				res.textContent = `OK — nouveau solde : ${r.points.toLocaleString()} pts`;
+				res.classList.add("ok");
+			}
+			catch (e: any)
+			{
+				res.textContent = e?.message ?? "Erreur";
+				res.classList.add("err");
+			}
+		});
 
-    $("[data-reset-all]").addEventListener("click", async () => {
-      const res = $("[data-reset-res]");
-      res.textContent = "";
-      res.className = "msg";
-      if (!confirm("Reset TOUS les joueurs à 1 000 pts ? Irréversible.")) return;
-      try {
-        await adminResetAll();
-        res.textContent = "Reset effectué ✓";
-        res.classList.add("ok");
-      } catch (e: any) {
-        res.textContent = e?.message ?? "Erreur";
-        res.classList.add("err");
-      }
-    });
+		$("[data-reset-all]").addEventListener("click", async () =>
+		{
+			const res = $("[data-reset-res]");
+			res.textContent = "";
+			res.className = "msg";
+			if (!confirm("Reset TOUS les joueurs à 1 000 pts ? Irréversible.")) return;
+			try
+			{
+				await adminResetAll();
+				res.textContent = "Reset effectué ✓";
+				res.classList.add("ok");
+			}
+			catch (e: any)
+			{
+				res.textContent = e?.message ?? "Erreur";
+				res.classList.add("err");
+			}
+		});
 
-    // ── Live log ──────────────────────────────────────────────────────────
-    const logPanel     = $("[data-log-panel]");
-    const logList      = $("[data-log-list]");
-    const logDot       = $("[data-log-dot]");
-    const logCount     = $("[data-log-count]");
-    const logPagination= $("[data-log-pagination]");
-    const fLoginInput  = $<HTMLInputElement>("[data-f-login]");
-    const fLoginClear  = $<HTMLButtonElement>("[data-f-login-clear]");
-    const fResults     = $("[data-f-results]");
-    logPanel.hidden    = false;
+		// ── Live log ──────────────────────────────────────────────────────────
+		const logPanel     = $("[data-log-panel]");
+		const logList      = $("[data-log-list]");
+		const logDot       = $("[data-log-dot]");
+		const logCount     = $("[data-log-count]");
+		const logPagination= $("[data-log-pagination]");
+		const fLoginInput  = $<HTMLInputElement>("[data-f-login]");
+		const fLoginClear  = $<HTMLButtonElement>("[data-f-login-clear]");
+		const fResults     = $("[data-f-results]");
+		logPanel.hidden    = false;
 
-    const LIMIT = 50;
-    let currentPage = 0;
-    let activeLogin = ""; // resolved login from picker
+		const LIMIT = 50;
+		let currentPage = 0;
+		let activeLogin = ""; // resolved login from picker
 
-    const GAME_ICON: Record<string, string> = {
-      coinflip: "🪙", dice: "🎲", limbo: "🚀", plinko: "🔻", slots: "🎰", blackjack: "🃏",
-    };
+		const GAME_ICON: Record<string, string> = {
+			coinflip: "🪙", dice: "🎲", limbo: "🚀", plinko: "🔻", slots: "🎰", blackjack: "🃏",
+		};
 
-    function getFilters() {
-      return {
-        login:  activeLogin || undefined,
-        action: $<HTMLSelectElement>("[data-f-action]").value || undefined,
-        from:   $<HTMLInputElement>("[data-f-from]").value   || undefined,
-        to:     $<HTMLInputElement>("[data-f-to]").value     || undefined,
-      };
-    }
+		function getFilters()
+		{
+			return {
+				login:  activeLogin || undefined,
+				action: $<HTMLSelectElement>("[data-f-action]").value || undefined,
+				from:   $<HTMLInputElement>("[data-f-from]").value   || undefined,
+				to:     $<HTMLInputElement>("[data-f-to]").value     || undefined,
+			};
+		}
 
-    function eventMatchesFilters(event: any): boolean {
-      const f = getFilters();
-      if (f.login) {
-        const l = f.login.toLowerCase();
-        const el = ((event.login ?? "") + (event.target ?? "")).toLowerCase();
-        if (!el.includes(l)) return false;
-      }
-      if (f.action && event.action !== f.action) return false;
-      if (f.from || f.to) {
-        const d = new Date(typeof event.ts === "number" ? event.ts : event.ts)
-          .toISOString().slice(0, 10);
-        if (f.from && d < f.from) return false;
-        if (f.to   && d > f.to)   return false;
-      }
-      return true;
-    }
+		function eventMatchesFilters(event: any): boolean
+		{
+			const f = getFilters();
+			if (f.login)
+			{
+				const l = f.login.toLowerCase();
+				const el = ((event.login ?? "") + (event.target ?? "")).toLowerCase();
+				if (!el.includes(l)) return false;
+			}
+			if (f.action && event.action !== f.action) return false;
+			if (f.from || f.to)
+			{
+				const d = new Date(typeof event.ts === "number" ? event.ts : event.ts)
+					.toISOString().slice(0, 10);
+				if (f.from && d < f.from) return false;
+				if (f.to   && d > f.to)   return false;
+			}
+			return true;
+		}
 
-    function renderEntry(event: any): HTMLLIElement {
-      const date = new Date(typeof event.ts === "number" ? event.ts : event.ts);
-      const ts   = date.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "medium" });
-      let text = "";
-      if (event.action === "bet") {
-        const icon = GAME_ICON[event.game] ?? "🎮";
-        const net  = (event.payout ?? 0) - event.bet;
-        const diff = net >= 0 ? `+${net.toLocaleString()}` : `${net.toLocaleString()}`;
-        const cls  = net >= 0 ? "log-win" : "log-lose";
-        text = `${icon} <b>@${event.login}</b> · ${event.game} · mise ${event.bet.toLocaleString()} · <span class="${cls}">${diff} pts</span> · solde ${event.balance.toLocaleString()}`;
-      } else if (event.action === "points") {
-        const sign = event.amount > 0 ? "+" : "";
-        const cls  = event.amount > 0 ? "log-win" : "log-lose";
-        text = `💰 admin → <b>@${event.target}</b> · <span class="${cls}">${sign}${event.amount.toLocaleString()} pts</span> · solde ${event.newBalance.toLocaleString()}`;
-      } else if (event.action === "reset-all") {
-        text = `⚠️ <span class="log-warn">Reset général — tous remis à 1 000 pts</span>`;
-      }
-      const li = document.createElement("li");
-      li.className = "log-entry";
-      li.innerHTML = `<span class="log-ts">${ts}</span>${text || JSON.stringify(event)}`;
-      return li;
-    }
+		function renderEntry(event: any): HTMLLIElement
+		{
+			const date = new Date(typeof event.ts === "number" ? event.ts : event.ts);
+			const ts   = date.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "medium" });
+			let text = "";
+			if (event.action === "bet")
+			{
+				const icon = GAME_ICON[event.game] ?? "🎮";
+				const net  = (event.payout ?? 0) - event.bet;
+				const diff = net >= 0 ? `+${net.toLocaleString()}` : `${net.toLocaleString()}`;
+				const cls  = net >= 0 ? "log-win" : "log-lose";
+				text = `${icon} <b>@${event.login}</b> · ${event.game} · mise ${event.bet.toLocaleString()} · <span class="${cls}">${diff} pts</span> · solde ${event.balance.toLocaleString()}`;
+			}
+			else if (event.action === "points")
+			{
+				const sign = event.amount > 0 ? "+" : "";
+				const cls  = event.amount > 0 ? "log-win" : "log-lose";
+				text = `💰 admin → <b>@${event.target}</b> · <span class="${cls}">${sign}${event.amount.toLocaleString()} pts</span> · solde ${event.newBalance.toLocaleString()}`;
+			}
+			else if (event.action === "reset-all")
+			{
+				text = `⚠️ <span class="log-warn">Reset général — tous remis à 1 000 pts</span>`;
+			}
+			const li = document.createElement("li");
+			li.className = "log-entry";
+			li.innerHTML = `<span class="log-ts">${ts}</span>${text || JSON.stringify(event)}`;
+			return li;
+		}
 
-    async function loadHistory(page = 0) {
-      try {
-        const { logs, total } = await adminGetLogs({ ...getFilters(), limit: LIMIT, offset: page * LIMIT });
-        currentPage = page;
-        logList.innerHTML = "";
-        if (!logs.length) {
-          const li = document.createElement("li");
-          li.className = "log-entry log-empty";
-          li.textContent = "Aucun résultat.";
-          logList.append(li);
-        } else {
-          for (const row of logs) logList.append(renderEntry({ ...row.payload, ts: row.ts, action: row.action }));
-        }
-        logCount.textContent = `${total.toLocaleString()} résultat${total !== 1 ? "s" : ""}`;
-        logCount.hidden = false;
-        const totalPages = Math.ceil(total / LIMIT);
-        logPagination.hidden = totalPages <= 1;
-        if (totalPages > 1) {
-          $("[data-page-info]").textContent = `Page ${page + 1} / ${totalPages}`;
-          ($("[data-page-prev]") as HTMLButtonElement).disabled = page === 0;
-          ($("[data-page-next]") as HTMLButtonElement).disabled = page >= totalPages - 1;
-        }
-      } catch {
-        logCount.textContent = "Erreur chargement.";
-        logCount.hidden = false;
-      }
-    }
+		async function loadHistory(page = 0)
+		{
+			try
+			{
+				const { logs, total } = await adminGetLogs({ ...getFilters(), limit: LIMIT, offset: page * LIMIT });
+				currentPage = page;
+				logList.innerHTML = "";
+				if (!logs.length)
+				{
+					const li = document.createElement("li");
+					li.className = "log-entry log-empty";
+					li.textContent = "Aucun résultat.";
+					logList.append(li);
+				}
+				else
+				{
+					for (const row of logs) logList.append(renderEntry({ ...row.payload, ts: row.ts, action: row.action }));
+				}
+				logCount.textContent = `${total.toLocaleString()} résultat${total !== 1 ? "s" : ""}`;
+				logCount.hidden = false;
+				const totalPages = Math.ceil(total / LIMIT);
+				logPagination.hidden = totalPages <= 1;
+				if (totalPages > 1)
+				{
+					$("[data-page-info]").textContent = `Page ${page + 1} / ${totalPages}`;
+					($("[data-page-prev]") as HTMLButtonElement).disabled = page === 0;
+					($("[data-page-next]") as HTMLButtonElement).disabled = page >= totalPages - 1;
+				}
+			} catch {
+				logCount.textContent = "Erreur chargement.";
+				logCount.hidden = false;
+			}
+		}
 
-    // ── Login autocomplete picker ─────────────────────────────────────────
-    let searchTimer: number;
-    fLoginInput.addEventListener("input", () => {
-      clearTimeout(searchTimer);
-      activeLogin = "";
-      fLoginClear.hidden = true;
-      const q = fLoginInput.value.trim();
-      if (!q) { fResults.hidden = true; fResults.innerHTML = ""; return; }
-      searchTimer = window.setTimeout(async () => {
-        const list = await adminSearch(q);
-        fResults.innerHTML = list.length
-          ? list.map((u: any) => {
-              const av = u.image_url
-                ? `<img class="pav" src="${u.image_url}" width="28" height="28" alt="" />`
-                : `<span class="pav fb">${u.login.charAt(0).toUpperCase()}</span>`;
-              return `<li data-login="${u.login}">${av}<span>@${u.login}</span><small>${u.points.toLocaleString()} pts</small></li>`;
-            }).join("")
-          : `<li class="empty">Aucun résultat</li>`;
-        fResults.hidden = false;
-      }, 200);
-    });
-    fResults.addEventListener("click", async (e) => {
-      const li = (e.target as HTMLElement).closest<HTMLElement>("li[data-login]");
-      if (!li) return;
-      activeLogin = li.dataset.login!;
-      fLoginInput.value = `@${activeLogin}`;
-      fResults.hidden = true;
-      fResults.innerHTML = "";
-      fLoginClear.hidden = false;
-      await loadHistory(0);
-    });
-    fLoginClear.addEventListener("click", async () => {
-      activeLogin = "";
-      fLoginInput.value = "";
-      fLoginClear.hidden = true;
-      await loadHistory(0);
-    });
-    document.addEventListener("click", (e) => {
-      if (!(e.target as HTMLElement).closest(".flt-picker")) fResults.hidden = true;
-    });
+		// ── Login autocomplete picker ─────────────────────────────────────────
+		let searchTimer: number;
+		fLoginInput.addEventListener("input", () =>
+		{
+			clearTimeout(searchTimer);
+			activeLogin = "";
+			fLoginClear.hidden = true;
+			const q = fLoginInput.value.trim();
+			if (!q) { fResults.hidden = true; fResults.innerHTML = ""; return; }
+			searchTimer = window.setTimeout(async () =>
+			{
+				const list = await adminSearch(q);
+				fResults.innerHTML = list.length
+					? list.map((u: any) =>
+					{
+							const av = u.image_url
+								? `<img class="pav" src="${u.image_url}" width="28" height="28" alt="" />`
+								: `<span class="pav fb">${u.login.charAt(0).toUpperCase()}</span>`;
+							return `<li data-login="${u.login}">${av}<span>@${u.login}</span><small>${u.points.toLocaleString()} pts</small></li>`;
+						}).join("")
+					: `<li class="empty">Aucun résultat</li>`;
+				fResults.hidden = false;
+			}, 200);
+		});
+		fResults.addEventListener("click", async (e) =>
+		{
+			const li = (e.target as HTMLElement).closest<HTMLElement>("li[data-login]");
+			if (!li) return;
+			activeLogin = li.dataset.login!;
+			fLoginInput.value = `@${activeLogin}`;
+			fResults.hidden = true;
+			fResults.innerHTML = "";
+			fLoginClear.hidden = false;
+			await loadHistory(0);
+		});
+		fLoginClear.addEventListener("click", async () =>
+		{
+			activeLogin = "";
+			fLoginInput.value = "";
+			fLoginClear.hidden = true;
+			await loadHistory(0);
+		});
+		document.addEventListener("click", (e) =>
+		{
+			if (!(e.target as HTMLElement).closest(".flt-picker")) fResults.hidden = true;
+		});
 
-    // ── Controls ──────────────────────────────────────────────────────────
-    $("[data-log-clear]").addEventListener("click", () => {
-      logList.innerHTML = "";
-      logCount.hidden = true;
-      logPagination.hidden = true;
-    });
-    $("[data-f-search]").addEventListener("click", () => loadHistory(0));
-    $("[data-f-action]").addEventListener("change", () => loadHistory(0));
-    $("[data-f-from]").addEventListener("change", () => loadHistory(0));
-    $("[data-f-to]").addEventListener("change", () => loadHistory(0));
-    $("[data-f-reset]").addEventListener("click", async () => {
-      activeLogin = "";
-      fLoginInput.value = "";
-      fLoginClear.hidden = true;
-      $<HTMLSelectElement>("[data-f-action]").value = "";
-      $<HTMLInputElement>("[data-f-from]").value = "";
-      $<HTMLInputElement>("[data-f-to]").value = "";
-      await loadHistory(0);
-    });
-    $("[data-page-prev]").addEventListener("click", () => loadHistory(currentPage - 1));
-    $("[data-page-next]").addEventListener("click", () => loadHistory(currentPage + 1));
+		// ── Controls ──────────────────────────────────────────────────────────
+		$("[data-log-clear]").addEventListener("click", () =>
+		{
+			logList.innerHTML = "";
+			logCount.hidden = true;
+			logPagination.hidden = true;
+		});
+		$("[data-f-search]").addEventListener("click", () => loadHistory(0));
+		$("[data-f-action]").addEventListener("change", () => loadHistory(0));
+		$("[data-f-from]").addEventListener("change", () => loadHistory(0));
+		$("[data-f-to]").addEventListener("change", () => loadHistory(0));
+		$("[data-f-reset]").addEventListener("click", async () =>
+		{
+			activeLogin = "";
+			fLoginInput.value = "";
+			fLoginClear.hidden = true;
+			$<HTMLSelectElement>("[data-f-action]").value = "";
+			$<HTMLInputElement>("[data-f-from]").value = "";
+			$<HTMLInputElement>("[data-f-to]").value = "";
+			await loadHistory(0);
+		});
+		$("[data-page-prev]").addEventListener("click", () => loadHistory(currentPage - 1));
+		$("[data-page-next]").addEventListener("click", () => loadHistory(currentPage + 1));
 
-    // Initial load
-    await loadHistory(0);
+		// Initial load
+		await loadHistory(0);
 
-    connectRealtime();
+		connectRealtime();
 
-    // WS events: toujours prepend si matche les filtres actifs
-    onAdminLog((event) => {
-      if (!eventMatchesFilters(event)) return;
-      // remove "no results" placeholder if present
-      logList.querySelector(".log-empty")?.remove();
-      const li = renderEntry(event);
-      logList.prepend(li);
-      while (logList.children.length > 200) logList.lastElementChild?.remove();
-      logDot.classList.remove("pulse");
-      void logDot.offsetWidth;
-      logDot.classList.add("pulse");
-    });
-  });
+		// WS events: toujours prepend si matche les filtres actifs
+		onAdminLog((event) =>
+		{
+			if (!eventMatchesFilters(event)) return;
+			// remove "no results" placeholder if present
+			logList.querySelector(".log-empty")?.remove();
+			const li = renderEntry(event);
+			logList.prepend(li);
+			while (logList.children.length > 200) logList.lastElementChild?.remove();
+			logDot.classList.remove("pulse");
+			void logDot.offsetWidth;
+			logDot.classList.add("pulse");
+		});
+	});
 </script>
 
 <style>

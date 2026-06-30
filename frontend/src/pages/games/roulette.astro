@@ -1,0 +1,472 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+---
+
+<Layout title="PISCASINO — Roulette">
+  <Nav />
+  <header class="game-header">
+    <span class="gh-icon">🎡</span>
+    <h1>Roulette</h1>
+    <span class="gh-sub">· Rouge ou noir, pair ou impair, la roue décide</span>
+  </header>
+  <div class="shell">
+    <aside class="panel betpanel">
+      <div class="field">
+        <label>Mise</label>
+        <input class="input" data-bet type="number" min="1" value="100" />
+        <div class="chips">
+          <button data-amt="half">½</button>
+          <button data-amt="double">2×</button>
+          <button data-amt="max">Max</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Type de pari</label>
+        <div class="bet-types">
+          <button class="bt active" data-bt="red"   data-odds="2×">Rouge</button>
+          <button class="bt"        data-bt="black"  data-odds="2×">Noir</button>
+          <button class="bt green"  data-bt="number" data-num="0" data-odds="35×">0</button>
+        </div>
+        <div class="bet-types">
+          <button class="bt" data-bt="even"  data-odds="2×">Pair</button>
+          <button class="bt" data-bt="odd"   data-odds="2×">Impair</button>
+          <button class="bt" data-bt="low"   data-odds="2×">1–18</button>
+          <button class="bt" data-bt="high"  data-odds="2×">19–36</button>
+        </div>
+        <div class="bet-types">
+          <button class="bt" data-bt="dozen1" data-odds="3×">1–12</button>
+          <button class="bt" data-bt="dozen2" data-odds="3×">13–24</button>
+          <button class="bt" data-bt="dozen3" data-odds="3×">25–36</button>
+        </div>
+        <div class="bet-types">
+          <button class="bt" data-bt="col1" data-odds="3×">Col. 1</button>
+          <button class="bt" data-bt="col2" data-odds="3×">Col. 2</button>
+          <button class="bt" data-bt="col3" data-odds="3×">Col. 3</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Numéro direct <small>(optionnel — 35×)</small></label>
+        <div class="num-grid" data-num-grid></div>
+      </div>
+
+      <div class="odds-row">
+        <span class="odds-lbl">Cote</span>
+        <span class="odds-val" data-odds-val>2×</span>
+      </div>
+
+      <button class="btn spin-btn" data-spin>Tourner</button>
+      <p class="result" data-result></p>
+
+      <div class="history" data-history></div>
+      <div class="sess-stats" data-sess></div>
+    </aside>
+
+    <main class="panel stage">
+      <div class="wheel-wrap">
+        <canvas id="wheel" width="320" height="320"></canvas>
+        <div class="pointer">▼</div>
+      </div>
+      <div class="result-big" data-result-big hidden>
+        <span data-rb-num>—</span>
+        <span data-rb-color></span>
+      </div>
+    </main>
+  </div>
+</Layout>
+
+<script>
+	import { loadMe, setupAmount, fmt, getBalance, roulettePlay, type RouletteBetType } from "../../lib/casino";
+	import { GameSession } from "../../lib/session";
+
+	// ── Wheel constants ──────────────────────────────────────────────────────
+	const WHEEL_NUMS = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+	const REDS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+	const SEG = (Math.PI * 2) / 37;
+
+	// ── Canvas wheel ─────────────────────────────────────────────────────────
+	const canvas  = document.getElementById("wheel") as HTMLCanvasElement;
+	const ctx     = canvas.getContext("2d")!;
+	const CX = 160, CY = 160, OR = 152, IR = 60;
+
+	let wheelAngle = 0;
+
+	function numColor(n: number)
+	{
+		if (n === 0) return "#16a34a";
+		return REDS.has(n) ? "#dc2626" : "#1c1c2e";
+	}
+
+	function drawWheel(rotation: number)
+	{
+		ctx.clearRect(0, 0, 320, 320);
+		ctx.save();
+		ctx.translate(CX, CY);
+		ctx.rotate(rotation);
+
+		// Segments
+		for (let i = 0; i < 37; i++)
+		{
+			const num   = WHEEL_NUMS[i];
+			const start = i * SEG - Math.PI / 2;
+			const end   = (i + 1) * SEG - Math.PI / 2;
+
+			// Slice fill
+			ctx.beginPath();
+			ctx.moveTo(0, 0);
+			ctx.arc(0, 0, OR, start, end);
+			ctx.closePath();
+			ctx.fillStyle = numColor(num);
+			ctx.fill();
+			ctx.strokeStyle = "#0f1923";
+			ctx.lineWidth = 1.5;
+			ctx.stroke();
+
+			// Number text
+			ctx.save();
+			const mid = (start + end) / 2;
+			ctx.rotate(mid);
+			ctx.translate(OR * 0.78, 0);
+			ctx.rotate(Math.PI / 2);
+			ctx.fillStyle = "#fff";
+			ctx.font = "bold 9px Inter, sans-serif";
+			ctx.textAlign = "center";
+			ctx.textBaseline = "middle";
+			ctx.fillText(String(num), 0, 0);
+			ctx.restore();
+		}
+
+		// Inner circle (hub)
+		ctx.beginPath();
+		ctx.arc(0, 0, IR, 0, Math.PI * 2);
+		ctx.fillStyle = "#0f1923";
+		ctx.fill();
+		ctx.strokeStyle = "#d4af37";
+		ctx.lineWidth = 3;
+		ctx.stroke();
+
+		// Gold outer ring
+		ctx.beginPath();
+		ctx.arc(0, 0, OR + 4, 0, Math.PI * 2);
+		ctx.strokeStyle = "#d4af37";
+		ctx.lineWidth = 4;
+		ctx.stroke();
+
+		ctx.restore();
+	}
+
+	drawWheel(0);
+
+	// ── Spin animation ────────────────────────────────────────────────────────
+	let spinning = false;
+
+	function easeOut(t: number) { return 1 - Math.pow(1 - t, 4); }
+
+	function spinTo(targetIdx: number, durationMs: number, onDone: () => void)
+	{
+		const segAngle   = (targetIdx / 37) * Math.PI * 2;
+		// We want segAngle to point to top (which is -π/2 before rotation)
+		// targetAngle makes segment land under pointer
+		const targetAngle = -segAngle - Math.PI / 2 + SEG / 2;
+		const spins = 5 * Math.PI * 2;
+		const start = wheelAngle;
+		const delta = spins + ((targetAngle - (start % (Math.PI * 2)) + Math.PI * 4) % (Math.PI * 2));
+
+		const t0 = performance.now();
+
+		function frame()
+		{
+			const elapsed = performance.now() - t0;
+			const t = Math.min(1, elapsed / durationMs);
+			wheelAngle = start + delta * easeOut(t);
+			drawWheel(wheelAngle);
+			if (t < 1) requestAnimationFrame(frame);
+			else { wheelAngle = start + delta; drawWheel(wheelAngle); onDone(); }
+		}
+
+		requestAnimationFrame(frame);
+	}
+
+	// ── Bet type state ────────────────────────────────────────────────────────
+	const betInput  = document.querySelector<HTMLInputElement>("[data-bet]")!;
+	const spinBtn   = document.querySelector<HTMLButtonElement>("[data-spin]")!;
+	const resultEl  = document.querySelector<HTMLElement>("[data-result]")!;
+	const oddsVal   = document.querySelector<HTMLElement>("[data-odds-val]")!;
+	const historyEl = document.querySelector<HTMLElement>("[data-history]")!;
+	const resultBig = document.querySelector<HTMLElement>("[data-result-big]")!;
+	const rbNum     = document.querySelector<HTMLElement>("[data-rb-num]")!;
+	const rbColor   = document.querySelector<HTMLElement>("[data-rb-color]")!;
+	const session   = new GameSession(null, document.querySelector("[data-sess]"));
+
+	setupAmount(betInput);
+
+	let betType: RouletteBetType = "red";
+	let directNumber: number | undefined = undefined;
+
+	// Bet type buttons
+	document.querySelectorAll<HTMLElement>("[data-bt]").forEach(btn =>
+	{
+		btn.addEventListener("click", () =>
+		{
+			document.querySelectorAll("[data-bt]").forEach(b => b.classList.remove("active"));
+			btn.classList.add("active");
+			betType       = btn.dataset.bt as RouletteBetType;
+			directNumber  = undefined;
+			oddsVal.textContent = btn.dataset.odds ?? "2×";
+
+			if (betType === "number" && btn.dataset.num !== undefined)
+				directNumber = Number(btn.dataset.num);
+
+			// Clear num grid selection unless it's a number bet from grid
+			if (betType !== "number")
+				document.querySelectorAll("[data-num-btn]").forEach(b => b.classList.remove("active"));
+		});
+	});
+
+	// Number grid
+	const numGrid = document.querySelector<HTMLElement>("[data-num-grid]")!;
+	for (let n = 0; n <= 36; n++)
+	{
+		const b = document.createElement("button");
+		b.className = `nb ${REDS.has(n) ? "r" : n === 0 ? "g" : "k"}`;
+		b.textContent = String(n);
+		b.dataset.numBtn = String(n);
+		b.addEventListener("click", () =>
+		{
+			document.querySelectorAll("[data-bt]").forEach(b => b.classList.remove("active"));
+			document.querySelectorAll("[data-num-btn]").forEach(b => b.classList.remove("active"));
+			b.classList.add("active");
+			betType      = "number";
+			directNumber = n;
+			oddsVal.textContent = "35×";
+		});
+		numGrid.appendChild(b);
+	}
+
+	// ── History ───────────────────────────────────────────────────────────────
+	const hist: number[] = [];
+	function pushHist(n: number)
+	{
+		hist.unshift(n);
+		if (hist.length > 12) hist.pop();
+		historyEl.innerHTML = hist.map(x =>
+		{
+			const cls = x === 0 ? "hc green" : REDS.has(x) ? "hc red" : "hc black";
+			return `<span class="${cls}">${x}</span>`;
+		}).join("");
+	}
+
+	// ── Spin ─────────────────────────────────────────────────────────────────
+	spinBtn.addEventListener("click", async () =>
+	{
+		if (spinning) return;
+		const amount = Math.max(1, Math.floor(Number(betInput.value)));
+		spinning = true;
+		spinBtn.disabled = true;
+		resultEl.textContent = "";
+		resultEl.className = "result";
+		resultBig.hidden = true;
+
+		try
+		{
+			const r = await roulettePlay(betType, amount, directNumber);
+			const { result, win, multiplier, payout } = r;
+
+			// Find result index in wheel
+			const idx = WHEEL_NUMS.indexOf(result);
+
+			spinTo(idx, 4200, () =>
+			{
+				spinning = false;
+				spinBtn.disabled = false;
+
+				// Big result display
+				const col = result === 0 ? "vert" : REDS.has(result) ? "rouge" : "noir";
+				rbNum.textContent = String(result);
+				rbNum.className   = result === 0 ? "rn green" : REDS.has(result) ? "rn red" : "rn black";
+				rbColor.textContent = col;
+				resultBig.hidden = false;
+
+				if (win)
+				{
+					resultEl.textContent = `+${fmt(payout)} pts (${multiplier.toFixed(2)}×)`;
+					resultEl.className   = "result win";
+				}
+				else
+				{
+					resultEl.textContent = `−${fmt(amount)} pts`;
+					resultEl.className   = "result lose";
+				}
+
+				pushHist(result);
+				session.record(win, amount, payout);
+			});
+		}
+		catch (e: any)
+		{
+			spinning = false;
+			spinBtn.disabled = false;
+			resultEl.textContent = e.message ?? "Erreur";
+			resultEl.className   = "result lose";
+		}
+	});
+
+	loadMe();
+</script>
+
+<style>
+  .stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 24px;
+  }
+
+  .wheel-wrap {
+    position: relative;
+    width: 320px;
+    height: 320px;
+  }
+
+  #wheel {
+    display: block;
+    filter: drop-shadow(0 0 24px rgba(212,175,55,0.25));
+  }
+
+  .pointer {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #d4af37;
+    font-size: 22px;
+    line-height: 1;
+    text-shadow: 0 0 8px rgba(212,175,55,0.8);
+  }
+
+  .result-big {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  :global(.rn) {
+    font-size: 48px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  :global(.rn.red)   { color: #ef4444; }
+  :global(.rn.black) { color: #e2e8f0; }
+  :global(.rn.green) { color: #22c55e; }
+
+  /* Bet type buttons */
+  .bet-types {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 5px;
+  }
+
+  .bt {
+    flex: 1;
+    padding: 8px 4px;
+    border-radius: 7px;
+    background: var(--raise);
+    border: 1px solid transparent;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+    font-family: inherit;
+    text-align: center;
+  }
+
+  .bt:hover { color: var(--fg); }
+
+  .bt[data-bt="red"] { color: #ef4444; }
+  .bt[data-bt="black"] { color: #a1a1aa; }
+  .bt.green, .bt[data-bt="number"][data-num="0"] { color: #22c55e; }
+
+  .bt.active {
+    border-color: var(--accent);
+    background: rgba(59,130,246,0.12);
+    color: var(--fg);
+  }
+  .bt[data-bt="red"].active   { border-color: #ef4444; background: rgba(239,68,68,0.12); color: #ef4444; }
+  .bt[data-bt="black"].active { border-color: #6b7280; background: rgba(107,114,128,0.12); color: #e2e8f0; }
+  .bt.green.active            { border-color: #22c55e; background: rgba(34,197,94,0.12); color: #22c55e; }
+
+  /* Number grid */
+  .num-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+    margin-top: 4px;
+  }
+
+  :global(.nb) {
+    aspect-ratio: 1;
+    border-radius: 5px;
+    border: 1px solid transparent;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.08s, border-color 0.1s;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  :global(.nb.r) { background: rgba(220,38,38,0.2); color: #ef4444; }
+  :global(.nb.k) { background: rgba(30,30,46,0.7); color: #94a3b8; }
+  :global(.nb.g) { background: rgba(22,163,74,0.2); color: #22c55e; }
+  :global(.nb:hover) { transform: scale(1.12); }
+  :global(.nb.active) { border-color: var(--accent); transform: scale(1.12); }
+
+  /* Odds */
+  .odds-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-top: 1px solid var(--line);
+    margin-top: 4px;
+  }
+  .odds-lbl { font-size: 12px; color: var(--muted); }
+  .odds-val { font-size: 18px; font-weight: 800; color: var(--accent); }
+
+  /* Spin btn */
+  .spin-btn { width: 100%; margin-top: 4px; }
+  .spin-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  /* History chips */
+  .history {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+  }
+
+  :global(.hc) {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 800;
+    color: #fff;
+  }
+  :global(.hc.red)   { background: #dc2626; }
+  :global(.hc.black) { background: #1e1e2e; border: 1px solid #4b5563; }
+  :global(.hc.green) { background: #16a34a; }
+</style>

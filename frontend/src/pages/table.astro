@@ -23,194 +23,226 @@ import Nav from "../components/Nav.astro";
 </Layout>
 
 <script>
-  import {
-    subscribeRoom,
-    unsubscribeRoom,
-    onRoom,
-    getMyId,
-    loadMe,
-    getFriends,
-    bjStart,
-    bjBet,
-    bjHit,
-    bjStand,
-    bjDouble,
-    bjAddBot,
-    bjInvite,
-    toast,
-    type FriendCard,
-  } from "../lib/casino";
+	import {
+		subscribeRoom,
+		unsubscribeRoom,
+		onRoom,
+		getMyId,
+		loadMe,
+		getFriends,
+		bjStart,
+		bjBet,
+		bjHit,
+		bjStand,
+		bjDouble,
+		bjAddBot,
+		bjInvite,
+		toast,
+		type FriendCard,
+	} from "../lib/casino";
 
-  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
-  const roomId = new URLSearchParams(location.search).get("room") ?? "";
-  const controls = $("[data-controls]");
-  const felt2d = $("[data-felt2d]");
-  let scene: any = null;
+	const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
+	const roomId = new URLSearchParams(location.search).get("room") ?? "";
+	const controls = $("[data-controls]");
+	const felt2d = $("[data-felt2d]");
+	let scene: any = null;
 
-  if (!roomId) location.href = "/blackjack";
+	if (!roomId) location.href = "/blackjack";
 
-  // ── 2D DOM fallback renderer (always available) ───────────────────────
-  const RED = (s: string) => s === "♥" || s === "♦";
-  const cardHtml = (c: { r: string; s: string }) =>
-    c.r === "?"
-      ? `<span class="c2 back"></span>`
-      : `<span class="c2 ${RED(c.s) ? "red" : ""}"><b>${c.r}</b><i>${c.s}</i></span>`;
-  const RES: Record<string, string> = {
-    win: "Gagné", lose: "Perdu", push: "Égalité", blackjack: "Blackjack !", bust: "Bust",
-  };
+	// ── 2D DOM fallback renderer (always available) ───────────────────────
+	const RED = (s: string) => s === "♥" || s === "♦";
+	const cardHtml = (c: { r: string; s: string }) =>
+		c.r === "?"
+			? `<span class="c2 back"></span>`
+			: `<span class="c2 ${RED(c.s) ? "red" : ""}"><b>${c.r}</b><i>${c.s}</i></span>`;
+	const RES: Record<string, string> = {
+		win: "Gagné", lose: "Perdu", push: "Égalité", blackjack: "Blackjack !", bust: "Bust",
+	};
 
-  function renderFelt(room: any) {
-    if (scene) return; // 3D handles it
-    const myId = getMyId();
-    const d = room.dealer;
-    felt2d.innerHTML = `
-      <div class="d2">
-        <span class="lab">Croupier ${d.value != null ? "· " + d.value : ""}</span>
-        <div class="row2">${d.cards.map(cardHtml).join("") || '<span class="c2 empty"></span>'}</div>
-      </div>
-      <div class="seats2">
-        ${room.seats
-          .map((s: any) => {
-            if (!s) return `<div class="seat2 empty">Libre</div>`;
-            const turn = room.turnSeatId === s.seatId;
-            const res =
-              s.result && room.phase === "payout"
-                ? `<span class="r2 ${s.result}">${RES[s.result] ?? ""}${s.win > 0 ? " +" + s.win : ""}</span>`
-                : "";
-            return `<div class="seat2 ${turn ? "turn" : ""} ${s.userId === myId ? "me" : ""}">
-              <span class="sn">${s.display_name || s.login}${s.isBot ? " 🤖" : ""}</span>
-              <div class="row2">${(s.cards || []).map(cardHtml).join("") || '<span class="c2 empty"></span>'}</div>
-              <span class="sf">${s.cards?.length ? `<b>${s.value}</b>` : ""}${s.bet ? ` · ${s.bet} pts` : ""} ${res}</span>
-            </div>`;
-          })
-          .join("")}
-      </div>`;
-  }
+	function renderFelt(room: any)
+	{
+		if (scene) return; // 3D handles it
+		const myId = getMyId();
+		const d = room.dealer;
+		felt2d.innerHTML = `
+			<div class="d2">
+				<span class="lab">Croupier ${d.value != null ? "· " + d.value : ""}</span>
+				<div class="row2">${d.cards.map(cardHtml).join("") || '<span class="c2 empty"></span>'}</div>
+			</div>
+			<div class="seats2">
+				${room.seats
+					.map((s: any) =>
+					{
+						if (!s) return `<div class="seat2 empty">Libre</div>`;
+						const turn = room.turnSeatId === s.seatId;
+						const res =
+							s.result && room.phase === "payout"
+								? `<span class="r2 ${s.result}">${RES[s.result] ?? ""}${s.win > 0 ? " +" + s.win : ""}</span>`
+								: "";
+						return `<div class="seat2 ${turn ? "turn" : ""} ${s.userId === myId ? "me" : ""}">
+							<span class="sn">${s.display_name || s.login}${s.isBot ? " 🤖" : ""}</span>
+							<div class="row2">${(s.cards || []).map(cardHtml).join("") || '<span class="c2 empty"></span>'}</div>
+							<span class="sf">${s.cards?.length ? `<b>${s.value}</b>` : ""}${s.bet ? ` · ${s.bet} pts` : ""} ${res}</span>
+						</div>`;
+					})
+					.join("")}
+			</div>`;
+	}
 
-  // ── Controls ──────────────────────────────────────────────────────────
-  function renderControls(room: any) {
-    const myId = getMyId();
-    const mySeat = room.seats.find((s: any) => s && s.userId === myId);
-    const isHost = room.hostId === myId;
-    const isMyTurn =
-      room.phase === "playing" && mySeat && room.turnSeatId === mySeat.seatId;
-    let html = "";
-    if (room.phase === "waiting") {
-      if (isHost) {
-        const n = room.seats.filter(Boolean).length;
-        html = `<button class="btn" data-start ${n < 1 ? "disabled" : ""}>Démarrer la manche</button>
-          <button class="btn ghost" data-bot>+ Bot</button>
-          <button class="btn ghost" data-invite>Inviter un ami</button>`;
-      } else html = `<span class="wait">En attente que l'hôte lance la manche…</span>`;
-    } else if (room.phase === "betting") {
-      if (mySeat && mySeat.bet === 0)
-        html = `<div class="betrow"><input class="input bet" data-betamt type="number" min="10" value="100" />
-            <button class="btn" data-bet>Miser</button></div>`;
-      else html = `<span class="wait">Mise placée — en attente…</span>`;
-    } else if (room.phase === "playing") {
-      if (isMyTurn) {
-        const canDouble = mySeat.cards.length === 2;
-        html = `<button class="btn" data-hit>Tirer</button>
-          <button class="btn ghost" data-stand>Rester</button>
-          ${canDouble ? `<button class="btn ghost" data-double>Doubler</button>` : ""}`;
-      } else {
-        const cur = room.seats.find((s: any) => s && s.seatId === room.turnSeatId);
-        html = `<span class="wait">Tour de ${cur ? cur.display_name || cur.login : "…"}</span>`;
-      }
-    } else if (room.phase === "dealer") html = `<span class="wait">Le croupier joue…</span>`;
-    else if (room.phase === "payout")
-      html = `<span class="wait">Manche terminée — nouvelle manche bientôt…</span>`;
-    controls.innerHTML = html;
-  }
+	// ── Controls ──────────────────────────────────────────────────────────
+	function renderControls(room: any)
+	{
+		const myId = getMyId();
+		const mySeat = room.seats.find((s: any) => s && s.userId === myId);
+		const isHost = room.hostId === myId;
+		const isMyTurn =
+			room.phase === "playing" && mySeat && room.turnSeatId === mySeat.seatId;
+		let html = "";
+		if (room.phase === "waiting")
+		{
+			if (isHost)
+			{
+				const n = room.seats.filter(Boolean).length;
+				html = `<button class="btn" data-start ${n < 1 ? "disabled" : ""}>Démarrer la manche</button>
+					<button class="btn ghost" data-bot>+ Bot</button>
+					<button class="btn ghost" data-invite>Inviter un ami</button>`;
+			} else html = `<span class="wait">En attente que l'hôte lance la manche…</span>`;
+		}
+		else if (room.phase === "betting")
+		{
+			if (mySeat && mySeat.bet === 0)
+				html = `<div class="betrow"><input class="input bet" data-betamt type="number" min="10" value="100" />
+						<button class="btn" data-bet>Miser</button></div>`;
+			else html = `<span class="wait">Mise placée — en attente…</span>`;
+		}
+		else if (room.phase === "playing")
+		{
+			if (isMyTurn)
+			{
+				const canDouble = mySeat.cards.length === 2;
+				html = `<button class="btn" data-hit>Tirer</button>
+					<button class="btn ghost" data-stand>Rester</button>
+					${canDouble ? `<button class="btn ghost" data-double>Doubler</button>` : ""}`;
+			}
+			else
+			{
+				const cur = room.seats.find((s: any) => s && s.seatId === room.turnSeatId);
+				html = `<span class="wait">Tour de ${cur ? cur.display_name || cur.login : "…"}</span>`;
+			}
+		} else if (room.phase === "dealer") html = `<span class="wait">Le croupier joue…</span>`;
+		else if (room.phase === "payout")
+			html = `<span class="wait">Manche terminée — nouvelle manche bientôt…</span>`;
+		controls.innerHTML = html;
+	}
 
-  controls.addEventListener("click", async (e) => {
-    const el = e.target as HTMLElement;
-    try {
-      if (el.hasAttribute("data-start")) await bjStart(roomId);
-      else if (el.hasAttribute("data-bot")) await bjAddBot(roomId);
-      else if (el.hasAttribute("data-bet"))
-        await bjBet(roomId, Number($<HTMLInputElement>("[data-betamt]").value));
-      else if (el.hasAttribute("data-hit")) await bjHit(roomId);
-      else if (el.hasAttribute("data-stand")) await bjStand(roomId);
-      else if (el.hasAttribute("data-double")) await bjDouble(roomId);
-      else if (el.hasAttribute("data-invite")) openInvite();
-    } catch (err: any) {
-      toast(err?.message ?? "Erreur");
-    }
-  });
+	controls.addEventListener("click", async (e) =>
+	{
+		const el = e.target as HTMLElement;
+		try
+		{
+			if (el.hasAttribute("data-start")) await bjStart(roomId);
+			else if (el.hasAttribute("data-bot")) await bjAddBot(roomId);
+			else if (el.hasAttribute("data-bet"))
+				await bjBet(roomId, Number($<HTMLInputElement>("[data-betamt]").value));
+			else if (el.hasAttribute("data-hit")) await bjHit(roomId);
+			else if (el.hasAttribute("data-stand")) await bjStand(roomId);
+			else if (el.hasAttribute("data-double")) await bjDouble(roomId);
+			else if (el.hasAttribute("data-invite")) openInvite();
+		}
+		catch (err: any)
+		{
+			toast(err?.message ?? "Erreur");
+		}
+	});
 
-  async function openInvite() {
-    const friends: FriendCard[] = await getFriends();
-    const ex = document.querySelector(".invite-pop");
-    if (ex) {
-      ex.remove();
-      return;
-    }
-    const pop = document.createElement("div");
-    pop.className = "invite-pop panel";
-    pop.innerHTML = friends.length
-      ? friends
-          .map(
-            (f) =>
-              `<button class="inv-item" data-inv="${f.id}">${f.display_name || f.login}${f.online ? " 🟢" : ""}</button>`,
-          )
-          .join("")
-      : `<span class="inv-empty">Aucun ami à inviter.</span>`;
-    controls.appendChild(pop);
-    pop.addEventListener("click", async (e) => {
-      const id = (e.target as HTMLElement).dataset.inv;
-      if (!id) return;
-      try {
-        await bjInvite(roomId, Number(id));
-        toast("Invitation envoyée");
-      } catch (err: any) {
-        toast(err?.message ?? "Erreur");
-      }
-      pop.remove();
-    });
-  }
+	async function openInvite()
+	{
+		const friends: FriendCard[] = await getFriends();
+		const ex = document.querySelector(".invite-pop");
+		if (ex)
+		{
+			ex.remove();
+			return;
+		}
+		const pop = document.createElement("div");
+		pop.className = "invite-pop panel";
+		pop.innerHTML = friends.length
+			? friends
+					.map(
+						(f) =>
+							`<button class="inv-item" data-inv="${f.id}">${f.display_name || f.login}${f.online ? " 🟢" : ""}</button>`,
+					)
+					.join("")
+			: `<span class="inv-empty">Aucun ami à inviter.</span>`;
+		controls.appendChild(pop);
+		pop.addEventListener("click", async (e) =>
+		{
+			const id = (e.target as HTMLElement).dataset.inv;
+			if (!id) return;
+			try
+			{
+				await bjInvite(roomId, Number(id));
+				toast("Invitation envoyée");
+			}
+			catch (err: any)
+			{
+				toast(err?.message ?? "Erreur");
+			}
+			pop.remove();
+		});
+	}
 
-  let gotState = false;
-  onRoom((msg) => {
-    if (msg.type === "room" && msg.room.id === roomId) gotState = true;
-    if (msg.type === "room_closed") {
-      toast("La table a été fermée");
-      setTimeout(() => (location.href = "/blackjack"), 1200);
-      return;
-    }
-    if (msg.type === "room" && msg.room.id === roomId) {
-      $("[data-rname]").textContent = msg.room.name;
-      $("[data-code]").textContent = msg.room.code;
-      if (scene) scene.update(msg.room, getMyId());
-      else renderFelt(msg.room);
-      renderControls(msg.room);
-    }
-  });
+	let gotState = false;
+	onRoom((msg) =>
+	{
+		if (msg.type === "room" && msg.room.id === roomId) gotState = true;
+		if (msg.type === "room_closed")
+		{
+			toast("La table a été fermée");
+			setTimeout(() => (location.href = "/blackjack"), 1200);
+			return;
+		}
+		if (msg.type === "room" && msg.room.id === roomId)
+		{
+			$("[data-rname]").textContent = msg.room.name;
+			$("[data-code]").textContent = msg.room.code;
+			if (scene) scene.update(msg.room, getMyId());
+			else renderFelt(msg.room);
+			renderControls(msg.room);
+		}
+	});
 
-  window.addEventListener("beforeunload", () => {
-    unsubscribeRoom(roomId);
-    navigator.sendBeacon?.(`/api/bj/rooms/${roomId}/leave`);
-  });
+	window.addEventListener("beforeunload", () =>
+	{
+		unsubscribeRoom(roomId);
+		navigator.sendBeacon?.(`/api/bj/rooms/${roomId}/leave`);
+	});
 
-  // Subscribe FIRST so the table works even if 3D/WebGL is unavailable.
-  loadMe().then(async () => {
-    subscribeRoom(roomId);
-    // Room gone (server restarted / bad id) -> back to lobby.
-    setTimeout(() => {
-      if (!gotState) {
-        toast("Table introuvable");
-        location.href = "/blackjack";
-      }
-    }, 2500);
-    try {
-      const { BlackjackScene } = await import("../lib/bjscene");
-      const s = new BlackjackScene($("[data-scene]"));
-      felt2d.style.display = "none";
-      scene = s;
-    } catch (e) {
-      console.warn("3D indisponible, fallback 2D", e);
-    }
-  });
+	// Subscribe FIRST so the table works even if 3D/WebGL is unavailable.
+	loadMe().then(async () =>
+	{
+		subscribeRoom(roomId);
+		// Room gone (server restarted / bad id) -> back to lobby.
+		setTimeout(() =>
+		{
+			if (!gotState)
+			{
+				toast("Table introuvable");
+				location.href = "/blackjack";
+			}
+		}, 2500);
+		try
+		{
+			const { BlackjackScene } = await import("../lib/bjscene");
+			const s = new BlackjackScene($("[data-scene]"));
+			felt2d.style.display = "none";
+			scene = s;
+		}
+		catch (e)
+		{
+			console.warn("3D indisponible, fallback 2D", e);
+		}
+	});
 </script>
 
 <style>

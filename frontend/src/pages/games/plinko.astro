@@ -8,10 +8,15 @@ const ROWS = 8;
 
 <Layout title="PISCASINO — Plinko">
   <Nav />
+  <header class="game-header">
+    <span class="gh-icon">⚡</span>
+    <h1>Plinko</h1>
+    <span class="gh-sub">· Lâche la balle et regarde où elle atterrit</span>
+  </header>
   <div class="shell">
     <aside class="panel betpanel">
       <div class="field">
-        <label>Mise</label>
+        <label>Mise par bille</label>
         <input class="input" data-bet type="number" min="1" value="100" />
         <div class="chips">
           <button data-amt="half">½</button>
@@ -20,30 +25,29 @@ const ROWS = 8;
         </div>
       </div>
 
+      <div class="field">
+        <label>Billes</label>
+        <div class="cnt-row">
+          {[1, 2, 3, 5, 10].map((n) => (
+            <button class={`cnt-btn${n === 1 ? " active" : ""}`} data-count={n}>
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div class="stat-row">
         <div class="stat"><span>Max</span><b>5.6×</b></div>
         <div class="stat"><span>Min</span><b>0.5×</b></div>
       </div>
 
-      <button class="btn bet-btn" data-play>Lacher la bille</button>
-      <p class="result" data-result></p>
+      <button class="btn bet-btn" data-play>Lâcher les billes</button>
+      <div class="pres-list" data-results></div>
+      <div class="sess-stats" data-sess></div>
     </aside>
 
     <main class="panel stage">
-      <div class="board" data-board>
-        <div class="pegs">
-          {
-            Array.from({ length: ROWS }).map((_, r) => (
-              <div class="peg-row">
-                {Array.from({ length: r + 3 }).map(() => (
-                  <span class="peg" />
-                ))}
-              </div>
-            ))
-          }
-        </div>
-        <div class="ball" data-ball hidden></div>
-      </div>
+      <canvas data-canvas></canvas>
       <div class="buckets">
         {
           MULT.map((m, i) => (
@@ -58,119 +62,433 @@ const ROWS = 8;
 </Layout>
 
 <script>
-  import { bet, setupAmount, fmt, BetError } from "../../lib/casino";
+	import { bet, setupAmount, fmt, BetError } from "../../lib/casino";
+	import { GameSession } from "../../lib/session";
 
-  const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
-  const result = document.querySelector<HTMLElement>("[data-result]")!;
-  const play = document.querySelector<HTMLButtonElement>("[data-play]")!;
-  const board = document.querySelector<HTMLElement>("[data-board]")!;
-  const ball = document.querySelector<HTMLElement>("[data-ball]")!;
-  const buckets = document.querySelectorAll<HTMLElement>("[data-bucket]");
+	const betInput  = document.querySelector<HTMLInputElement>("[data-bet]")!;
+	const playBtn   = document.querySelector<HTMLButtonElement>("[data-play]")!;
+	const canvas    = document.querySelector<HTMLCanvasElement>("[data-canvas]")!;
+	const bucketEls = document.querySelectorAll<HTMLElement>("[data-bucket]");
+	const resultsEl = document.querySelector<HTMLElement>("[data-results]")!;
+	const ctx       = canvas.getContext("2d")!;
+	const session   = new GameSession(null, document.querySelector("[data-sess]"));
 
-  setupAmount(betInput);
+	setupAmount(betInput);
 
-  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+	// ── Layout ──────────────────────────────────────────────────────────────
+	const W    = 420;
+	const H    = 340;
+	const ROWS = 8;
+	const GAP  = 26;   // horizontal peg spacing
+	const PR   = 5;    // peg radius
+	const BR   = 7;    // ball radius
+	const TOP  = 34;
+	const ROW_H = (H - TOP - 24) / (ROWS - 1);
+	const CX   = W / 2;
 
-  async function drop(path: number[], bucket: number) {
-    const rect = board.getBoundingClientRect();
-    const unit = rect.width / 9 / 2;
-    let x = 0;
-    const top0 = 8;
-    const stepY = (rect.height - 24) / path.length;
-    ball.hidden = false;
-    ball.style.transition = "none";
-    ball.style.transform = `translate(-50%,0) translate(0px, ${top0}px)`;
-    ball.style.left = "50%";
-    await wait(20);
-    ball.style.transition = "transform 0.18s ease-in";
-    for (let i = 0; i < path.length; i++) {
-      x += path[i] ? unit : -unit;
-      ball.style.transform = `translate(-50%,0) translate(${x}px, ${top0 + (i + 1) * stepY}px)`;
-      await wait(180);
-    }
-    buckets.forEach((b, i) => b.classList.toggle("hit", i === bucket));
-    setTimeout(() => buckets.forEach((b) => b.classList.remove("hit")), 1200);
-  }
+	canvas.width  = W;
+	canvas.height = H;
 
-  play.addEventListener("click", async () => {
-    play.disabled = true;
-    result.textContent = "";
-    result.className = "result";
-    try {
-      const r: any = await bet("plinko", { bet: Number(betInput.value) });
-      await drop(r.path, r.bucket);
-      result.textContent = r.win
-        ? `${r.multiplier}× · +${fmt(r.payout)} pts`
-        : `${r.multiplier}× · -${fmt(Number(betInput.value) - r.payout)} pts`;
-      result.classList.add(r.win ? "win" : "lose");
-    } catch (e) {
-      result.textContent = e instanceof BetError ? e.message : "Erreur";
-      result.classList.add("lose");
-    } finally {
-      play.disabled = false;
-    }
-  });
+	// ── Pegs ────────────────────────────────────────────────────────────────
+	interface Peg { x: number; y: number; row: number; lit: number; }
+	const pegs: Peg[] = [];
+	for (let r = 0; r < ROWS; r++)
+	{
+		const n = r + 3;
+		const y = TOP + r * ROW_H;
+		for (let k = 0; k < n; k++)
+			pegs.push({ x: CX + (k - (n - 1) / 2) * GAP, y, row: r, lit: 0 });
+	}
+
+	// ── Physics constants ────────────────────────────────────────────────────
+	const GRAV = 0.35;
+	const DAMP = 0.975;
+	const REST = 0.45;   // peg bounce restitution
+	const PULL = 0.012;  // waypoint attraction force
+	const MIN_VY = 2.5;  // floor vy after peg hit — ball always falls
+
+	// ── Ball colors ──────────────────────────────────────────────────────────
+	const COLORS = [
+		"#3b82f6", "#f59e0b", "#ef4444", "#10b981",
+		"#8b5cf6", "#ec4899", "#06b6d4", "#f97316",
+	];
+	let colorCtr = 0;
+
+	// ── Ball type ────────────────────────────────────────────────────────────
+	interface Ball
+	{
+		x: number; y: number;
+		vx: number; vy: number;
+		color: string;
+		wps: { x: number; y: number }[];
+		wpIdx: number;
+		bucket: number;
+		done: boolean;
+		result: { win: boolean; mult: number; payout: number; bet: number };
+	}
+
+	let balls: Ball[] = [];
+	let looping = false;
+
+	// Waypoint: the target peg position at each row, then the bucket center.
+	function buildWaypoints(path: number[], bucket: number)
+	{
+		const wps: { x: number; y: number }[] = [];
+		let s = 0;
+		for (let r = 0; r < ROWS; r++)
+		{
+			const n = r + 3;
+			const k = s + 1;
+			wps.push({ x: CX + (k - (n - 1) / 2) * GAP, y: TOP + r * ROW_H });
+			s += path[r];
+		}
+		// Final: centre du bucket
+		wps.push({ x: (bucket + 0.5) * W / 9, y: H + BR + 4 });
+		return wps;
+	}
+
+	function makeBall(
+		path: number[],
+		bucket: number,
+		result: Ball["result"],
+	): Ball
+	{
+		return {
+			x:      CX + (Math.random() - 0.5) * 2,
+			y:      5,
+			vx:     (Math.random() - 0.5) * 0.3,
+			vy:     1.4,
+			color:  COLORS[colorCtr++ % COLORS.length],
+			wps:    buildWaypoints(path, bucket),
+			wpIdx:  0,
+			bucket,
+			done:   false,
+			result,
+		};
+	}
+
+	// ── Physics step ─────────────────────────────────────────────────────────
+	function step(b: Ball, now: number)
+	{
+		// gravity + drag
+		b.vy += GRAV;
+		b.vx *= DAMP;
+
+		// attract toward current waypoint
+		if (b.wpIdx < b.wps.length)
+		{
+			const wp = b.wps[b.wpIdx];
+			b.vx += (wp.x - b.x) * PULL;
+			if (b.y > wp.y + PR + 4)
+				b.wpIdx++;
+		}
+
+		b.x += b.vx;
+		b.y += b.vy;
+
+		// peg collisions
+		for (const p of pegs)
+		{
+			const dx = b.x - p.x;
+			const dy = b.y - p.y;
+			const d2 = dx * dx + dy * dy;
+			const md = PR + BR;
+			if (d2 < md * md && d2 > 0.001)
+			{
+				const d  = Math.sqrt(d2);
+				const nx = dx / d;
+				const ny = dy / d;
+				// push out
+				b.x += nx * (md - d);
+				b.y += ny * (md - d);
+				// reflect
+				const dot = b.vx * nx + b.vy * ny;
+				b.vx = (b.vx - 2 * dot * nx) * REST;
+				b.vy = (b.vy - 2 * dot * ny) * REST;
+				// never stall upward — ball always continues down
+				if (b.vy < MIN_VY) b.vy = MIN_VY;
+				// light up peg
+				p.lit = now + 220;
+			}
+		}
+
+		// wall clamp
+		if (b.x < BR)       { b.x = BR;       b.vx =  Math.abs(b.vx) * 0.4; }
+		if (b.x > W - BR)   { b.x = W - BR;   b.vx = -Math.abs(b.vx) * 0.4; }
+
+		// exit bottom
+		if (b.y > H + BR)
+		{
+			b.done = true;
+			bucketEls[b.bucket]?.classList.add("hit");
+			setTimeout(() => bucketEls[b.bucket]?.classList.remove("hit"), 900);
+			addResult(b.result);
+		}
+	}
+
+	// ── Render ───────────────────────────────────────────────────────────────
+	function draw(now: number)
+	{
+		ctx.clearRect(0, 0, W, H);
+
+		// pegs
+		for (const p of pegs)
+		{
+			const lit = p.lit > now;
+			ctx.beginPath();
+			ctx.arc(p.x, p.y, PR, 0, Math.PI * 2);
+			if (lit)
+			{
+				ctx.shadowColor = "#3b82f6";
+				ctx.shadowBlur  = 12;
+				ctx.fillStyle   = "#93c5fd";
+			}
+			else
+			{
+				ctx.shadowBlur = 0;
+				ctx.fillStyle  = "#334155";
+			}
+			ctx.fill();
+			ctx.strokeStyle = lit ? "#bfdbfe" : "#4b6278";
+			ctx.lineWidth   = 1;
+			ctx.stroke();
+			ctx.shadowBlur = 0;
+		}
+
+		// balls
+		for (const b of balls)
+		{
+			if (b.done) continue;
+			ctx.save();
+			ctx.shadowColor = b.color;
+			ctx.shadowBlur  = 20;
+			const g = ctx.createRadialGradient(b.x - 2, b.y - 2, 1, b.x, b.y, BR);
+			g.addColorStop(0,   "rgba(255,255,255,0.55)");
+			g.addColorStop(0.35, b.color);
+			g.addColorStop(1,    b.color + "99");
+			ctx.beginPath();
+			ctx.arc(b.x, b.y, BR, 0, Math.PI * 2);
+			ctx.fillStyle = g;
+			ctx.fill();
+			ctx.restore();
+		}
+	}
+
+	// ── Loop ────────────────────────────────────────────────────────────────
+	function tick()
+	{
+		const now = performance.now();
+		for (const b of balls) step(b, now);
+		draw(now);
+		balls = balls.filter(b => !b.done);
+		if (balls.length > 0) requestAnimationFrame(tick);
+		else looping = false;
+	}
+
+	function startLoop()
+	{
+		if (!looping) { looping = true; requestAnimationFrame(tick); }
+	}
+
+	// ── Results ──────────────────────────────────────────────────────────────
+	function addResult(r: Ball["result"])
+	{
+		const el  = document.createElement("p");
+		el.className = `pres ${r.win ? "win" : "lose"}`;
+		const pts = r.win ? r.payout : r.bet - r.payout;
+		el.innerHTML =
+			`<span class="pmult">${r.mult}×</span>` +
+			`<span class="pdot"></span>` +
+			`<span class="ppts">${r.win ? "+" : "−"}${fmt(pts)} pts</span>`;
+		resultsEl.prepend(el);
+		while (resultsEl.children.length > 6) resultsEl.lastElementChild?.remove();
+		session.record(r.win, r.bet, r.payout);
+	}
+
+	function addError(msg: string)
+	{
+		const el = document.createElement("p");
+		el.className = "pres lose";
+		el.innerHTML = `<span class="pmult">—</span><span class="ppts">${msg}</span>`;
+		resultsEl.prepend(el);
+		while (resultsEl.children.length > 6) resultsEl.lastElementChild?.remove();
+	}
+
+	// ── Ball count selector ───────────────────────────────────────────────────
+	let ballCount = 1;
+	document.querySelectorAll<HTMLElement>("[data-count]").forEach(btn =>
+	{
+		btn.addEventListener("click", () =>
+		{
+			document.querySelectorAll("[data-count]").forEach(b => b.classList.remove("active"));
+			btn.classList.add("active");
+			ballCount = Number(btn.dataset.count);
+		});
+	});
+
+	// ── Play ─────────────────────────────────────────────────────────────────
+	playBtn.addEventListener("click", async () =>
+	{
+		const betAmt = Number(betInput.value);
+		if (isNaN(betAmt) || betAmt < 1) return;
+		playBtn.disabled = true;
+		try
+		{
+			const rs = await Promise.all(
+				Array.from({ length: ballCount }, () =>
+					bet("plinko", { bet: betAmt }).catch((e: unknown) =>
+					({
+						_err: e instanceof BetError ? e.message : "Erreur réseau",
+					}))
+				)
+			);
+			for (const r of rs)
+			{
+				if ("_err" in r) { addError(r._err); continue; }
+				balls.push(makeBall(
+					(r as any).path,
+					(r as any).bucket,
+					{
+						win:    (r as any).win,
+						mult:   (r as any).multiplier,
+						payout: (r as any).payout,
+						bet:    betAmt,
+					}
+				));
+			}
+			startLoop();
+		}
+		finally
+		{
+			playBtn.disabled = false;
+		}
+	});
 </script>
 
 <style>
-  .board {
-    position: relative;
+  canvas[data-canvas] {
+    display: block;
     width: min(420px, 100%);
-    height: 320px;
+    aspect-ratio: 420 / 340;
+    border-radius: 10px;
+    background: #0f1923;
   }
-  .pegs {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    height: 100%;
-    padding: 4px 0;
-  }
-  .peg-row {
-    display: flex;
-    justify-content: center;
-    gap: 26px;
-  }
-  .peg {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--raise);
-  }
-  .ball {
-    position: absolute;
-    top: 0;
-    left: 50%;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 12px var(--accent);
-    z-index: 2;
-  }
+
   .buckets {
     display: grid;
     grid-template-columns: repeat(9, 1fr);
-    gap: 4px;
+    gap: 3px;
     width: min(420px, 100%);
+    margin-top: 4px;
   }
+
   .bucket {
     text-align: center;
     font-size: 11px;
     font-weight: 700;
-    padding: 8px 2px;
+    padding: 7px 2px;
     border-radius: 6px;
     background: var(--raise);
     font-variant-numeric: tabular-nums;
-    transition: transform 0.1s, filter 0.1s;
+    transition: transform 0.12s, filter 0.12s;
   }
-  /* heat: edges hot, center cold */
+
   .b0, .b8 { background: #ed4163; }
   .b1, .b7 { background: #f0803c; }
-  .b2, .b6 { background: #f2b33d; }
+  .b2, .b6 { background: #e8a83a; }
   .b3, .b5 { background: #2f4553; }
-  .b4 { background: #213743; }
+  .b4       { background: #213743; }
+
   .bucket.hit {
-    transform: translateY(-4px) scale(1.08);
-    filter: brightness(1.4);
+    transform: translateY(-5px) scale(1.1);
+    filter: brightness(1.5);
+  }
+
+  /* Ball count row */
+  .cnt-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .cnt-btn {
+    flex: 1;
+    min-width: 36px;
+    padding: 7px 4px;
+    border-radius: 8px;
+    background: var(--raise);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+
+  .cnt-btn:hover {
+    background: var(--raise2, #253545);
+    color: var(--fg);
+  }
+
+  .cnt-btn.active {
+    background: #1d3a52;
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* Results list */
+  .pres-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 10px;
+  }
+
+  :global(.pres) {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 10px 6px 10px;
+    border-radius: 6px;
+    border-left: 3px solid;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+    line-height: 1;
+  }
+
+  :global(.pres.win) {
+    border-color: #22c55e;
+    color: #4ade80;
+    background: rgba(34, 197, 94, 0.07);
+  }
+
+  :global(.pres.lose) {
+    border-color: #ef4444;
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.07);
+  }
+
+  :global(.pres .pmult) {
+    font-size: 11px;
+    font-weight: 800;
+    min-width: 34px;
+    opacity: 0.85;
+  }
+
+  :global(.pres .pdot) {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.35;
+    margin: 0 7px;
+    flex-shrink: 0;
+  }
+
+  :global(.pres .ppts) {
+    flex: 1;
+    text-align: right;
   }
 </style>

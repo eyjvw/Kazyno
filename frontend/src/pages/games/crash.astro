@@ -1,0 +1,544 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+---
+
+<Layout title="PISCASINO — Crash">
+  <Nav />
+  <header class="game-header">
+    <span class="gh-icon">🚀</span>
+    <h1>Crash</h1>
+    <span class="gh-sub">· Encaisse avant que le multiplicateur s'effondre</span>
+  </header>
+  <div class="shell">
+    <aside class="panel betpanel">
+      <div class="field">
+        <label>Mise</label>
+        <input class="input" data-bet type="number" min="1" value="100" />
+        <div class="chips">
+          <button data-amt="half">½</button>
+          <button data-amt="double">2×</button>
+          <button data-amt="max">Max</button>
+        </div>
+      </div>
+
+      <button class="btn bet-btn" data-action disabled>En attente…</button>
+      <p class="result" data-result></p>
+
+      <div class="pl-title">Joueurs</div>
+      <div class="pl-list" data-players></div>
+      <div class="sess-stats" data-sess></div>
+    </aside>
+
+    <main class="panel stage crash-stage">
+      <div class="hist-row" data-history></div>
+      <div class="graph-wrap">
+        <canvas data-canvas></canvas>
+        <div class="mult-overlay">
+          <span class="mult-val" data-mult>1.00×</span>
+          <span class="phase-sub" data-sub>Prochain tour…</span>
+        </div>
+      </div>
+    </main>
+  </div>
+</Layout>
+
+<script>
+	import {
+		loadMe, setupAmount, fmt, getBalance,
+		connectRealtime, subscribeCrash, unsubscribeCrash, onCrash,
+		crashBet, crashCashout,
+	} from "../../lib/casino";
+	import { GameSession } from "../../lib/session";
+
+	const betInput  = document.querySelector<HTMLInputElement>("[data-bet]")!;
+	const actionBtn = document.querySelector<HTMLButtonElement>("[data-action]")!;
+	const resultEl  = document.querySelector<HTMLElement>("[data-result]")!;
+	const playersEl = document.querySelector<HTMLElement>("[data-players]")!;
+	const histEl    = document.querySelector<HTMLElement>("[data-history]")!;
+	const multEl    = document.querySelector<HTMLElement>("[data-mult]")!;
+	const subEl     = document.querySelector<HTMLElement>("[data-sub]")!;
+	const canvas    = document.querySelector<HTMLCanvasElement>("[data-canvas]")!;
+	const ctx       = canvas.getContext("2d")!;
+	const session   = new GameSession(null, document.querySelector("[data-sess]"));
+
+	setupAmount(betInput);
+
+	// ── State ─────────────────────────────────────────────────────────────────
+	const CRASH_K = 0.0003;
+
+	type Phase = "waiting" | "running" | "crashed";
+	let phase: Phase     = "waiting";
+	let startTime        = 0;
+	let waitStart        = 0;
+	let waitMs           = 10_000;
+	let crashAt          = 0;
+	let currentRoundId   = 0;
+	let myBetAmount      = 0;
+	let myBetActive      = false;
+	let cashedOutAt: number | null = null;
+	let history: number[]= [];
+	let animFrame        = 0;
+
+	function calcMult(elapsed: number): number
+	{
+		return Math.max(1.0, Math.pow(Math.E, CRASH_K * elapsed));
+	}
+
+	function liveMultiplier(): number
+	{
+		if (phase !== "running") return 1.0;
+		return calcMult(Date.now() - startTime);
+	}
+
+	// ── Canvas ────────────────────────────────────────────────────────────────
+	function resizeCanvas()
+	{
+		const wrap = canvas.parentElement!;
+		const W = wrap.clientWidth;
+		const H = Math.max(220, Math.min(320, wrap.clientHeight || 260));
+		canvas.width  = W;
+		canvas.height = H;
+	}
+
+	function drawGraph()
+	{
+		const W = canvas.width;
+		const H = canvas.height;
+		ctx.clearRect(0, 0, W, H);
+
+		if (phase === "waiting" || startTime === 0) return;
+
+		const elapsed  = phase === "running"
+			? Date.now() - startTime
+			: Math.log(crashAt) / CRASH_K;
+		const liveMult = phase === "running" ? calcMult(elapsed) : crashAt;
+		const maxMult  = Math.max(2.5, liveMult * 1.25);
+		const maxMs    = Math.max(8_000, elapsed * 1.3);
+		const crashed  = phase === "crashed";
+		const color    = crashed ? "#ef4444" : "#22c55e";
+
+		// Axes
+		ctx.strokeStyle = "rgba(255,255,255,0.06)";
+		ctx.lineWidth   = 1;
+		ctx.beginPath();
+		ctx.moveTo(0, H - 1); ctx.lineTo(W, H - 1);
+		ctx.stroke();
+
+		// Curve fill
+		ctx.beginPath();
+		const steps = Math.min(200, Math.ceil(elapsed / 50));
+		for (let i = 0; i <= steps; i++)
+		{
+			const t = (i / steps) * elapsed;
+			const m = calcMult(t);
+			const x = (t / maxMs) * W;
+			const y = H - ((m - 1) / (maxMult - 1)) * (H - 8);
+			i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+		}
+		const endX = (elapsed / maxMs) * W;
+		ctx.lineTo(endX, H);
+		ctx.lineTo(0, H);
+		ctx.closePath();
+		ctx.fillStyle = crashed ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.08)";
+		ctx.fill();
+
+		// Curve line
+		ctx.beginPath();
+		for (let i = 0; i <= steps; i++)
+		{
+			const t = (i / steps) * elapsed;
+			const m = calcMult(t);
+			const x = (t / maxMs) * W;
+			const y = H - ((m - 1) / (maxMult - 1)) * (H - 8);
+			i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+		}
+		ctx.strokeStyle = color;
+		ctx.lineWidth   = 2.5;
+		ctx.lineJoin    = "round";
+		ctx.stroke();
+
+		// Glow dot
+		const dotX = endX;
+		const dotY = H - ((liveMult - 1) / (maxMult - 1)) * (H - 8);
+		ctx.save();
+		ctx.shadowColor = color;
+		ctx.shadowBlur  = 18;
+		ctx.beginPath();
+		ctx.arc(dotX, dotY, 5, 0, Math.PI * 2);
+		ctx.fillStyle = color;
+		ctx.fill();
+		ctx.restore();
+	}
+
+	// ── UI updates ────────────────────────────────────────────────────────────
+	function colorForMult(m: number): string
+	{
+		if (m < 1.5)  return "#ef4444";
+		if (m < 2)    return "#f97316";
+		if (m < 5)    return "#eab308";
+		if (m < 10)   return "#22c55e";
+		return "#3b82f6";
+	}
+
+	function renderHistory()
+	{
+		histEl.innerHTML = history.slice(-12).reverse().map(m =>
+			`<span class="hchip" style="color:${colorForMult(m)}">${m.toFixed(2)}×</span>`
+		).join("");
+	}
+
+	function renderPlayers(bets: Array<{ login: string; amount: number; cashedOut: number | null }>)
+	{
+		if (!bets.length) { playersEl.innerHTML = `<p class="pl-empty">Aucun parieur</p>`; return; }
+		playersEl.innerHTML = bets.map(b =>
+		{
+			const co = b.cashedOut;
+			return `<div class="pl-row ${co !== null ? "pl-out" : ""}">
+				<span class="pl-login">${b.login}</span>
+				<span class="pl-amt">${co !== null ? `<b style="color:#22c55e">${co.toFixed(2)}×</b>` : fmt(b.amount) + " pts"}</span>
+			</div>`;
+		}).join("");
+	}
+
+	function setResult(txt: string, cls: "win" | "lose" | "")
+	{
+		resultEl.textContent = txt;
+		resultEl.className   = `result ${cls}`;
+	}
+
+	function updateActionBtn()
+	{
+		if (phase === "waiting")
+		{
+			if (myBetActive)
+			{
+				actionBtn.textContent = "Pari placé ✓";
+				actionBtn.disabled    = true;
+				actionBtn.className   = "btn bet-btn active-bet";
+			}
+			else
+			{
+				actionBtn.textContent = "Parier";
+				actionBtn.disabled    = false;
+				actionBtn.className   = "btn bet-btn";
+			}
+		}
+		else if (phase === "running")
+		{
+			if (myBetActive && cashedOutAt === null)
+			{
+				const m = liveMultiplier();
+				actionBtn.textContent = `Cashout ${m.toFixed(2)}×`;
+				actionBtn.disabled    = false;
+				actionBtn.className   = "btn bet-btn cashout-btn";
+			}
+			else if (myBetActive && cashedOutAt !== null)
+			{
+				actionBtn.textContent = `Cashedout à ${cashedOutAt.toFixed(2)}× ✓`;
+				actionBtn.disabled    = true;
+				actionBtn.className   = "btn bet-btn active-bet";
+			}
+			else
+			{
+				actionBtn.textContent = "Prochain tour…";
+				actionBtn.disabled    = true;
+				actionBtn.className   = "btn bet-btn";
+				subEl.textContent     = "Mise en place ton pari pendant l'attente";
+			}
+		}
+		else
+		{
+			actionBtn.textContent = "Prochain tour…";
+			actionBtn.disabled    = true;
+			actionBtn.className   = "btn bet-btn";
+		}
+	}
+
+	// ── Countdown timer ───────────────────────────────────────────────────────
+	let countdownTimer: ReturnType<typeof setInterval> | null = null;
+
+	function startCountdown()
+	{
+		if (countdownTimer) clearInterval(countdownTimer);
+		countdownTimer = setInterval(() =>
+		{
+			if (phase !== "waiting") { clearInterval(countdownTimer!); return; }
+			const remaining = Math.max(0, (waitStart + waitMs - Date.now()) / 1000);
+			subEl.textContent = remaining > 0.1
+				? `Départ dans ${remaining.toFixed(1)}s`
+				: "Décollage !";
+		}, 100);
+	}
+
+	// ── rAF loop ──────────────────────────────────────────────────────────────
+	function animate()
+	{
+		if (phase !== "running") return;
+		const m = liveMultiplier();
+		multEl.textContent = m.toFixed(2) + "×";
+		multEl.style.color = "#22c55e";
+		if (myBetActive && cashedOutAt === null)
+		{
+			actionBtn.textContent = `Cashout ${m.toFixed(2)}×`;
+		}
+		drawGraph();
+		animFrame = requestAnimationFrame(animate);
+	}
+
+	// ── Crash WS handler ──────────────────────────────────────────────────────
+	onCrash((msg: any) =>
+	{
+		if (msg.phase === "waiting")
+		{
+			cancelAnimationFrame(animFrame);
+			phase         = "waiting";
+			waitStart     = msg.waitStart ?? Date.now();
+			waitMs        = msg.waitMs ?? 10_000;
+			currentRoundId = msg.roundId;
+			myBetActive   = false;
+			cashedOutAt   = null;
+			history       = msg.history ?? history;
+
+			multEl.textContent = "1.00×";
+			multEl.style.color = "";
+			subEl.textContent  = "En attente de joueurs…";
+			updateActionBtn();
+			renderPlayers(msg.bets ?? []);
+			renderHistory();
+			startCountdown();
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+		}
+		else if (msg.phase === "running")
+		{
+			if (msg.roundId !== currentRoundId) return;
+
+			if (msg.cashout)
+			{
+				// Someone cashed out — check if it's me
+				renderPlayers(msg.bets ?? []);
+				return;
+			}
+
+			// Phase transition to running
+			if (phase !== "running")
+			{
+				phase     = "running";
+				startTime = msg.startTime;
+				if (countdownTimer) clearInterval(countdownTimer);
+				subEl.textContent = myBetActive ? "" : "Mise en place ton pari pendant l'attente";
+				updateActionBtn();
+				cancelAnimationFrame(animFrame);
+				animate();
+			}
+		}
+		else if (msg.phase === "crashed")
+		{
+			cancelAnimationFrame(animFrame);
+			phase   = "crashed";
+			crashAt = msg.crashAt;
+			history = msg.history ?? history;
+
+			multEl.textContent = crashAt.toFixed(2) + "×";
+			multEl.style.color = "#ef4444";
+			subEl.textContent  = "CRASH";
+
+			drawGraph();
+			renderHistory();
+			renderPlayers(msg.bets ?? []);
+			updateActionBtn();
+
+			if (myBetActive && cashedOutAt === null)
+			{
+				setResult(`💥 Crashé à ${crashAt.toFixed(2)}× · −${fmt(myBetAmount)} pts`, "lose");
+				session.record(false, myBetAmount, 0);
+			}
+			myBetActive = false;
+		}
+	});
+
+	// ── Action button ─────────────────────────────────────────────────────────
+	actionBtn.addEventListener("click", async () =>
+	{
+		if (phase === "waiting" && !myBetActive)
+		{
+			const amount = Math.max(1, Math.floor(Number(betInput.value)));
+			actionBtn.disabled = true;
+			setResult("", "");
+			try
+			{
+				await crashBet(amount);
+				myBetAmount = amount;
+				myBetActive = true;
+				updateActionBtn();
+			}
+			catch (e: any)
+			{
+				setResult(e.message ?? "Erreur", "lose");
+				updateActionBtn(); // resync after race condition
+			}
+		}
+		else if (phase === "running" && myBetActive && cashedOutAt === null)
+		{
+			actionBtn.disabled = true;
+			try
+			{
+				const r = await crashCashout();
+				cashedOutAt = r.multiplier;
+				setResult(`${r.multiplier.toFixed(2)}× · +${fmt(r.payout)} pts`, "win");
+				session.record(true, myBetAmount, r.payout);
+				updateActionBtn();
+			}
+			catch (e: any)
+			{
+				setResult(e.message ?? "Erreur", "lose");
+				updateActionBtn();
+			}
+		}
+	});
+
+	// ── Boot ──────────────────────────────────────────────────────────────────
+	window.addEventListener("resize", () => { resizeCanvas(); drawGraph(); });
+	resizeCanvas();
+
+	loadMe().then(async () =>
+	{
+		connectRealtime();
+		subscribeCrash();
+
+		// Fetch current state to sync
+		const state = await fetch("/api/crash/state").then(r => r.json()).catch(() => null);
+		if (state)
+		{
+			history   = state.history ?? [];
+			waitStart = state.waitStart ?? Date.now();
+			waitMs    = state.waitMs ?? 10_000;
+			currentRoundId = state.roundId;
+			renderHistory();
+
+			if (state.phase === "running")
+			{
+				phase     = "running";
+				startTime = state.startTime;
+				subEl.textContent = "Mise en place ton pari pendant l'attente";
+				animate();
+			}
+			else if (state.phase === "waiting")
+			{
+				phase = "waiting";
+				multEl.textContent = "1.00×";
+				subEl.textContent  = "En attente…";
+				startCountdown();
+			}
+			else
+			{
+				phase   = "crashed";
+				crashAt = state.crashAt ?? 1;
+				multEl.textContent = (crashAt).toFixed(2) + "×";
+				multEl.style.color = "#ef4444";
+				subEl.textContent  = "CRASH";
+			}
+			renderPlayers(state.bets ?? []);
+			updateActionBtn();
+		}
+	});
+</script>
+
+<style>
+  .crash-stage {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px;
+    min-width: 0;
+  }
+
+  .hist-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-height: 24px;
+  }
+
+  :global(.hchip) {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.06);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .graph-wrap {
+    position: relative;
+    flex: 1;
+    min-height: 200px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #0a1520;
+  }
+
+  canvas[data-canvas] {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .mult-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    gap: 6px;
+  }
+
+  .mult-val {
+    font-size: clamp(52px, 10vw, 88px);
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    text-shadow: 0 0 40px currentColor;
+    transition: color 0.2s;
+  }
+
+  .phase-sub {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  /* Bet panel extras */
+  .pl-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    margin: 14px 0 6px;
+  }
+
+  .pl-list { display: flex; flex-direction: column; gap: 4px; }
+
+  :global(.pl-empty)  { color: var(--muted); font-size: 12px; }
+  :global(.pl-row)    { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 4px 6px; border-radius: 6px; background: var(--raise); }
+  :global(.pl-out)    { opacity: 0.65; }
+  :global(.pl-login)  { font-weight: 600; }
+  :global(.pl-amt)    { font-variant-numeric: tabular-nums; color: var(--muted); }
+
+  :global(.cashout-btn) {
+    background: #16a34a !important;
+    animation: pulse-green 1s infinite;
+  }
+  :global(.active-bet) { background: #1d3a52 !important; color: var(--accent) !important; }
+
+  @keyframes pulse-green {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+    50%       { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+  }
+</style>

@@ -29,139 +29,225 @@ import Footer from "../components/Footer.astro";
       <span class="pginfo" data-pginfo></span>
       <button class="ghost-btn" data-next>Suiv. →</button>
     </nav>
+
+    <section class="game-lb">
+      <header class="game-head">
+        <h2>Par jeu</h2>
+        <p>Top 10 des joueurs les plus rentables sur chaque jeu.</p>
+      </header>
+      <div class="game-tabs" data-game-tabs></div>
+      <ol class="game-list" data-game-list>
+        <li class="gempty">Sélectionner un jeu.</li>
+      </ol>
+    </section>
   </main>
   <Footer />
 </Layout>
 
 <script>
-  import {
-    getLeaderboardPage,
-    loadMe,
-    fmt,
-    onLeaderboard,
-    type LeaderRow,
-    type Me,
-  } from "../lib/casino";
+	import {
+		getLeaderboardPage,
+		getGameLeaderboard,
+		loadMe,
+		fmt,
+		onLeaderboard,
+		type LeaderRow,
+		type GameLeaderRow,
+		type Me,
+	} from "../lib/casino";
 
-  const PAGE = 20;
-  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
-  const list = $("[data-list]");
-  const search = $<HTMLInputElement>("[data-search]");
-  const pager = $("[data-pager]");
-  const pginfo = $("[data-pginfo]");
-  const prev = $<HTMLButtonElement>("[data-prev]");
-  const next = $<HTMLButtonElement>("[data-next]");
+	const PAGE = 20;
+	const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
+	const list = $("[data-list]");
+	const search = $<HTMLInputElement>("[data-search]");
+	const pager = $("[data-pager]");
+	const pginfo = $("[data-pginfo]");
+	const prev = $<HTMLButtonElement>("[data-prev]");
+	const next = $<HTMLButtonElement>("[data-next]");
 
-  let me: Me | null = null;
-  let offset = 0;
-  let q = "";
-  let total = 0;
+	let me: Me | null = null;
+	let offset = 0;
+	let q = "";
+	let total = 0;
 
-  const initial = (n: string) => n.charAt(0).toUpperCase();
+	const initial = (n: string) => n.charAt(0).toUpperCase();
 
-  function rowHtml(r: LeaderRow) {
-    const name = r.display_name || r.login;
-    const isMe = me && r.login === me.login;
-    const rankCls = r.rank <= 3 ? `medal m${r.rank}` : "rank";
-    const av = r.image_url
-      ? `<img class="av" src="${r.image_url}" width="28" height="28" alt="" />`
-      : `<span class="av fb">${initial(name)}</span>`;
-    return `<li class="row${isMe ? " me" : ""}" data-login="${r.login}">
-      <span class="${rankCls}">${r.rank}</span>
-      ${av}
-      <a class="name" href="/profile?u=${r.login}">${name}<small>@${r.login}</small></a>
-      <span class="pts">${fmt(r.points)} <em>pts</em></span>
-    </li>`;
-  }
+	function rowHtml(r: LeaderRow)
+	{
+		const name = r.display_name || r.login;
+		const isMe = me && r.login === me.login;
+		const rankCls = r.rank <= 3 ? `medal m${r.rank}` : "rank";
+		const av = r.image_url
+			? `<img class="av" src="${r.image_url}" width="28" height="28" alt="" />`
+			: `<span class="av fb">${initial(name)}</span>`;
+		return `<li class="row${isMe ? " me" : ""}" data-login="${r.login}">
+			<span class="${rankCls}">${r.rank}</span>
+			${av}
+			<a class="name" href="/profile?u=${r.login}">${name}<small>@${r.login}</small></a>
+			<span class="pts">${fmt(r.points)} <em>pts</em></span>
+		</li>`;
+	}
 
-  function render(rows: LeaderRow[]) {
-    if (!rows.length) {
-      list.innerHTML = `<li class="empty">Aucun joueur.</li>`;
-      pager.hidden = true;
-      return;
-    }
+	function render(rows: LeaderRow[])
+	{
+		if (!rows.length)
+		{
+			list.innerHTML = `<li class="empty">Aucun joueur.</li>`;
+			pager.hidden = true;
+			return;
+		}
 
-    // FLIP: remember each visible row's position (keyed by login).
-    const prevTop = new Map<string, number>();
-    list.querySelectorAll<HTMLElement>(".row").forEach((r) => {
-      prevTop.set(r.dataset.login!, r.getBoundingClientRect().top);
-    });
+		// FLIP: remember each visible row's position (keyed by login).
+		const prevTop = new Map<string, number>();
+		list.querySelectorAll<HTMLElement>(".row").forEach((r) =>
+		{
+			prevTop.set(r.dataset.login!, r.getBoundingClientRect().top);
+		});
 
-    list.innerHTML = rows.map(rowHtml).join("");
+		list.innerHTML = rows.map(rowHtml).join("");
 
-    const items = list.querySelectorAll<HTMLElement>(".row");
-    items.forEach((r) => {
-      const old = prevTop.get(r.dataset.login!);
-      if (old == null) return; // new entry, no slide
-      const delta = old - r.getBoundingClientRect().top;
-      if (!delta) return;
-      // Invert: jump back to old spot instantly.
-      r.style.transition = "none";
-      r.style.transform = `translateY(${delta}px)`;
-      r.classList.add(delta > 0 ? "moved-up" : "moved-down");
-    });
+		const items = list.querySelectorAll<HTMLElement>(".row");
+		items.forEach((r) =>
+		{
+			const old = prevTop.get(r.dataset.login!);
+			if (old == null) return; // new entry, no slide
+			const delta = old - r.getBoundingClientRect().top;
+			if (!delta) return;
+			// Invert: jump back to old spot instantly.
+			r.style.transition = "none";
+			r.style.transform = `translateY(${delta}px)`;
+			r.classList.add(delta > 0 ? "moved-up" : "moved-down");
+		});
 
-    // Play: release to new spot on next frame.
-    requestAnimationFrame(() => {
-      items.forEach((r) => {
-        if (prevTop.get(r.dataset.login!) == null) return;
-        r.style.transition = "transform .6s cubic-bezier(.2,.8,.2,1)";
-        r.style.transform = "";
-      });
-    });
-    items.forEach((r) =>
-      r.addEventListener(
-        "animationend",
-        () => r.classList.remove("moved-up", "moved-down"),
-        { once: true },
-      ),
-    );
+		// Play: release to new spot on next frame.
+		requestAnimationFrame(() =>
+		{
+			items.forEach((r) =>
+			{
+				if (prevTop.get(r.dataset.login!) == null) return;
+				r.style.transition = "transform .6s cubic-bezier(.2,.8,.2,1)";
+				r.style.transform = "";
+			});
+		});
+		items.forEach((r) =>
+			r.addEventListener(
+				"animationend",
+				() => r.classList.remove("moved-up", "moved-down"),
+				{ once: true },
+			),
+		);
 
-    const from = offset + 1;
-    const to = offset + rows.length;
-    pginfo.textContent = `${from}–${to} sur ${total}`;
-    prev.disabled = offset === 0;
-    next.disabled = offset + PAGE >= total;
-    pager.hidden = total <= PAGE && offset === 0;
-  }
+		const from = offset + 1;
+		const to = offset + rows.length;
+		pginfo.textContent = `${from}–${to} sur ${total}`;
+		prev.disabled = offset === 0;
+		next.disabled = offset + PAGE >= total;
+		pager.hidden = total <= PAGE && offset === 0;
+	}
 
-  async function load() {
-    const data = await getLeaderboardPage(PAGE, offset, q);
-    total = data.total;
-    render(data.leaderboard);
-  }
+	async function load()
+	{
+		const data = await getLeaderboardPage(PAGE, offset, q);
+		total = data.total;
+		render(data.leaderboard);
+	}
 
-  // Search resets to page 1
-  let timer: number;
-  search.addEventListener("input", () => {
-    clearTimeout(timer);
-    timer = window.setTimeout(() => {
-      q = search.value.trim();
-      offset = 0;
-      load();
-    }, 220);
-  });
+	// Search resets to page 1
+	let timer: number;
+	search.addEventListener("input", () =>
+	{
+		clearTimeout(timer);
+		timer = window.setTimeout(() =>
+		{
+			q = search.value.trim();
+			offset = 0;
+			load();
+		}, 220);
+	});
 
-  prev.addEventListener("click", () => {
-    offset = Math.max(0, offset - PAGE);
-    load();
-  });
-  next.addEventListener("click", () => {
-    offset += PAGE;
-    load();
-  });
+	prev.addEventListener("click", () =>
+	{
+		offset = Math.max(0, offset - PAGE);
+		load();
+	});
+	next.addEventListener("click", () =>
+	{
+		offset += PAGE;
+		load();
+	});
 
-  // Live: refetch current page on any bet-driven change.
-  let liveTimer: number;
-  onLeaderboard(() => {
-    clearTimeout(liveTimer);
-    liveTimer = window.setTimeout(load, 300);
-  });
+	// Live: refetch current page on any bet-driven change.
+	let liveTimer: number;
+	onLeaderboard(() =>
+	{
+		clearTimeout(liveTimer);
+		liveTimer = window.setTimeout(load, 300);
+	});
 
-  loadMe().then((m) => {
-    me = m;
-    load();
-  });
+	loadMe().then((m) =>
+	{
+		me = m;
+		load();
+	});
+
+	// ── Game leaderboard ──────────────────────────────────────────────────────
+	const GAMES = [
+		{ id: "coinflip",  label: "Coin Flip", icon: "🪙" },
+		{ id: "dice",      label: "Dés",       icon: "🎲" },
+		{ id: "limbo",     label: "Limbo",     icon: "🎯" },
+		{ id: "plinko",    label: "Plinko",    icon: "⚡" },
+		{ id: "slots",     label: "Slots",     icon: "🎰" },
+		{ id: "roulette",  label: "Roulette",  icon: "🎡" },
+		{ id: "crash",     label: "Crash",     icon: "🚀" },
+		{ id: "mines",     label: "Mines",     icon: "💣" },
+	];
+
+	const gameTabs = $("[data-game-tabs]");
+	const gameList = $("[data-game-list]");
+
+	gameTabs.innerHTML = GAMES.map(g =>
+		`<button class="gtab" data-game="${g.id}">${g.icon} ${g.label}</button>`
+	).join("");
+
+	async function loadGame(game: string)
+	{
+		gameTabs.querySelectorAll<HTMLElement>(".gtab").forEach(btn =>
+			btn.classList.toggle("active", btn.dataset.game === game)
+		);
+		gameList.innerHTML = `<li class="gempty">Chargement…</li>`;
+		const rows = await getGameLeaderboard(game);
+		if (!rows.length)
+		{
+			gameList.innerHTML = `<li class="gempty">Aucune donnée pour ce jeu.</li>`;
+			return;
+		}
+		gameList.innerHTML = rows.map((r: GameLeaderRow) =>
+		{
+			const name = r.display_name || r.login;
+			const rankCls = r.rank <= 3 ? `medal m${r.rank}` : "rank";
+			const av = r.image_url
+				? `<img class="av" src="${r.image_url}" width="28" height="28" alt="" />`
+				: `<span class="av fb">${name.charAt(0).toUpperCase()}</span>`;
+			const profitStr = r.profit >= 0
+				? `<span class="pos">+${fmt(r.profit)}</span>`
+				: `<span class="neg">${fmt(r.profit)}</span>`;
+			return `<li class="grow" data-login="${r.login}">
+				<span class="${rankCls}">${r.rank}</span>
+				${av}
+				<a class="gname" href="/profile?u=${r.login}">${name}<small>@${r.login}</small></a>
+				<div class="gcol">
+					<span class="gprofit">${profitStr} <em>pts</em></span>
+					<span class="gplayed">${r.games_played} partie${r.games_played > 1 ? "s" : ""}</span>
+				</div>
+			</li>`;
+		}).join("");
+	}
+
+	gameTabs.addEventListener("click", (e) =>
+	{
+		const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-game]");
+		if (btn?.dataset.game) void loadGame(btn.dataset.game);
+	});
 </script>
 
 <style>
@@ -295,4 +381,141 @@ import Footer from "../components/Footer.astro";
     font-size: 13px;
     font-variant-numeric: tabular-nums;
   }
+
+  /* ── Game leaderboard ──────────────────────────────────────────────────── */
+  .game-lb {
+    margin-top: 48px;
+    border-top: 1px solid var(--line);
+    padding-top: 32px;
+  }
+  .game-head h2 {
+    margin: 0;
+    font-size: clamp(20px, 4vw, 28px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  .game-head p {
+    margin: 6px 0 20px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .game-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 18px;
+  }
+  .game-tabs :global(.gtab) {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--fg);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .game-tabs :global(.gtab:hover) {
+    border-color: var(--accent);
+  }
+  .game-tabs :global(.gtab.active) {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .game-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .game-list :global(.gempty) {
+    color: var(--muted);
+    text-align: center;
+    padding: 40px 0;
+  }
+  .game-list :global(.grow) {
+    display: grid;
+    grid-template-columns: 36px 28px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 14px;
+  }
+  .game-list :global(.rank),
+  .game-list :global(.medal) {
+    text-align: center;
+    font-weight: 800;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+  .game-list :global(.medal) {
+    border-radius: 6px;
+    padding: 3px 0;
+    color: #06121f;
+  }
+  .game-list :global(.m1) { background: #ffd24a; }
+  .game-list :global(.m2) { background: #cdd6e0; }
+  .game-list :global(.m3) { background: #e08b4a; }
+  .game-list :global(.av) {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--raise);
+  }
+  .game-list :global(.av.fb) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+    color: #fff;
+    background: var(--accent);
+  }
+  .game-list :global(.gname) {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+    font-weight: 600;
+    font-size: 14px;
+    overflow: hidden;
+    text-decoration: none;
+    color: var(--fg);
+  }
+  .game-list :global(.gname small) {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 11px;
+  }
+  .game-list :global(.gcol) {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+  .game-list :global(.gprofit) {
+    font-weight: 800;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  .game-list :global(.gprofit em) {
+    color: var(--muted);
+    font-style: normal;
+    font-weight: 400;
+    font-size: 11px;
+  }
+  .game-list :global(.gplayed) {
+    color: var(--muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .game-list :global(.pos) { color: var(--win); }
+  .game-list :global(.neg) { color: #ef4444; }
 </style>

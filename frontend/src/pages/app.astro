@@ -4,12 +4,15 @@ import Nav from "../components/Nav.astro";
 import Footer from "../components/Footer.astro";
 
 const games = [
-  { href: "/blackjack", name: "Blackjack", tag: "Solo ou en ligne · multijoueur", emoji: "🃏" },
-  { href: "/games/dice", name: "Dice", tag: "Roll under / over", emoji: "🎲" },
-  { href: "/games/limbo", name: "Limbo", tag: "Bust avant ta cible ?", emoji: "🚀" },
-  { href: "/games/plinko", name: "Plinko", tag: "Laisse tomber la bille", emoji: "🔻" },
-  { href: "/games/coinflip", name: "Coinflip", tag: "Pile ou face · 1.98x", emoji: "🪙" },
-  { href: "/games/slots", name: "Machine à sous", tag: "3 rouleaux · jackpot 7️⃣", emoji: "🎰" },
+	{ href: "/games/crash",    name: "Crash",          tag: "Cashout avant le crash",       emoji: "📈", hot: true },
+	{ href: "/games/mines",    name: "Mines",          tag: "Évite les bombes",              emoji: "💣", hot: true },
+	{ href: "/games/roulette", name: "Roulette",       tag: "Européenne · 37 numéros",      emoji: "🎡", hot: true },
+	{ href: "/blackjack",     name: "Blackjack",      tag: "Solo ou en ligne · multijoueur",emoji: "🃏" },
+	{ href: "/games/dice",    name: "Dice",           tag: "Roll under / over",             emoji: "🎲" },
+	{ href: "/games/limbo",   name: "Limbo",          tag: "Bust avant ta cible ?",         emoji: "🚀" },
+	{ href: "/games/plinko",  name: "Plinko",         tag: "Laisse tomber la bille",        emoji: "🔻" },
+	{ href: "/games/coinflip",name: "Coinflip",       tag: "Pile ou face · 1.98x",          emoji: "🪙" },
+	{ href: "/games/slots",   name: "Machine à sous", tag: "3 rouleaux · jackpot 7️⃣",      emoji: "🎰" },
 ];
 ---
 
@@ -42,6 +45,12 @@ const games = [
       </div>
     </section>
 
+    <!-- Weekly challenges widget -->
+    <section class="challenges-section" data-challenges-section hidden>
+      <h2 class="section-title">Défis de la semaine</h2>
+      <div class="challenges-grid" data-challenges-grid></div>
+    </section>
+
     <h2 class="section-title">Jeux</h2>
     <section class="grid">
       {
@@ -49,7 +58,7 @@ const games = [
           <a class="card" href={g.href}>
             <span class="emoji">{g.emoji}</span>
             <span class="meta">
-              <b>{g.name}</b>
+              <b>{g.name}{(g as any).hot ? <span class="hot-badge">NEW</span> : ""}</b>
               <small>{g.tag}</small>
             </span>
             <span class="go">Jouer →</span>
@@ -58,27 +67,161 @@ const games = [
       }
     </section>
   </main>
+
+  <!-- Daily reward modal -->
+  <div class="daily-modal" data-daily-modal hidden>
+    <div class="daily-card">
+      <button class="daily-close" data-daily-close aria-label="Fermer">✕</button>
+      <div class="daily-fire" data-daily-fire>🔥</div>
+      <h2 class="daily-title">Récompense quotidienne</h2>
+      <p class="daily-streak-txt" data-daily-streak-txt>Série de 0 jour</p>
+      <div class="daily-days" data-daily-days></div>
+      <button class="btn daily-claim-btn" data-daily-claim>Réclamer</button>
+      <p class="daily-claimed-txt" data-daily-claimed-txt hidden>Reviens demain !</p>
+    </div>
+  </div>
+
   <Footer />
 </Layout>
 
 <script>
-  import { loadMe, getMyRank, getStats, onBalance, fmt } from "../lib/casino";
+	import { loadMe, getMyRank, getStats, onBalance, fmt, getDailyStatus, claimDaily, getMyChallenges, onChallengeComplete } from "../lib/casino";
 
-  const helloEl = document.querySelector<HTMLElement>("[data-hello]")!;
-  const balEl = document.querySelector<HTMLElement>("[data-hero-balance]")!;
-  const rankEl = document.querySelector<HTMLElement>("[data-rank]")!;
-  const playersEl = document.querySelector<HTMLElement>("[data-players]")!;
+	const helloEl = document.querySelector<HTMLElement>("[data-hello]")!;
+	const balEl = document.querySelector<HTMLElement>("[data-hero-balance]")!;
+	const rankEl = document.querySelector<HTMLElement>("[data-rank]")!;
+	const playersEl = document.querySelector<HTMLElement>("[data-players]")!;
 
-  onBalance((pts) => (balEl.textContent = fmt(pts)));
+	onBalance((pts) => (balEl.textContent = fmt(pts)));
 
-  loadMe().then(async (me) => {
-    if (!me) return; // Nav handles redirect
-    helloEl.textContent = `Salut, ${me.display_name || me.login} 👋`;
+	loadMe().then(async (me) =>
+	{
+		if (!me) return; // Nav handles redirect
+		helloEl.textContent = `Salut, ${me.display_name || me.login} 👋`;
 
-    const [rank, stats] = await Promise.all([getMyRank(), getStats()]);
-    playersEl.textContent = fmt(stats.players);
-    rankEl.textContent = rank ? `#${rank}` : "—";
-  });
+		const [rank, stats] = await Promise.all([getMyRank(), getStats()]);
+		playersEl.textContent = fmt(stats.players);
+		rankEl.textContent = rank ? `#${rank}` : "—";
+
+		// Weekly challenges
+		loadChallenges();
+
+		// Daily reward modal — only if not yet claimed today
+		const daily = await getDailyStatus();
+		if (daily && !daily.claimed) showDailyModal(daily);
+	});
+
+	// ── Weekly challenges ─────────────────────────────────────────────────────
+	const challengesSection = document.querySelector<HTMLElement>("[data-challenges-section]")!;
+	const challengesGrid    = document.querySelector<HTMLElement>("[data-challenges-grid]")!;
+
+	async function loadChallenges()
+	{
+		const list = await getMyChallenges();
+		if (!list.length) return;
+		challengesSection.hidden = false;
+		challengesGrid.innerHTML = list.map((c: any) => `
+			<div class="chal-card ${c.completed ? "done" : ""}">
+				<span class="chal-ico">${c.icon}</span>
+				<div class="chal-meta">
+					<b>${c.desc}</b>
+					<div class="chal-bar-wrap">
+						<div class="chal-bar" style="width:${Math.min(100, Math.round(c.progress / c.target * 100))}%"></div>
+					</div>
+					<small>${c.progress}/${c.target} · +${fmt(c.reward)} pts</small>
+				</div>
+				${c.completed ? '<span class="chal-done">✓</span>' : ""}
+			</div>`).join("");
+	}
+
+	onChallengeComplete(() => loadChallenges());
+
+	// ── Daily modal ───────────────────────────────────────────────────────────
+	const dailyModal    = document.querySelector<HTMLElement>("[data-daily-modal]")!;
+	const dailyDaysEl   = document.querySelector<HTMLElement>("[data-daily-days]")!;
+	const dailyStreakTxt= document.querySelector<HTMLElement>("[data-daily-streak-txt]")!;
+	const dailyFireEl   = document.querySelector<HTMLElement>("[data-daily-fire]")!;
+	const dailyClaimBtn = document.querySelector<HTMLButtonElement>("[data-daily-claim]")!;
+	const dailyClaimedTxt = document.querySelector<HTMLElement>("[data-daily-claimed-txt]")!;
+
+	const REWARDS = [50, 100, 150, 200, 300, 500, 1000];
+
+	function showDailyModal(status: { streak: number; claimed: boolean; rewards: number[]; nextReward: number })
+	{
+		const { streak, claimed } = status;
+		const rewards = status.rewards ?? REWARDS;
+
+		// Current day index (0-6)
+		const dayIdx = claimed ? (streak - 1) % 7 : streak % 7;
+
+		dailyStreakTxt.textContent = streak > 1
+			? `Série de ${streak} jour${streak > 1 ? "s" : ""} 🔥`
+			: "Premier jour !";
+
+		dailyFireEl.textContent = streak >= 7 ? "🔥🔥" : streak >= 3 ? "🔥" : "⭐";
+
+		// Render 7 day boxes
+		dailyDaysEl.innerHTML = "";
+		for (let i = 0; i < 7; i++)
+		{
+			const isPast    = i < dayIdx;
+			const isCurrent = i === dayIdx;
+			const isFuture  = i > dayIdx;
+			const box = document.createElement("div");
+			box.className = `dday ${isPast ? "past" : isCurrent ? (claimed ? "claimed" : "current") : "future"}`;
+			box.innerHTML = `
+				<span class="dday-n">Jour ${i + 1}</span>
+				<span class="dday-ico">${isPast || (isCurrent && claimed) ? "✓" : "🎁"}</span>
+				<span class="dday-pts">${fmt(rewards[i])}</span>
+				<span class="dday-unit">pts</span>`;
+			dailyDaysEl.appendChild(box);
+		}
+
+		if (claimed)
+		{
+			dailyClaimBtn.hidden = true;
+			dailyClaimedTxt.hidden = false;
+		}
+		else
+		{
+			dailyClaimBtn.textContent = `Réclamer ${fmt(status.nextReward)} pts`;
+			dailyClaimBtn.hidden = false;
+			dailyClaimedTxt.hidden = true;
+		}
+
+		dailyModal.hidden = false;
+	}
+
+	dailyClaimBtn.addEventListener("click", async () =>
+	{
+		dailyClaimBtn.disabled = true;
+		try
+		{
+			const r = await claimDaily();
+			// Refresh modal state
+			dailyClaimBtn.hidden     = true;
+			dailyClaimedTxt.hidden   = false;
+			dailyStreakTxt.textContent = `Série de ${r.streak} jour${r.streak > 1 ? "s" : ""} 🔥`;
+			// Re-render days with updated streak
+			const updated = await getDailyStatus();
+			if (updated) showDailyModal(updated);
+		}
+		catch (e: any)
+		{
+			dailyClaimBtn.disabled = false;
+		}
+	});
+
+	document.querySelector("[data-daily-close]")?.addEventListener("click", () =>
+	{
+		dailyModal.hidden = true;
+	});
+
+	// Close on backdrop click
+	dailyModal.addEventListener("click", (e) =>
+	{
+		if (e.target === dailyModal) dailyModal.hidden = true;
+	});
 
 </script>
 
@@ -250,6 +393,192 @@ const games = [
   .grid .card:nth-child(3) { animation-delay: 0.3s; }
   .grid .card:nth-child(4) { animation-delay: 0.36s; }
   .grid .card:nth-child(5) { animation-delay: 0.42s; }
+  /* ── Weekly challenges ── */
+  .challenges-section {
+    margin-bottom: 8px;
+  }
+
+  .challenges-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+  }
+
+  :global(.chal-card) {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    transition: border-color 0.15s;
+  }
+  :global(.chal-card.done) {
+    border-color: #22c55e;
+    background: rgba(34,197,94,0.06);
+  }
+  :global(.chal-ico) { font-size: 26px; flex: none; }
+  :global(.chal-meta) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  :global(.chal-meta b) { font-size: 13px; line-height: 1.3; }
+  :global(.chal-meta small) { color: var(--muted); font-size: 11px; }
+  :global(.chal-bar-wrap) {
+    height: 4px;
+    background: var(--raise);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  :global(.chal-bar) {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+  :global(.chal-card.done .chal-bar) { background: #22c55e; }
+  :global(.chal-done) {
+    font-size: 18px;
+    color: #22c55e;
+    font-weight: 800;
+  }
+
+  /* ── HOT badge ── */
+  .hot-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: #ef4444;
+    color: #fff;
+    vertical-align: middle;
+    margin-left: 6px;
+    line-height: 1.5;
+  }
+
+  /* ── Daily modal ── */
+  .daily-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+    backdrop-filter: blur(4px);
+  }
+
+  [hidden] { display: none !important; }
+
+  .daily-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 28px 24px 24px;
+    max-width: 480px;
+    width: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .daily-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: color 0.1s, background 0.1s;
+    font-family: inherit;
+  }
+  .daily-close:hover { color: var(--fg); background: var(--raise); }
+
+  .daily-fire { font-size: 36px; margin-bottom: 2px; }
+
+  .daily-title {
+    font-size: 22px;
+    font-weight: 800;
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+
+  .daily-streak-txt {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0;
+  }
+
+  .daily-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    width: 100%;
+    margin: 12px 0 4px;
+  }
+
+  :global(.dday) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 8px 4px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--raise);
+    transition: transform 0.1s;
+  }
+
+  :global(.dday-n)    { font-size: 9px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  :global(.dday-ico)  { font-size: 18px; line-height: 1; }
+  :global(.dday-pts)  { font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  :global(.dday-unit) { font-size: 9px; color: var(--muted); }
+
+  :global(.dday.past)    { opacity: 0.5; }
+  :global(.dday.past .dday-ico) { filter: grayscale(1); }
+
+  :global(.dday.current) {
+    border-color: var(--accent);
+    background: rgba(59,130,246,0.12);
+    transform: scale(1.06);
+  }
+  :global(.dday.current .dday-pts) { color: var(--accent); }
+
+  :global(.dday.claimed) {
+    border-color: #22c55e;
+    background: rgba(34,197,94,0.1);
+    transform: scale(1.06);
+  }
+  :global(.dday.claimed .dday-pts) { color: #22c55e; }
+
+  :global(.dday.future) { opacity: 0.35; }
+
+  .daily-claim-btn {
+    width: 100%;
+    margin-top: 8px;
+    font-size: 15px;
+    font-weight: 800;
+    padding: 14px;
+  }
+
+  .daily-claimed-txt {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 8px 0 0;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .hero-main,
     .hero-side .stat-box,

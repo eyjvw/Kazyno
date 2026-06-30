@@ -6,6 +6,11 @@ import Footer from "../../components/Footer.astro";
 
 <Layout title="PISCASINO — Machine à sous">
   <Nav />
+  <header class="game-header">
+    <span class="gh-icon">🎰</span>
+    <h1>Slots</h1>
+    <span class="gh-sub">· Aligne les symboles pour gagner gros</span>
+  </header>
   <div class="shell">
     <aside class="panel betpanel">
       <div class="field">
@@ -31,6 +36,7 @@ import Footer from "../../components/Footer.astro";
 
       <button class="btn bet-btn" data-play>Tourner</button>
       <p class="result" data-result></p>
+      <div class="sess-stats" data-sess></div>
     </aside>
 
     <main class="panel stage">
@@ -50,75 +56,86 @@ import Footer from "../../components/Footer.astro";
 </Layout>
 
 <script>
-  import { bet, setupAmount, fmt, BetError } from "../../lib/casino";
+	import { bet, setupAmount, fmt, BetError } from "../../lib/casino";
+	import { GameSession } from "../../lib/session";
 
-  const SYMBOLS = ["🍒", "🍋", "🔔", "⭐", "💎", "7️⃣"];
-  const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
-  const result = document.querySelector<HTMLElement>("[data-result]")!;
-  const multEl = document.querySelector<HTMLElement>("[data-mult]")!;
-  const play = document.querySelector<HTMLButtonElement>("[data-play]")!;
-  const strips = [0, 1, 2].map(
-    (i) => document.querySelector<HTMLElement>(`[data-reel="${i}"]`)!,
-  );
+	const SYMBOLS = ["🍒", "🍋", "🔔", "⭐", "💎", "7️⃣"];
+	const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
+	const result = document.querySelector<HTMLElement>("[data-result]")!;
+	const multEl = document.querySelector<HTMLElement>("[data-mult]")!;
+	const play = document.querySelector<HTMLButtonElement>("[data-play]")!;
+	const session = new GameSession(null, document.querySelector("[data-sess]"));
+	const strips = [0, 1, 2].map(
+		(i) => document.querySelector<HTMLElement>(`[data-reel="${i}"]`)!,
+	);
 
-  setupAmount(betInput);
-  const rndSym = () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
-  const cellH = () => strips[0].parentElement!.clientHeight;
+	setupAmount(betInput);
+	const rndSym = () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+	const cellH = () => strips[0].parentElement!.clientHeight;
 
-  // Initial idle symbols
-  strips.forEach((st) => (st.innerHTML = `<span class="cell">${rndSym()}</span>`));
+	// Initial idle symbols
+	strips.forEach((st) => (st.innerHTML = `<span class="cell">${rndSym()}</span>`));
 
-  function spinReel(st: HTMLElement, final: string, dur: number) {
-    const h = cellH();
-    const n = 30;
-    const syms = Array.from({ length: n }, rndSym);
-    syms.push(final); // last cell = result, lands centered
-    st.innerHTML = syms.map((s) => `<span class="cell">${s}</span>`).join("");
-    st.style.transition = "none";
-    st.style.transform = "translateY(0)";
-    void st.offsetHeight; // reflow
-    st.classList.add("spinning");
-    st.style.transition = `transform ${dur}ms cubic-bezier(0.12, 0.82, 0.18, 1)`;
-    st.style.transform = `translateY(${-(syms.length - 1) * h}px)`;
-    // drop the blur before the reel settles so the result is crisp
-    setTimeout(() => st.classList.remove("spinning"), Math.max(0, dur - 450));
-    return new Promise<void>((res) => setTimeout(res, dur));
-  }
+	function spinReel(st: HTMLElement, final: string, dur: number)
+	{
+		const h = cellH();
+		const n = 30;
+		const syms = Array.from({ length: n }, rndSym);
+		syms.push(final); // last cell = result, lands centered
+		st.innerHTML = syms.map((s) => `<span class="cell">${s}</span>`).join("");
+		st.style.transition = "none";
+		st.style.transform = "translateY(0)";
+		void st.offsetHeight; // reflow
+		st.classList.add("spinning");
+		st.style.transition = `transform ${dur}ms cubic-bezier(0.12, 0.82, 0.18, 1)`;
+		st.style.transform = `translateY(${-(syms.length - 1) * h}px)`;
+		// drop the blur before the reel settles so the result is crisp
+		setTimeout(() => st.classList.remove("spinning"), Math.max(0, dur - 450));
+		return new Promise<void>((res) => setTimeout(res, dur));
+	}
 
-  play.addEventListener("click", async () => {
-    play.disabled = true;
-    result.textContent = "";
-    result.className = "result";
-    multEl.textContent = "";
-    strips.forEach((st) => st.parentElement!.classList.remove("hit"));
+	play.addEventListener("click", async () =>
+	{
+		play.disabled = true;
+		result.textContent = "";
+		result.className = "result";
+		multEl.textContent = "";
+		strips.forEach((st) => st.parentElement!.classList.remove("hit"));
 
-    let data: any;
-    try {
-      data = await bet("slots", { bet: Number(betInput.value) });
-    } catch (e) {
-      result.textContent = e instanceof BetError ? e.message : "Erreur";
-      result.classList.add("lose");
-      play.disabled = false;
-      return;
-    }
+		let data: any;
+		try
+		{
+			data = await bet("slots", { bet: Number(betInput.value) });
+		}
+		catch (e)
+		{
+			result.textContent = e instanceof BetError ? e.message : "Erreur";
+			result.classList.add("lose");
+			play.disabled = false;
+			return;
+		}
 
-    await Promise.all([
-      spinReel(strips[0], data.reels[0], 1500),
-      spinReel(strips[1], data.reels[1], 1900),
-      spinReel(strips[2], data.reels[2], 2300),
-    ]);
+		await Promise.all([
+			spinReel(strips[0], data.reels[0], 1500),
+			spinReel(strips[1], data.reels[1], 1900),
+			spinReel(strips[2], data.reels[2], 2300),
+		]);
 
-    if (data.win) {
-      strips.forEach((st) => st.parentElement!.classList.add("hit"));
-      multEl.textContent = `${data.multiplier}×`;
-      result.textContent = `Gagné +${fmt(data.payout)} pts`;
-      result.classList.add("win");
-    } else {
-      result.textContent = `Perdu -${fmt(Number(betInput.value))} pts`;
-      result.classList.add("lose");
-    }
-    play.disabled = false;
-  });
+		if (data.win)
+		{
+			strips.forEach((st) => st.parentElement!.classList.add("hit"));
+			multEl.textContent = `${data.multiplier}×`;
+			result.textContent = `Gagné +${fmt(data.payout)} pts`;
+			result.classList.add("win");
+		}
+		else
+		{
+			result.textContent = `Perdu -${fmt(Number(betInput.value))} pts`;
+			result.classList.add("lose");
+		}
+		session.record(data.win, Number(betInput.value), data.payout);
+		play.disabled = false;
+	});
 
 </script>
 

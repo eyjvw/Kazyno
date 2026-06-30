@@ -21,13 +21,14 @@ import Footer from "../components/Footer.astro";
 </Layout>
 
 <script>
-  // Guard: already logged in -> skip the landing.
-  fetch("/api/auth/me")
-    .then((r) => (r.ok ? r.json() : null))
-    .then((d) => {
-      if (d?.authenticated) location.replace("/app");
-    })
-    .catch(() => {});
+	// Guard: already logged in -> skip the landing.
+	fetch("/api/auth/me")
+		.then((r) => (r.ok ? r.json() : null))
+		.then((d) =>
+		{
+			if (d?.authenticated) location.replace("/app");
+		})
+		.catch(() => {});
 </script>
 
 <style>

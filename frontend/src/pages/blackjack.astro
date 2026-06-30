@@ -28,72 +28,87 @@ import Footer from "../components/Footer.astro";
 </Layout>
 
 <script>
-  import {
-    bjCreateRoom,
-    bjListRooms,
-    bjJoin,
-    bjJoinByCode,
-    loadMe,
-  } from "../lib/casino";
+	import {
+		bjCreateRoom,
+		bjListRooms,
+		bjJoin,
+		bjJoinByCode,
+		loadMe,
+	} from "../lib/casino";
 
-  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
-  const err = $("[data-err]");
-  const roomsEl = $("[data-rooms]");
+	const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
+	const err = $("[data-err]");
+	const roomsEl = $("[data-rooms]");
 
-  function fail(e: any) {
-    err.textContent = e?.message ?? "Erreur";
-  }
+	function fail(e: any)
+	{
+		err.textContent = e?.message ?? "Erreur";
+	}
 
-  $("[data-create]").addEventListener("click", async () => {
-    try {
-      const r = await bjCreateRoom("", true);
-      location.href = `/table?room=${r.id}`;
-    } catch (e) {
-      fail(e);
-    }
-  });
+	$("[data-create]").addEventListener("click", async () =>
+	{
+		try
+		{
+			const r = await bjCreateRoom("", true);
+			location.href = `/table?room=${r.id}`;
+		}
+		catch (e)
+		{
+			fail(e);
+		}
+	});
 
-  $<HTMLFormElement>("[data-join-form]").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const code = (e.target as HTMLFormElement).code.value.trim().toUpperCase();
-    if (!code) return;
-    try {
-      const r = await bjJoinByCode(code);
-      location.href = `/table?room=${r.id}`;
-    } catch (e) {
-      fail(e);
-    }
-  });
+	$<HTMLFormElement>("[data-join-form]").addEventListener("submit", async (e) =>
+	{
+		e.preventDefault();
+		const code = (e.target as HTMLFormElement).code.value.trim().toUpperCase();
+		if (!code) return;
+		try
+		{
+			const r = await bjJoinByCode(code);
+			location.href = `/table?room=${r.id}`;
+		}
+		catch (e)
+		{
+			fail(e);
+		}
+	});
 
-  async function loadRooms() {
-    const rooms = await bjListRooms();
-    roomsEl.innerHTML = rooms.length
-      ? rooms
-          .map(
-            (r: any) => `<li class="room">
-              <span class="rinfo"><b>${r.name}</b><small>par ${r.host} · ${r.players}/${r.maxSeats}</small></span>
-              <button class="btn sm" data-join="${r.id}">Rejoindre</button>
-            </li>`,
-          )
-          .join("")
-      : `<li class="empty">Aucune table publique. Crée la première !</li>`;
-  }
+	async function loadRooms()
+	{
+		const rooms = await bjListRooms();
+		roomsEl.innerHTML = rooms.length
+			? rooms
+					.map(
+						(r: any) => `<li class="room">
+							<span class="rinfo"><b>${r.name}</b><small>par ${r.host} · ${r.players}/${r.maxSeats}</small></span>
+							<button class="btn sm" data-join="${r.id}">Rejoindre</button>
+						</li>`,
+					)
+					.join("")
+			: `<li class="empty">Aucune table publique. Crée la première !</li>`;
+	}
 
-  document.addEventListener("click", async (e) => {
-    const el = e.target as HTMLElement;
-    if (el.dataset.join) {
-      try {
-        await bjJoin(el.dataset.join);
-        location.href = `/table?room=${el.dataset.join}`;
-      } catch (e) {
-        fail(e);
-      }
-    }
-  });
+	document.addEventListener("click", async (e) =>
+	{
+		const el = e.target as HTMLElement;
+		if (el.dataset.join)
+		{
+			try
+			{
+				await bjJoin(el.dataset.join);
+				location.href = `/table?room=${el.dataset.join}`;
+			}
+			catch (e)
+			{
+				fail(e);
+			}
+		}
+	});
 
-  loadMe();
-  loadRooms();
-  setInterval(loadRooms, 4000);
+	loadMe();
+	loadRooms();
+	setInterval(loadRooms, 4000);
 </script>
 
 <style>

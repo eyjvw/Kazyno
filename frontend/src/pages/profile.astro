@@ -16,98 +16,129 @@ import Footer from "../components/Footer.astro";
 </Layout>
 
 <script>
-  import {
-    getProfile,
-    sendFriendRequest,
-    acceptFriend,
-    removeFriend,
-    onFriendEvent,
-    onPresence,
-    loadPresence,
-    fmt,
-    type Profile,
-  } from "../lib/casino";
+	import {
+		loadMe,
+		getProfile,
+		sendFriendRequest,
+		acceptFriend,
+		removeFriend,
+		onFriendEvent,
+		onPresence,
+		loadPresence,
+		fmt,
+		getAchievements,
+		type Profile,
+	} from "../lib/casino";
 
-  const host = document.querySelector<HTMLElement>("[data-profile]")!;
-  const login = new URLSearchParams(location.search).get("u") ?? "";
+	const host = document.querySelector<HTMLElement>("[data-profile]")!;
+	const login = new URLSearchParams(location.search).get("u") ?? "";
 
-  const initial = (n: string) => n.charAt(0).toUpperCase();
-  const since = (iso: string) =>
-    new Date(iso).toLocaleDateString("fr-FR", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
+	const initial = (n: string) => n.charAt(0).toUpperCase();
+	const since = (iso: string) =>
+		new Date(iso).toLocaleDateString("fr-FR", {
+			day: "numeric",
+			month: "long",
+			year: "numeric",
+		});
 
-  function actionHtml(p: Profile) {
-    switch (p.status) {
-      case "self":
-        return `<span class="tag">C'est toi</span>`;
-      case "friend":
-        return `<button class="ghost-btn" data-remove="${p.id}">Retirer des amis</button>`;
-      case "pending_out":
-        return `<span class="tag">Demande envoyée</span>`;
-      case "pending_in":
-        return `<button class="btn" data-accept="${p.id}">Accepter la demande</button>`;
-      default:
-        return `<button class="btn" data-add="${p.login}">Ajouter en ami</button>`;
-    }
-  }
+	function actionHtml(p: Profile)
+	{
+		switch (p.status)
+		{
+			case "self":
+				return `<span class="tag">C'est toi</span>`;
+			case "friend":
+				return `<button class="ghost-btn" data-remove="${p.id}">Retirer des amis</button>`;
+			case "pending_out":
+				return `<span class="tag">Demande envoyée</span>`;
+			case "pending_in":
+				return `<button class="btn" data-accept="${p.id}">Accepter la demande</button>`;
+			default:
+				return `<button class="btn" data-add="${p.login}">Ajouter en ami</button>`;
+		}
+	}
 
-  function render(p: Profile) {
-    const name = p.display_name || p.login;
-    const av = p.image_url
-      ? `<img class="pp" src="${p.image_url}" width="96" height="96" alt="" />`
-      : `<span class="pp fb">${initial(name)}</span>`;
-    host.innerHTML = `
-      <section class="card">
-        <div class="ppwrap">
-          ${av}<span class="dot ${p.online ? "on" : "off"}"></span>
-        </div>
-        <h1 class="name">${name}</h1>
-        <p class="sub">@${p.login} · ${p.online ? '<span class="ol">en ligne</span>' : "hors ligne"}</p>
-        <div class="stats">
-          <div class="stat"><span>Solde</span><b>${fmt(p.points)} pts</b></div>
-          <div class="stat"><span>Rang</span><b>${p.rank ? "#" + p.rank : "—"}</b></div>
-          <div class="stat"><span>Membre depuis</span><b>${since(p.created_at)}</b></div>
-        </div>
-        <div class="action">${actionHtml(p)}</div>
-      </section>`;
-  }
+	async function render(p: Profile)
+	{
+		const name = p.display_name || p.login;
+		const av = p.image_url
+			? `<img class="pp" src="${p.image_url}" width="96" height="96" alt="" />`
+			: `<span class="pp fb">${initial(name)}</span>`;
 
-  async function load() {
-    if (!login) {
-      host.innerHTML = `<p class="loading">Aucun joueur.</p>`;
-      return;
-    }
-    const p = await getProfile(login);
-    if (!p) {
-      host.innerHTML = `<p class="loading">Joueur introuvable.</p>`;
-      return;
-    }
-    render(p);
-  }
+		const achievements = await getAchievements(p.login);
+		const achHtml = achievements.length
+			? `<div class="ach-grid">${achievements.map(a =>
+				`<div class="ach-chip" title="${a.desc}">
+					<span class="ach-ico">${a.icon}</span>
+					<span class="ach-name">${a.name}</span>
+				</div>`).join("")}</div>`
+			: `<p class="ach-empty">Aucun succès encore.</p>`;
 
-  document.addEventListener("click", async (e) => {
-    const el = e.target as HTMLElement;
-    if (el.dataset.add) {
-      try {
-        await sendFriendRequest(el.dataset.add);
-      } catch {}
-      load();
-    } else if (el.dataset.accept) {
-      await acceptFriend(Number(el.dataset.accept));
-      load();
-    } else if (el.dataset.remove) {
-      await removeFriend(Number(el.dataset.remove));
-      load();
-    }
-  });
+		host.innerHTML = `
+			<section class="card">
+				<div class="ppwrap">
+					${av}<span class="dot ${p.online ? "on" : "off"}"></span>
+				</div>
+				<h1 class="name">${name}</h1>
+				<p class="sub">@${p.login} · ${p.online ? '<span class="ol">en ligne</span>' : "hors ligne"}</p>
+				<div class="stats">
+					<div class="stat"><span>Solde</span><b>${fmt(p.points)} pts</b></div>
+					<div class="stat"><span>Rang</span><b>${p.rank ? "#" + p.rank : "—"}</b></div>
+					<div class="stat"><span>Membre depuis</span><b>${since(p.created_at)}</b></div>
+				</div>
+				<div class="action">${actionHtml(p)}</div>
+			</section>
+			<section class="ach-section">
+				<h2 class="ach-title">Succès <span class="ach-count">${achievements.length}</span></h2>
+				${achHtml}
+			</section>`;
+	}
 
-  onFriendEvent(() => load());
-  onPresence(() => load());
-  loadPresence();
-  load();
+	async function load()
+	{
+		let targetLogin = login;
+		if (!targetLogin)
+		{
+			const me = await loadMe();
+			if (!me) { host.innerHTML = `<p class="loading">Non connecté.</p>`; return; }
+			targetLogin = me.login;
+		}
+		const p = await getProfile(targetLogin);
+		if (!p)
+		{
+			host.innerHTML = `<p class="loading">Joueur introuvable.</p>`;
+			return;
+		}
+		render(p);
+	}
+
+	document.addEventListener("click", async (e) =>
+	{
+		const el = e.target as HTMLElement;
+		if (el.dataset.add)
+		{
+			try
+			{
+				await sendFriendRequest(el.dataset.add);
+			} catch {}
+			load();
+		}
+		else if (el.dataset.accept)
+		{
+			await acceptFriend(Number(el.dataset.accept));
+			load();
+		}
+		else if (el.dataset.remove)
+		{
+			await removeFriend(Number(el.dataset.remove));
+			load();
+		}
+	});
+
+	onFriendEvent(() => load());
+	onPresence(() => load());
+	loadPresence();
+	load();
 </script>
 
 <style>
@@ -219,5 +250,56 @@ import Footer from "../components/Footer.astro";
     padding: 12px 18px;
     border: 1px solid var(--line);
     border-radius: 8px;
+  }
+
+  /* Achievements */
+  .wrap :global(.ach-section) {
+    margin-top: 20px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 24px;
+  }
+  .wrap :global(.ach-title) {
+    margin: 0 0 14px;
+    font-size: 16px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .wrap :global(.ach-count) {
+    background: var(--raise);
+    border-radius: 6px;
+    padding: 1px 7px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+  .wrap :global(.ach-grid) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .wrap :global(.ach-chip) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--raise);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    cursor: default;
+    transition: border-color 0.15s;
+  }
+  .wrap :global(.ach-chip:hover) { border-color: var(--accent); }
+  .wrap :global(.ach-ico)  { font-size: 18px; line-height: 1; }
+  .wrap :global(.ach-name) { font-size: 12px; font-weight: 700; }
+  .wrap :global(.ach-empty) {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0;
+    text-align: center;
+    padding: 12px 0;
   }
 </style>

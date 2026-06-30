@@ -5,6 +5,11 @@ import Nav from "../../components/Nav.astro";
 
 <Layout title="PISCASINO — Dice">
   <Nav />
+  <header class="game-header">
+    <span class="gh-icon">🎲</span>
+    <h1>Dés</h1>
+    <span class="gh-sub">· Prédit si le résultat sera au-dessus ou en dessous</span>
+  </header>
   <div class="shell">
     <aside class="panel betpanel">
       <div class="field">
@@ -37,6 +42,7 @@ import Nav from "../../components/Nav.astro";
 
       <button class="btn bet-btn" data-play>Lancer</button>
       <p class="result" data-result></p>
+      <div class="sess-stats" data-sess></div>
     </aside>
 
     <main class="panel stage">
@@ -47,78 +53,94 @@ import Nav from "../../components/Nav.astro";
         <div class="ball" data-ballx hidden></div>
       </div>
       <div class="scale"><span>0</span><span>50</span><span>100</span></div>
+      <div class="hist-bar" data-hist></div>
     </main>
   </div>
 </Layout>
 
 <script>
-  import { bet, setupAmount, fmt, BetError } from "../../lib/casino";
+	import { bet, setupAmount, fmt, BetError } from "../../lib/casino";
+	import { GameSession } from "../../lib/session";
 
-  const EDGE = 0.99;
-  const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
-  const target = document.querySelector<HTMLInputElement>("[data-target]")!;
-  const tval = document.querySelector<HTMLElement>("[data-tval]")!;
-  const multEl = document.querySelector<HTMLElement>("[data-mult]")!;
-  const chanceEl = document.querySelector<HTMLElement>("[data-chance]")!;
-  const result = document.querySelector<HTMLElement>("[data-result]")!;
-  const play = document.querySelector<HTMLButtonElement>("[data-play]")!;
-  const rollEl = document.querySelector<HTMLElement>("[data-roll]")!;
-  const marker = document.querySelector<HTMLElement>("[data-marker]")!;
-  const fill = document.querySelector<HTMLElement>("[data-fill]")!;
-  const ball = document.querySelector<HTMLElement>("[data-ballx]")!;
-  let dir: "under" | "over" = "under";
+	const EDGE = 0.99;
+	const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
+	const target = document.querySelector<HTMLInputElement>("[data-target]")!;
+	const tval = document.querySelector<HTMLElement>("[data-tval]")!;
+	const multEl = document.querySelector<HTMLElement>("[data-mult]")!;
+	const chanceEl = document.querySelector<HTMLElement>("[data-chance]")!;
+	const result = document.querySelector<HTMLElement>("[data-result]")!;
+	const play = document.querySelector<HTMLButtonElement>("[data-play]")!;
+	const session = new GameSession(
+		document.querySelector("[data-hist]"),
+		document.querySelector("[data-sess]"),
+	);
+	const rollEl = document.querySelector<HTMLElement>("[data-roll]")!;
+	const marker = document.querySelector<HTMLElement>("[data-marker]")!;
+	const fill = document.querySelector<HTMLElement>("[data-fill]")!;
+	const ball = document.querySelector<HTMLElement>("[data-ballx]")!;
+	let dir: "under" | "over" = "under";
 
-  setupAmount(betInput);
+	setupAmount(betInput);
 
-  function refresh() {
-    const t = Number(target.value);
-    const chance = dir === "under" ? t : 100 - t;
-    const mult = (100 / chance) * EDGE;
-    tval.textContent = String(t);
-    multEl.textContent = mult.toFixed(2) + "×";
-    chanceEl.textContent = chance.toFixed(0) + "%";
-    marker.style.left = t + "%";
-    fill.style.left = dir === "under" ? "0" : t + "%";
-    fill.style.right = dir === "under" ? 100 - t + "%" : "0";
-  }
-  target.addEventListener("input", refresh);
-  document.querySelectorAll<HTMLButtonElement>("[data-dir] button").forEach((b) => {
-    b.addEventListener("click", () => {
-      dir = b.dataset.val as "under" | "over";
-      document
-        .querySelectorAll("[data-dir] button")
-        .forEach((x) => x.classList.toggle("is-active", x === b));
-      refresh();
-    });
-  });
-  refresh();
+	function refresh()
+	{
+		const t = Number(target.value);
+		const chance = dir === "under" ? t : 100 - t;
+		const mult = (100 / chance) * EDGE;
+		tval.textContent = String(t);
+		multEl.textContent = mult.toFixed(2) + "×";
+		chanceEl.textContent = chance.toFixed(0) + "%";
+		marker.style.left = t + "%";
+		fill.style.left = dir === "under" ? "0" : t + "%";
+		fill.style.right = dir === "under" ? 100 - t + "%" : "0";
+	}
+	target.addEventListener("input", refresh);
+	document.querySelectorAll<HTMLButtonElement>("[data-dir] button").forEach((b) =>
+	{
+		b.addEventListener("click", () =>
+		{
+			dir = b.dataset.val as "under" | "over";
+			document
+				.querySelectorAll("[data-dir] button")
+				.forEach((x) => x.classList.toggle("is-active", x === b));
+			refresh();
+		});
+	});
+	refresh();
 
-  play.addEventListener("click", async () => {
-    play.disabled = true;
-    result.textContent = "";
-    result.className = "result";
-    try {
-      const r: any = await bet("dice", {
-        bet: Number(betInput.value),
-        target: Number(target.value),
-        direction: dir,
-      });
-      ball.hidden = false;
-      ball.style.left = r.roll + "%";
-      ball.style.background = r.win ? "var(--win)" : "var(--lose)";
-      rollEl.textContent = r.roll.toFixed(2);
-      rollEl.style.color = r.win ? "var(--win)" : "var(--lose)";
-      result.textContent = r.win
-        ? `Gagne +${fmt(r.payout)} pts (${r.multiplier}×)`
-        : `Perdu -${fmt(Number(betInput.value))} pts`;
-      result.classList.add(r.win ? "win" : "lose");
-    } catch (e) {
-      result.textContent = e instanceof BetError ? e.message : "Erreur";
-      result.classList.add("lose");
-    } finally {
-      play.disabled = false;
-    }
-  });
+	play.addEventListener("click", async () =>
+	{
+		play.disabled = true;
+		result.textContent = "";
+		result.className = "result";
+		try
+		{
+			const r: any = await bet("dice", {
+				bet: Number(betInput.value),
+				target: Number(target.value),
+				direction: dir,
+			});
+			ball.hidden = false;
+			ball.style.left = r.roll + "%";
+			ball.style.background = r.win ? "var(--win)" : "var(--lose)";
+			rollEl.textContent = r.roll.toFixed(2);
+			rollEl.style.color = r.win ? "var(--win)" : "var(--lose)";
+			result.textContent = r.win
+				? `Gagne +${fmt(r.payout)} pts (${r.multiplier}×)`
+				: `Perdu -${fmt(Number(betInput.value))} pts`;
+			result.classList.add(r.win ? "win" : "lose");
+			session.record(r.win, Number(betInput.value), r.payout);
+		}
+		catch (e)
+		{
+			result.textContent = e instanceof BetError ? e.message : "Erreur";
+			result.classList.add("lose");
+		}
+		finally
+		{
+			play.disabled = false;
+		}
+	});
 </script>
 
 <style>

@@ -79,270 +79,309 @@
         <span class="menu-name" data-menu-name></span>
         <span class="menu-sub" data-menu-sub></span>
       </div>
-      <button class="menu-item" data-logout>Se deconnecter</button>
+      <a class="menu-item" href="/profile">Mon profil</a>
+      <button class="menu-item" data-logout>Se déconnecter</button>
       <button class="menu-item danger" data-delete>Supprimer mon compte</button>
     </div>
   </div>
 </nav>
 
 <script>
-  import {
-    loadMe,
-    onBalance,
-    logout,
-    deleteAccount,
-    connectRealtime,
-    getFriends,
-    getRequests,
-    onFriendEvent,
-    onPresence,
-    loadPresence,
-    adminMe,
-    getNotifications,
-    markNotifsRead,
-    deleteNotif,
-    clearNotifs,
-    onNotification,
-    type FriendCard,
-  } from "../lib/casino";
+	import {
+		loadMe,
+		onBalance,
+		logout,
+		deleteAccount,
+		connectRealtime,
+		getFriends,
+		getRequests,
+		onFriendEvent,
+		onPresence,
+		loadPresence,
+		adminMe,
+		getNotifications,
+		markNotifsRead,
+		deleteNotif,
+		clearNotifs,
+		onNotification,
+		type FriendCard,
+	} from "../lib/casino";
 
-  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s);
+	const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s);
 
-  // Active top link
-  const path = location.pathname;
-  document.querySelectorAll<HTMLAnchorElement>("[data-link]").forEach((a) => {
-    const target = a.dataset.link!;
-    const active =
-      target === "/app"
-        ? path === "/app" || path.startsWith("/games/")
-        : path.startsWith(target);
-    a.classList.toggle("is-active", active);
-  });
+	// Active top link
+	const path = location.pathname;
+	document.querySelectorAll<HTMLAnchorElement>("[data-link]").forEach((a) =>
+	{
+		const target = a.dataset.link!;
+		const active =
+			target === "/app"
+				? path === "/app" || path.startsWith("/games/")
+				: path.startsWith(target);
+		a.classList.toggle("is-active", active);
+	});
 
-  const balanceEl = $("[data-balance]");
-  const userEl = $("[data-user]");
-  const avatar = $<HTMLImageElement>("[data-avatar]");
-  const fallback = $("[data-avatar-fallback]");
-  const menuName = $("[data-menu-name]");
-  const menuSub = $("[data-menu-sub]");
+	const balanceEl = $("[data-balance]");
+	const userEl = $("[data-user]");
+	const avatar = $<HTMLImageElement>("[data-avatar]");
+	const fallback = $("[data-avatar-fallback]");
+	const menuName = $("[data-menu-name]");
+	const menuSub = $("[data-menu-sub]");
 
-  onBalance((pts) => {
-    if (balanceEl) balanceEl.textContent = pts.toLocaleString("fr-FR");
-  });
+	onBalance((pts) =>
+	{
+		if (balanceEl) balanceEl.textContent = pts.toLocaleString("fr-FR");
+	});
 
-  loadMe().then((me) => {
-    if (!me) {
-      location.replace("/");
-      return;
-    }
-    const name = me.login;
-    if (userEl) userEl.textContent = name;
-    if (menuName) menuName.textContent = me.display_name || name;
-    if (menuSub) menuSub.textContent = "@" + name;
-    if (me.image_url && avatar) {
-      avatar.src = me.image_url;
-      avatar.hidden = false;
-      fallback?.setAttribute("hidden", "");
-    } else if (fallback) {
-      fallback.textContent = name.charAt(0).toUpperCase();
-      fallback.hidden = false;
-    }
-    connectRealtime();
-    loadPresence();
-    refreshRequests();
-    refreshFriends();
-    refreshNotifs();
-    hideBoot();
-    adminMe().then((ok) => {
-      if (ok) $("[data-admin-link]")?.removeAttribute("hidden");
-    });
-  });
+	loadMe().then((me) =>
+	{
+		if (!me)
+		{
+			location.replace("/");
+			return;
+		}
+		const name = me.login;
+		if (userEl) userEl.textContent = name;
+		if (menuName) menuName.textContent = me.display_name || name;
+		if (menuSub) menuSub.textContent = "@" + name;
+		if (me.image_url && avatar)
+		{
+			avatar.src = me.image_url;
+			avatar.hidden = false;
+			fallback?.setAttribute("hidden", "");
+		}
+		else if (fallback)
+		{
+			fallback.textContent = name.charAt(0).toUpperCase();
+			fallback.hidden = false;
+		}
+		connectRealtime();
+		loadPresence();
+		refreshRequests();
+		refreshFriends();
+		refreshNotifs();
+		hideBoot();
+		adminMe().then((ok) =>
+		{
+			if (ok) $("[data-admin-link]")?.removeAttribute("hidden");
+		});
+	});
 
-  // Boot loader: always show it briefly (min), then hide once ready.
-  const boot = document.querySelector<HTMLElement>("[data-boot]");
-  const BOOT_MIN = 450;
-  const bootStart = Date.now();
-  let bootDone = false;
-  function hideBoot() {
-    if (bootDone) return;
-    bootDone = true;
-    const wait = Math.max(0, BOOT_MIN - (Date.now() - bootStart));
-    setTimeout(() => {
-      if (!boot) return;
-      boot.classList.add("hide");
-      document.body.classList.add("booted");
-      setTimeout(() => boot.remove(), 500);
-    }, wait);
-  }
-  // Safety: never trap the user behind the loader.
-  setTimeout(hideBoot, 4000);
+	// Boot loader: always show it briefly (min), then hide once ready.
+	const boot = document.querySelector<HTMLElement>("[data-boot]");
+	const BOOT_MIN = 450;
+	const bootStart = Date.now();
+	let bootDone = false;
+	function hideBoot()
+	{
+		if (bootDone) return;
+		bootDone = true;
+		const wait = Math.max(0, BOOT_MIN - (Date.now() - bootStart));
+		setTimeout(() =>
+		{
+			if (!boot) return;
+			boot.classList.add("hide");
+			document.body.classList.add("booted");
+			setTimeout(() => boot.remove(), 500);
+		}, wait);
+	}
+	// Safety: never trap the user behind the loader.
+	setTimeout(hideBoot, 4000);
 
-  // ── Friends popover content ───────────────────────────────────────────
-  const badge = $("[data-req-badge]");
-  const reqLine = $("[data-req-line]");
-  const frList = $("[data-fr-list]");
-  const initial = (n: string) => n.charAt(0).toUpperCase();
+	// ── Friends popover content ───────────────────────────────────────────
+	const badge = $("[data-req-badge]");
+	const reqLine = $("[data-req-line]");
+	const frList = $("[data-fr-list]");
+	const initial = (n: string) => n.charAt(0).toUpperCase();
 
-  async function refreshRequests() {
-    const { incoming } = await getRequests();
-    const n = incoming.length;
-    if (badge) {
-      badge.textContent = String(n);
-      badge.hidden = n === 0;
-    }
-    if (reqLine) {
-      if (n) {
-        reqLine.innerHTML = `<a href="/friends">${n} demande(s) reçue(s) →</a>`;
-        reqLine.hidden = false;
-      } else {
-        reqLine.hidden = true;
-      }
-    }
-  }
+	async function refreshRequests()
+	{
+		const { incoming } = await getRequests();
+		const n = incoming.length;
+		if (badge)
+		{
+			badge.textContent = String(n);
+			badge.hidden = n === 0;
+		}
+		if (reqLine)
+		{
+			if (n)
+			{
+				reqLine.innerHTML = `<a href="/friends">${n} demande(s) reçue(s) →</a>`;
+				reqLine.hidden = false;
+			}
+			else
+			{
+				reqLine.hidden = true;
+			}
+		}
+	}
 
-  function renderFriends(list: FriendCard[]) {
-    if (!frList) return;
-    const sorted = [...list].sort(
-      (a, b) =>
-        Number(b.online) - Number(a.online) || a.login.localeCompare(b.login),
-    );
-    frList.innerHTML = sorted.length
-      ? sorted
-          .map((f) => {
-            const av = f.image_url
-              ? `<img class="fr-av" src="${f.image_url}" width="30" height="30" alt="" />`
-              : `<span class="fr-av fb">${initial(f.login)}</span>`;
-            return `<li class="fr-item">
-              <a class="fr-avwrap" href="/profile?u=${f.login}">${av}<span class="fr-dot ${f.online ? "on" : "off"}"></span></a>
-              <a class="fr-name" href="/profile?u=${f.login}">${f.display_name || f.login}</a>
-              <span class="fr-st ${f.online ? "on" : "off"}">${f.online ? "en ligne" : ""}</span>
-            </li>`;
-          })
-          .join("")
-      : `<li class="fr-empty">Aucun ami. <a href="/friends">Cherche →</a></li>`;
-  }
+	function renderFriends(list: FriendCard[])
+	{
+		if (!frList) return;
+		const sorted = [...list].sort(
+			(a, b) =>
+				Number(b.online) - Number(a.online) || a.login.localeCompare(b.login),
+		);
+		frList.innerHTML = sorted.length
+			? sorted
+					.map((f) =>
+					{
+						const av = f.image_url
+							? `<img class="fr-av" src="${f.image_url}" width="30" height="30" alt="" />`
+							: `<span class="fr-av fb">${initial(f.login)}</span>`;
+						return `<li class="fr-item">
+							<a class="fr-avwrap" href="/profile?u=${f.login}">${av}<span class="fr-dot ${f.online ? "on" : "off"}"></span></a>
+							<a class="fr-name" href="/profile?u=${f.login}">${f.display_name || f.login}</a>
+							<span class="fr-st ${f.online ? "on" : "off"}">${f.online ? "en ligne" : ""}</span>
+						</li>`;
+					})
+					.join("")
+			: `<li class="fr-empty">Aucun ami. <a href="/friends">Cherche →</a></li>`;
+	}
 
-  async function refreshFriends() {
-    renderFriends(await getFriends());
-  }
+	async function refreshFriends()
+	{
+		renderFriends(await getFriends());
+	}
 
-  onFriendEvent(() => {
-    refreshRequests();
-    refreshFriends();
-  });
-  onPresence(() => refreshFriends());
+	onFriendEvent(() =>
+	{
+		refreshRequests();
+		refreshFriends();
+	});
+	onPresence(() => refreshFriends());
 
-  // ── Notifications ─────────────────────────────────────────────────────
-  const notifBadge = document.querySelector<HTMLElement>("[data-notif-badge]");
-  const notifList = document.querySelector<HTMLElement>("[data-notif-list]");
-  const timeAgo = (iso: string) => {
-    const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-    if (s < 60) return "à l'instant";
-    if (s < 3600) return `${Math.floor(s / 60)} min`;
-    if (s < 86400) return `${Math.floor(s / 3600)} h`;
-    return `${Math.floor(s / 86400)} j`;
-  };
-  function renderNotifs(items: any[]) {
-    if (!notifList) return;
-    notifList.innerHTML = items.length
-      ? items
-          .map((n) => {
-            const who = n.from_name || n.from_login || "Système";
-            const av = n.from_image
-              ? `<img class="fr-av" src="${n.from_image}" width="30" height="30" alt="" />`
-              : `<span class="fr-av fb">${who.charAt(0).toUpperCase()}</span>`;
-            const inner = `${av}<span class="nf-body"><b>${who}</b><span class="nf-msg">${n.message}</span><span class="nf-time">${timeAgo(n.created_at)}</span></span>`;
-            const del = n.id ? `<button class="nf-del" data-del="${n.id}" title="Supprimer">✕</button>` : "";
-            return n.link
-              ? `<li class="fr-item nf ${n.read ? "" : "unread"}"><a class="nf-link" href="${n.link}">${inner}</a>${del}</li>`
-              : `<li class="fr-item nf ${n.read ? "" : "unread"}">${inner}${del}</li>`;
-          })
-          .join("")
-      : `<li class="fr-empty">Aucune notification</li>`;
-  }
-  async function refreshNotifs() {
-    const { items, unread } = await getNotifications();
-    if (notifBadge) {
-      notifBadge.textContent = String(unread);
-      notifBadge.hidden = unread === 0;
-    }
-    renderNotifs(items);
-  }
-  onNotification(() => refreshNotifs());
+	// ── Notifications ─────────────────────────────────────────────────────
+	const notifBadge = document.querySelector<HTMLElement>("[data-notif-badge]");
+	const notifList = document.querySelector<HTMLElement>("[data-notif-list]");
+	const timeAgo = (iso: string) =>
+	{
+		const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+		if (s < 60) return "à l'instant";
+		if (s < 3600) return `${Math.floor(s / 60)} min`;
+		if (s < 86400) return `${Math.floor(s / 3600)} h`;
+		return `${Math.floor(s / 86400)} j`;
+	};
+	function renderNotifs(items: any[])
+	{
+		if (!notifList) return;
+		notifList.innerHTML = items.length
+			? items
+					.map((n) =>
+					{
+						const who = n.from_name || n.from_login || "Système";
+						const av = n.from_image
+							? `<img class="fr-av" src="${n.from_image}" width="30" height="30" alt="" />`
+							: `<span class="fr-av fb">${who.charAt(0).toUpperCase()}</span>`;
+						const inner = `${av}<span class="nf-body"><b>${who}</b><span class="nf-msg">${n.message}</span><span class="nf-time">${timeAgo(n.created_at)}</span></span>`;
+						const del = n.id ? `<button class="nf-del" data-del="${n.id}" title="Supprimer">✕</button>` : "";
+						return n.link
+							? `<li class="fr-item nf ${n.read ? "" : "unread"}"><a class="nf-link" href="${n.link}">${inner}</a>${del}</li>`
+							: `<li class="fr-item nf ${n.read ? "" : "unread"}">${inner}${del}</li>`;
+					})
+					.join("")
+			: `<li class="fr-empty">Aucune notification</li>`;
+	}
+	async function refreshNotifs()
+	{
+		const { items, unread } = await getNotifications();
+		if (notifBadge)
+		{
+			notifBadge.textContent = String(unread);
+			notifBadge.hidden = unread === 0;
+		}
+		renderNotifs(items);
+	}
+	onNotification(() => refreshNotifs());
 
-  // Delete one / clear all
-  notifList?.addEventListener("click", async (e) => {
-    const del = (e.target as HTMLElement).closest<HTMLElement>("[data-del]");
-    if (!del) return;
-    e.preventDefault();
-    e.stopPropagation();
-    await deleteNotif(Number(del.dataset.del));
-    refreshNotifs();
-  });
-  document
-    .querySelector("[data-notif-clear]")
-    ?.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      await clearNotifs();
-      refreshNotifs();
-    });
+	// Delete one / clear all
+	notifList?.addEventListener("click", async (e) =>
+	{
+		const del = (e.target as HTMLElement).closest<HTMLElement>("[data-del]");
+		if (!del) return;
+		e.preventDefault();
+		e.stopPropagation();
+		await deleteNotif(Number(del.dataset.del));
+		refreshNotifs();
+	});
+	document
+		.querySelector("[data-notif-clear]")
+		?.addEventListener("click", async (e) =>
+		{
+			e.stopPropagation();
+			await clearNotifs();
+			refreshNotifs();
+		});
 
-  // ── Popovers (generic) ────────────────────────────────────────────────
-  function wirePopover(rootSel: string, toggleSel: string, menuSel: string) {
-    const root = $(rootSel);
-    const toggle = $<HTMLButtonElement>(toggleSel);
-    const menu = $(menuSel);
-    if (!root || !toggle || !menu) return;
-    toggle.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const opening = menu.hasAttribute("hidden");
-      closeAll();
-      if (opening) {
-        menu.removeAttribute("hidden");
-        toggle.setAttribute("aria-expanded", "true");
-      }
-    });
-    document.addEventListener("click", (e) => {
-      if (!root.contains(e.target as Node)) {
-        menu.setAttribute("hidden", "");
-        toggle.setAttribute("aria-expanded", "false");
-      }
-    });
-  }
-  function closeAll() {
-    document.querySelectorAll<HTMLElement>(".menu").forEach((m) => m.setAttribute("hidden", ""));
-    document
-      .querySelectorAll<HTMLButtonElement>("[aria-expanded]")
-      .forEach((b) => b.setAttribute("aria-expanded", "false"));
-  }
-  wirePopover("[data-notif-pop]", "[data-notif-toggle]", "[data-notif-menu]");
-  wirePopover("[data-friends-pop]", "[data-friends-toggle]", "[data-friends-menu]");
-  wirePopover("[data-account]", "[data-acct-toggle]", "[data-menu]");
+	// ── Popovers (generic) ────────────────────────────────────────────────
+	function wirePopover(rootSel: string, toggleSel: string, menuSel: string)
+	{
+		const root = $(rootSel);
+		const toggle = $<HTMLButtonElement>(toggleSel);
+		const menu = $(menuSel);
+		if (!root || !toggle || !menu) return;
+		toggle.addEventListener("click", (e) =>
+		{
+			e.stopPropagation();
+			const opening = menu.hasAttribute("hidden");
+			closeAll();
+			if (opening)
+			{
+				menu.removeAttribute("hidden");
+				toggle.setAttribute("aria-expanded", "true");
+			}
+		});
+		document.addEventListener("click", (e) =>
+		{
+			if (!root.contains(e.target as Node))
+			{
+				menu.setAttribute("hidden", "");
+				toggle.setAttribute("aria-expanded", "false");
+			}
+		});
+	}
+	function closeAll()
+	{
+		document.querySelectorAll<HTMLElement>(".menu").forEach((m) => m.setAttribute("hidden", ""));
+		document
+			.querySelectorAll<HTMLButtonElement>("[aria-expanded]")
+			.forEach((b) => b.setAttribute("aria-expanded", "false"));
+	}
+	wirePopover("[data-notif-pop]", "[data-notif-toggle]", "[data-notif-menu]");
+	wirePopover("[data-friends-pop]", "[data-friends-toggle]", "[data-friends-menu]");
+	wirePopover("[data-account]", "[data-acct-toggle]", "[data-menu]");
 
-  // Mark notifications read when the panel opens.
-  $("[data-notif-toggle]")?.addEventListener("click", () => {
-    setTimeout(async () => {
-      const open = !$("[data-notif-menu]")?.hasAttribute("hidden");
-      if (open) {
-        await markNotifsRead();
-        if (notifBadge) notifBadge.hidden = true;
-      }
-    }, 0);
-  });
+	// Mark notifications read when the panel opens.
+	$("[data-notif-toggle]")?.addEventListener("click", () =>
+	{
+		setTimeout(async () =>
+		{
+			const open = !$("[data-notif-menu]")?.hasAttribute("hidden");
+			if (open)
+			{
+				await markNotifsRead();
+				if (notifBadge) notifBadge.hidden = true;
+			}
+		}, 0);
+	});
 
-  $("[data-logout]")?.addEventListener("click", async () => {
-    await logout();
-    location.replace("/");
-  });
-  $("[data-delete]")?.addEventListener("click", async () => {
-    const ok = confirm(
-      "Supprimer definitivement ton compte et toutes tes donnees ? Cette action est irreversible.",
-    );
-    if (!ok) return;
-    const done = await deleteAccount();
-    if (done) location.replace("/?deleted=1");
-    else alert("Echec de la suppression. Reessaie.");
-  });
+	$("[data-logout]")?.addEventListener("click", async () =>
+	{
+		await logout();
+		location.replace("/");
+	});
+	$("[data-delete]")?.addEventListener("click", async () =>
+	{
+		const ok = confirm(
+			"Supprimer definitivement ton compte et toutes tes donnees ? Cette action est irreversible.",
+		);
+		if (!ok) return;
+		const done = await deleteAccount();
+		if (done) location.replace("/?deleted=1");
+		else alert("Echec de la suppression. Reessaie.");
+	});
 </script>
 
 <style>
@@ -553,6 +592,7 @@
     border-radius: 6px;
     cursor: pointer;
     transition: background 0.12s;
+    text-decoration: none;
   }
   .menu-item:hover {
     background: var(--panel-2);

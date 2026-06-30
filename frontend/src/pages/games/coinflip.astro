@@ -5,6 +5,11 @@ import Nav from "../../components/Nav.astro";
 
 <Layout title="PISCASINO — Coinflip">
   <Nav />
+  <header class="game-header">
+    <span class="gh-icon">🪙</span>
+    <h1>Coin Flip</h1>
+    <span class="gh-sub">· Pile ou face, 1.98× de gain</span>
+  </header>
   <div class="shell">
     <aside class="panel betpanel">
       <div class="field">
@@ -32,65 +37,92 @@ import Nav from "../../components/Nav.astro";
 
       <button class="btn bet-btn" data-play>Lancer la piece</button>
       <p class="result" data-result></p>
+      <div class="sess-stats" data-sess></div>
     </aside>
 
     <main class="panel stage">
-      <div class="coin" data-coin>
-        <div class="face heads">P</div>
-        <div class="face tails">F</div>
+      <div class="coin-wrap">
+        <div class="coin" data-coin>
+          <div class="face heads">P</div>
+          <div class="face tails">F</div>
+        </div>
       </div>
+      <div class="hist-bar" data-hist></div>
     </main>
   </div>
 </Layout>
 
 <script>
-  import { bet, setupAmount, fmt, BetError } from "../../lib/casino";
+	import { bet, setupAmount, fmt, BetError } from "../../lib/casino";
+	import { GameSession } from "../../lib/session";
 
-  const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
-  const result = document.querySelector<HTMLElement>("[data-result]")!;
-  const play = document.querySelector<HTMLButtonElement>("[data-play]")!;
-  const coin = document.querySelector<HTMLElement>("[data-coin]")!;
-  let side: "heads" | "tails" = "heads";
+	const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
+	const result = document.querySelector<HTMLElement>("[data-result]")!;
+	const play = document.querySelector<HTMLButtonElement>("[data-play]")!;
+	const coin = document.querySelector<HTMLElement>("[data-coin]")!;
+	const session = new GameSession(
+		document.querySelector("[data-hist]"),
+		document.querySelector("[data-sess]"),
+	);
+	let side: "heads" | "tails" = "heads";
 
-  setupAmount(betInput);
+	setupAmount(betInput);
 
-  document.querySelectorAll<HTMLButtonElement>("[data-side] button").forEach((b) => {
-    b.addEventListener("click", () => {
-      side = b.dataset.val as "heads" | "tails";
-      document
-        .querySelectorAll("[data-side] button")
-        .forEach((x) => x.classList.toggle("is-active", x === b));
-    });
-  });
+	document.querySelectorAll<HTMLButtonElement>("[data-side] button").forEach((b) =>
+	{
+		b.addEventListener("click", () =>
+		{
+			side = b.dataset.val as "heads" | "tails";
+			document
+				.querySelectorAll("[data-side] button")
+				.forEach((x) => x.classList.toggle("is-active", x === b));
+		});
+	});
 
-  play.addEventListener("click", async () => {
-    play.disabled = true;
-    result.textContent = "";
-    result.className = "result";
-    try {
-      const r = await bet("coinflip", { bet: Number(betInput.value), side });
-      const turns = 4 * 360;
-      const final = r.outcome === "heads" ? 0 : 180;
-      coin.style.transition = "transform 1s cubic-bezier(.2,.8,.2,1)";
-      coin.style.transform = `rotateY(${turns + final}deg)`;
-      setTimeout(() => {
-        coin.style.transition = "none";
-        coin.style.transform = `rotateY(${final}deg)`;
-        result.textContent = r.win
-          ? `Gagne +${fmt(r.payout)} pts`
-          : `Perdu -${fmt(Number(betInput.value))} pts`;
-        result.classList.add(r.win ? "win" : "lose");
-        play.disabled = false;
-      }, 1000);
-    } catch (e) {
-      result.textContent = e instanceof BetError ? e.message : "Erreur";
-      result.classList.add("lose");
-      play.disabled = false;
-    }
-  });
+	play.addEventListener("click", async () =>
+	{
+		play.disabled = true;
+		result.textContent = "";
+		result.className = "result";
+		try
+		{
+			const r = await bet("coinflip", { bet: Number(betInput.value), side });
+			const turns = 4 * 360;
+			const final = r.outcome === "heads" ? 0 : 180;
+			coin.style.transition = "transform 1s cubic-bezier(.2,.8,.2,1)";
+			coin.style.transform = `rotateY(${turns + final}deg)`;
+			setTimeout(() =>
+			{
+				coin.style.transition = "none";
+				coin.style.transform = `rotateY(${final}deg)`;
+				result.textContent = r.win
+					? `Gagne +${fmt(r.payout)} pts`
+					: `Perdu -${fmt(Number(betInput.value))} pts`;
+				result.classList.add(r.win ? "win" : "lose");
+				session.record(r.win, Number(betInput.value), r.payout);
+				play.disabled = false;
+			}, 1000);
+		}
+		catch (e)
+		{
+			result.textContent = e instanceof BetError ? e.message : "Erreur";
+			result.classList.add("lose");
+			play.disabled = false;
+		}
+	});
 </script>
 
 <style>
+  .stage {
+    perspective: 800px;
+    overflow: visible;
+  }
+  .coin-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+  }
   .coin {
     width: 160px;
     height: 160px;
