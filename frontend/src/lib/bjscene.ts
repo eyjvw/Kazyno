@@ -350,14 +350,11 @@ export class BlackjackScene
 	private setSeatLabel(slot: number, s: any, room: any)
 	{
 		const name = (s.display_name || s.login) + (s.isBot ? " 🤖" : "");
+		const RES: Record<string, string> =
+			{ win: "Gagné", lose: "Perdu", push: "Égalité", blackjack: "BJ!", bust: "Bust" };
 		const res =
 			s.result && room.phase === "payout"
-				? `<span class="bj-res ${s.result}">$
-				{
-						{ win: "Gagné", lose: "Perdu", push: "Égalité", blackjack: "BJ!", bust: "Bust" }[
-							s.result as string
-						] ?? ""
-					}${s.win > 0 ? " +" + s.win : ""}</span>`
+				? `<span class="bj-res ${s.result}">${RES[s.result as string] ?? ""}${s.win > 0 ? " +" + s.win : ""}</span>`
 				: "";
 		const html = `
 			<span class="bj-name ${s.userId === this.myId ? "me" : ""}">${name}</span>

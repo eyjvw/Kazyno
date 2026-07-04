@@ -30,6 +30,9 @@ import Footer from "../components/Footer.astro";
       <button class="tab" data-tab="requests">
         Demandes <span class="count" data-c-requests>0</span>
       </button>
+      <button class="tab" data-tab="duels">
+        Duels ⚔️ <span class="count" data-c-duels>0</span>
+      </button>
     </div>
 
     <section data-pane="friends">
@@ -39,7 +42,27 @@ import Footer from "../components/Footer.astro";
     <section data-pane="requests" hidden>
       <ul class="list" data-requests><li class="empty">Aucune demande.</li></ul>
     </section>
+
+    <section data-pane="duels" hidden>
+      <ul class="list" data-duels><li class="empty">Aucun duel. Défie un ami ⚔️</li></ul>
+    </section>
   </main>
+
+  <!-- Duel modal -->
+  <div class="gift-modal" data-duel-modal hidden>
+    <div class="gift-card">
+      <button class="gift-close" data-duel-close>✕</button>
+      <div class="gift-icon">⚔️</div>
+      <h2 class="gift-title">Duel coinflip</h2>
+      <p class="gift-to" data-duel-to></p>
+      <div class="field" style="width:100%">
+        <label>Mise (chacun)</label>
+        <input class="input" data-duel-stake type="number" min="10" max="100000" value="100" />
+      </div>
+      <button class="btn" data-duel-send style="width:100%">Défier ⚔️</button>
+      <p class="gift-err" data-duel-err hidden></p>
+    </div>
+  </div>
 
   <!-- Gift modal -->
   <div class="gift-modal" data-gift-modal hidden>
@@ -71,6 +94,14 @@ import Footer from "../components/Footer.astro";
 		cancelFriend,
 		removeFriend,
 		giftPoints,
+		getMyDuels,
+		challengeDuel,
+		acceptDuel,
+		declineDuel,
+		cancelDuel,
+		onDuel,
+		getMyId,
+		toast,
 		onFriendEvent,
 		onPresence,
 		loadPresence,
@@ -107,6 +138,7 @@ import Footer from "../components/Footer.astro";
 							<a class="avwrap" href="/profile?u=${f.login}">${avatar(f)}${dot(f.online)}</a>
 							<a class="name" href="/profile?u=${f.login}">${f.display_name || f.login}<small>@${f.login}</small></a>
 							<span class="pts">${fmt(f.points ?? 0)} pts</span>
+							<button class="gift-btn sm" data-duel-open="${f.login}" title="Défier en duel">⚔️</button>
 							<button class="gift-btn sm" data-gift="${f.login}" title="Offrir des points">🎁</button>
 							<button class="ghost-btn sm" data-remove="${f.id}">Retirer</button>
 						</li>`,
@@ -158,6 +190,55 @@ import Footer from "../components/Footer.astro";
 		const [friends, requests] = await Promise.all([getFriends(), getRequests()]);
 		renderFriends(friends);
 		renderRequests(requests);
+		void refreshDuels();
+	}
+
+	// ── Duels ───────────────────────────────────────────────────────────
+	const duelsEl = $("[data-duels]");
+	const cDuels = $("[data-c-duels]");
+
+	function duelRow(d: any): string
+	{
+		const me = getMyId();
+		const iAmChallenger = d.challenger_id === me;
+		const other = iAmChallenger
+			? { login: d.opponent_login, name: d.opponent_name, image_url: d.opponent_image }
+			: { login: d.challenger_login, name: d.challenger_name, image_url: d.challenger_image };
+		const av = avatar({ image_url: other.image_url, login: other.login });
+
+		let action = "";
+		if (d.status === "pending")
+		{
+			action = iAmChallenger
+				? `<span class="tag">En attente</span><button class="ghost-btn sm" data-duel-cancel="${d.id}">Annuler</button>`
+				: `<button class="btn sm" data-duel-accept="${d.id}">Accepter ⚔️</button><button class="ghost-btn sm" data-duel-decline="${d.id}">Refuser</button>`;
+		}
+		else if (d.status === "resolved")
+		{
+			const won = d.winner_id === me;
+			action = `<span class="tag ${won ? "ok" : ""}">${won ? `Gagné +${fmt(d.stake)}` : `Perdu -${fmt(d.stake)}`}</span>`;
+		}
+		else
+		{
+			action = `<span class="tag">${d.status === "declined" ? "Refusé" : "Annulé"}</span>`;
+		}
+
+		return `<li class="row">
+			<a class="avwrap" href="/profile?u=${other.login}">${av}</a>
+			<a class="name" href="/profile?u=${other.login}">${other.name || other.login}<small>⚔️ ${fmt(d.stake)} pts</small></a>
+			${action}
+		</li>`;
+	}
+
+	async function refreshDuels()
+	{
+		const duels = await getMyDuels();
+		const me = getMyId();
+		const pendingIn = duels.filter((d: any) => d.status === "pending" && d.opponent_id === me).length;
+		cDuels.textContent = String(pendingIn);
+		duelsEl.innerHTML = duels.length
+			? duels.map(duelRow).join("")
+			: `<li class="empty">Aucun duel. Défie un ami ⚔️</li>`;
 	}
 
 	// ── Search ──────────────────────────────────────────────────────────
@@ -223,7 +304,36 @@ import Footer from "../components/Footer.astro";
 	document.addEventListener("click", async (e) =>
 	{
 		const el = e.target as HTMLElement;
-		if (el.dataset.gift)
+		if (el.dataset.duelOpen)
+		{
+			duelTarget = el.dataset.duelOpen;
+			duelToEl.textContent = `Contre @${duelTarget} — le gagnant rafle tout`;
+			duelStakeEl.value = "100";
+			duelErrEl.hidden = true;
+			duelModal.hidden = false;
+		}
+		else if (el.dataset.duelAccept)
+		{
+			(el as HTMLButtonElement).disabled = true;
+			try
+			{
+				const r = await acceptDuel(Number(el.dataset.duelAccept));
+				toast(r.win ? `⚔️ Duel gagné ! +${fmt(r.pot)} pts` : "⚔️ Duel perdu…");
+			}
+			catch (err: any) { toast(err?.message ?? "Erreur"); }
+			void refreshDuels();
+		}
+		else if (el.dataset.duelDecline)
+		{
+			await declineDuel(Number(el.dataset.duelDecline)).catch(() => {});
+			void refreshDuels();
+		}
+		else if (el.dataset.duelCancel)
+		{
+			await cancelDuel(Number(el.dataset.duelCancel)).catch(() => {});
+			void refreshDuels();
+		}
+		else if (el.dataset.gift)
 		{
 			giftTarget = el.dataset.gift;
 			giftToEl.textContent = `Pour @${giftTarget}`;
@@ -297,6 +407,45 @@ import Footer from "../components/Footer.astro";
 		}
 		finally { giftSendBtn.disabled = false; }
 	});
+
+	// ── Duel modal ───────────────────────────────────────────────────────────
+	const duelModal   = document.querySelector<HTMLElement>("[data-duel-modal]")!;
+	const duelToEl    = document.querySelector<HTMLElement>("[data-duel-to]")!;
+	const duelStakeEl = document.querySelector<HTMLInputElement>("[data-duel-stake]")!;
+	const duelSendBtn = document.querySelector<HTMLButtonElement>("[data-duel-send]")!;
+	const duelErrEl   = document.querySelector<HTMLElement>("[data-duel-err]")!;
+	let duelTarget    = "";
+
+	document.querySelector("[data-duel-close]")?.addEventListener("click", () => { duelModal.hidden = true; });
+	duelModal.addEventListener("click", (e) => { if (e.target === duelModal) duelModal.hidden = true; });
+
+	duelSendBtn.addEventListener("click", async () =>
+	{
+		const stake = Math.floor(Number(duelStakeEl.value));
+		if (!stake || stake < 10)
+		{
+			duelErrEl.textContent = "Mise invalide (min 10 pts)";
+			duelErrEl.hidden = false;
+			return;
+		}
+		duelSendBtn.disabled = true;
+		duelErrEl.hidden = true;
+		try
+		{
+			await challengeDuel(duelTarget, stake);
+			duelModal.hidden = true;
+			toast(`⚔️ Défi envoyé à @${duelTarget} !`);
+			void refreshDuels();
+		}
+		catch (e: any)
+		{
+			duelErrEl.textContent = e.message ?? "Erreur";
+			duelErrEl.hidden = false;
+		}
+		finally { duelSendBtn.disabled = false; }
+	});
+
+	onDuel(() => void refreshDuels());
 
 	// Tabs
 	document.querySelectorAll<HTMLButtonElement>(".tab").forEach((tab) =>

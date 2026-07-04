@@ -1,0 +1,307 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+---
+
+<Layout title="PISCASINO — Hi-Lo">
+  <Nav />
+  <header class="game-header">
+    <span class="gh-icon">🃏</span>
+    <h1>Hi-Lo</h1>
+    <span class="gh-sub">· Carte suivante plus haute ou plus basse ? Égalité = perdu</span>
+  </header>
+  <div class="shell">
+    <aside class="panel betpanel">
+      <div class="field">
+        <label>Mise</label>
+        <input class="input" data-bet type="number" min="1" value="100" />
+        <div class="chips">
+          <button data-amt="half">½</button>
+          <button data-amt="double">2×</button>
+          <button data-amt="max">Max</button>
+        </div>
+      </div>
+
+      <div class="mult-info" data-mult-box hidden>
+        <span class="mult-lbl">Multiplicateur</span>
+        <span class="mult-big" data-cur-mult>1.00×</span>
+      </div>
+
+      <button class="btn bet-btn" data-play>Jouer</button>
+      <button class="btn cashout-btn" data-cashout hidden>Cashout</button>
+      <p class="result" data-result></p>
+      <div class="sess-stats" data-sess></div>
+    </aside>
+
+    <main class="panel stage hilo-stage">
+      <div class="card-zone">
+        <div class="pcard old" data-prev hidden></div>
+        <div class="pcard" data-card>?</div>
+      </div>
+      <div class="guess-row" data-guess hidden>
+        <button class="gbtn hi" data-hi>▲ Plus haut <b data-hi-mult></b></button>
+        <button class="gbtn lo" data-lo>▼ Plus bas <b data-lo-mult></b></button>
+      </div>
+      <div class="hist-bar" data-hist></div>
+    </main>
+  </div>
+</Layout>
+
+<script>
+	import { loadMe, setupAmount, fmt, hiloStart, hiloGuess, hiloCashout, getHiloSession } from "../../lib/casino";
+	import { GameSession } from "../../lib/session";
+
+	const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
+	const playBtn  = document.querySelector<HTMLButtonElement>("[data-play]")!;
+	const cashBtn  = document.querySelector<HTMLButtonElement>("[data-cashout]")!;
+	const resultEl = document.querySelector<HTMLElement>("[data-result]")!;
+	const cardEl   = document.querySelector<HTMLElement>("[data-card]")!;
+	const prevEl   = document.querySelector<HTMLElement>("[data-prev]")!;
+	const guessRow = document.querySelector<HTMLElement>("[data-guess]")!;
+	const hiBtn    = document.querySelector<HTMLButtonElement>("[data-hi]")!;
+	const loBtn    = document.querySelector<HTMLButtonElement>("[data-lo]")!;
+	const hiMult   = document.querySelector<HTMLElement>("[data-hi-mult]")!;
+	const loMult   = document.querySelector<HTMLElement>("[data-lo-mult]")!;
+	const multBox  = document.querySelector<HTMLElement>("[data-mult-box]")!;
+	const curMult  = document.querySelector<HTMLElement>("[data-cur-mult]")!;
+	const session  = new GameSession(
+		document.querySelector("[data-hist]"),
+		document.querySelector("[data-sess]"),
+	);
+
+	setupAmount(betInput);
+
+	const LABEL: Record<number, string> = { 11: "J", 12: "Q", 13: "K", 14: "A" };
+	const rankLabel = (r: number) => LABEL[r] ?? String(r);
+	const isRed = (s: string) => s === "♥" || s === "♦";
+
+	let active  = false;
+	let gameBet = 0;
+	let mult    = 1;
+	let steps   = 0;
+
+	function showCard(el: HTMLElement, card: { rank: number; suit: string })
+	{
+		el.innerHTML = `<b>${rankLabel(card.rank)}</b><i>${card.suit}</i>`;
+		el.classList.toggle("red", isRed(card.suit));
+		el.hidden = false;
+	}
+
+	function setNext(next: { higher: number | null; lower: number | null })
+	{
+		hiBtn.disabled = next.higher === null;
+		loBtn.disabled = next.lower === null;
+		hiMult.textContent = next.higher ? `${(mult * next.higher).toFixed(2)}×` : "—";
+		loMult.textContent = next.lower ? `${(mult * next.lower).toFixed(2)}×` : "—";
+	}
+
+	function setPlaying(card: any, next: any)
+	{
+		active = true;
+		showCard(cardEl, card);
+		guessRow.hidden = false;
+		multBox.hidden  = false;
+		playBtn.hidden  = true;
+		curMult.textContent = mult.toFixed(2) + "×";
+		cashBtn.textContent = `Cashout ${mult.toFixed(2)}× · +${fmt(Math.floor(gameBet * mult))} pts`;
+		cashBtn.hidden = steps === 0;
+		setNext(next);
+	}
+
+	function endGame()
+	{
+		active = false;
+		guessRow.hidden = true;
+		multBox.hidden  = true;
+		cashBtn.hidden  = true;
+		playBtn.hidden  = false;
+	}
+
+	async function guess(dir: "higher" | "lower")
+	{
+		hiBtn.disabled = loBtn.disabled = true;
+		try
+		{
+			const r = await hiloGuess(dir);
+			prevEl.hidden = false;
+			prevEl.innerHTML = cardEl.innerHTML;
+			prevEl.className = "pcard old" + (cardEl.classList.contains("red") ? " red" : "");
+			showCard(cardEl, r.card);
+			if (r.win)
+			{
+				mult  = r.multiplier;
+				steps = r.steps;
+				setPlaying(r.card, r.next);
+				resultEl.textContent = "";
+				resultEl.className = "result";
+			}
+			else
+			{
+				endGame();
+				resultEl.textContent = `Perdu −${fmt(gameBet)} pts`;
+				resultEl.className = "result lose";
+				session.record(false, gameBet, 0);
+			}
+		}
+		catch (e: any)
+		{
+			resultEl.textContent = e.message ?? "Erreur";
+			resultEl.className = "result lose";
+			hiBtn.disabled = loBtn.disabled = false;
+		}
+	}
+
+	hiBtn.addEventListener("click", () => void guess("higher"));
+	loBtn.addEventListener("click", () => void guess("lower"));
+
+	cashBtn.addEventListener("click", async () =>
+	{
+		cashBtn.disabled = true;
+		try
+		{
+			const r = await hiloCashout();
+			endGame();
+			resultEl.textContent = `${(r.multiplier as number).toFixed(2)}× · +${fmt(r.payout)} pts`;
+			resultEl.className = "result win";
+			session.record(true, gameBet, r.payout);
+		}
+		catch (e: any)
+		{
+			resultEl.textContent = e.message ?? "Erreur";
+			resultEl.className = "result lose";
+		}
+		finally
+		{
+			cashBtn.disabled = false;
+		}
+	});
+
+	playBtn.addEventListener("click", async () =>
+	{
+		playBtn.disabled = true;
+		resultEl.textContent = "";
+		resultEl.className = "result";
+		try
+		{
+			const amount = Math.max(1, Math.floor(Number(betInput.value)));
+			const r = await hiloStart(amount);
+			gameBet = amount;
+			mult    = 1;
+			steps   = 0;
+			prevEl.hidden = true;
+			setPlaying(r.card, r.next);
+		}
+		catch (e: any)
+		{
+			resultEl.textContent = e.message ?? "Erreur";
+			resultEl.className = "result lose";
+		}
+		finally
+		{
+			playBtn.disabled = false;
+		}
+	});
+
+	loadMe().then(async () =>
+	{
+		const s = await getHiloSession();
+		if (s)
+		{
+			gameBet = s.bet;
+			mult    = s.multiplier;
+			steps   = s.steps;
+			setPlaying(s.card, s.next);
+		}
+	});
+</script>
+
+<style>
+  .hilo-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    min-height: 520px;
+  }
+  .card-zone {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  :global(.pcard) {
+    width: 120px;
+    height: 168px;
+    border-radius: 12px;
+    background: #fff;
+    color: #16202b;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    animation: popIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  :global(.pcard b) { font-size: 44px; }
+  :global(.pcard i) { font-style: normal; font-size: 34px; }
+  :global(.pcard.red) { color: #d4123f; }
+  :global(.pcard.old) {
+    transform: scale(0.72);
+    opacity: 0.5;
+  }
+  @keyframes popIn {
+    from { transform: scale(0.85); opacity: 0.5; }
+    to   { transform: scale(1);    opacity: 1; }
+  }
+  :global(.pcard.old) { animation: none; }
+
+  .guess-row {
+    display: flex;
+    gap: 12px;
+  }
+  .gbtn {
+    padding: 14px 22px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--raise);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 150px;
+    transition: border-color 0.12s, transform 0.1s;
+  }
+  .gbtn b {
+    font-size: 13px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .gbtn.hi:hover:not(:disabled) { border-color: var(--win); transform: translateY(-2px); }
+  .gbtn.lo:hover:not(:disabled) { border-color: var(--lose); transform: translateY(2px); }
+  .gbtn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .cashout-btn { background: #16a34a !important; margin-top: 4px; font-size: 13px; }
+  .cashout-btn:hover { filter: brightness(1.12); }
+  [hidden] { display: none !important; }
+
+  .mult-info { display: flex; flex-direction: column; gap: 2px; margin: 10px 0 4px; }
+  .mult-lbl {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .mult-big {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+</style>

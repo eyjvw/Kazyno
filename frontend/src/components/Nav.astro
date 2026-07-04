@@ -15,6 +15,7 @@
     <a href="/app" data-link="/app">Casino</a>
     <a href="/leaderboard" data-link="/leaderboard">Classement</a>
     <a href="/paris" data-link="/paris">Paris</a>
+    <a href="/shop" data-link="/shop">Boutique</a>
     <a href="/admin" data-link="/admin" data-admin-link hidden>Admin</a>
   </div>
   <span class="spacer"></span>
@@ -99,6 +100,7 @@
 		onPresence,
 		loadPresence,
 		adminMe,
+		checkRain,
 		getNotifications,
 		markNotifsRead,
 		deleteNotif,
@@ -156,6 +158,7 @@
 			fallback.hidden = false;
 		}
 		connectRealtime();
+		checkRain();
 		loadPresence();
 		refreshRequests();
 		refreshFriends();

@@ -68,17 +68,23 @@ export const daily = new Elysia({ prefix: "/api/daily" })
 		const newStreak = lastStr === yesterday ? user.daily_streak + 1 : 1;
 		const reward    = REWARDS[(newStreak - 1) % 7];
 
-		await sql`
+		// Garde anti double-claim : refuse si last_daily a déjà été mis à
+		// aujourd'hui par une requête concurrente entre le SELECT et l'UPDATE.
+		const [updated] = (await sql`
 			UPDATE users
 			SET points       = points + ${reward},
 			    daily_streak  = ${newStreak},
 			    last_daily    = ${today}::date
 			WHERE id = ${userId!}
-		`;
-
-		const [updated] = (await sql`
-			SELECT points FROM users WHERE id = ${userId!}
+			  AND (last_daily IS NULL OR last_daily < ${today}::date)
+			RETURNING points
 		`) as Array<{ points: number }>;
+
+		if (!updated)
+		{
+			set.status = 409;
+			return { error: "Déjà réclamé aujourd'hui" };
+		}
 
 		publishBalance(userId!, updated.points);
 

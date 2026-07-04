@@ -176,6 +176,27 @@ export function connectRealtime()
 			case "admin-log":
 				adminLogListeners.forEach((fn) => fn(msg));
 				break;
+			case "jackpot":
+				if (msg.won && msg.login) toast(`🎰 JACKPOT ! ${msg.login} remporte ${fmt(msg.won)} pts !`);
+				jackpotListeners.forEach((fn) => fn(msg.amount));
+				break;
+			case "feed":
+				feedListeners.forEach((fn) => fn(msg.item));
+				break;
+			case "rain":
+				showRainBanner(msg);
+				break;
+			case "rain_update":
+				if (msg.remaining <= 0) hideRainBanner();
+				break;
+			case "duel":
+				duelListeners.forEach((fn) => fn(msg));
+				break;
+			case "poker":
+			case "poker_hole":
+			case "poker_kick":
+				pokerListeners.forEach((fn) => fn(msg));
+				break;
 		}
 	};
 	sock.onopen = () => resubscribeRooms();
@@ -760,6 +781,58 @@ export async function minesCashout() {
 	return d;
 }
 
+// ── Hi-Lo ─────────────────────────────────────────────────────────────────────
+export async function getHiloSession() {
+	const r = await fetch("/api/hilo/session");
+	return r.ok ? (await r.json()).session : null;
+}
+export async function hiloStart(bet: number) {
+	const r = await fetch("/api/hilo/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bet }) });
+	const d = await r.json().catch(() => ({}));
+	if (!r.ok) throw new Error(d?.error ?? "Erreur");
+	setBalance(d.balance);
+	return d;
+}
+export async function hiloGuess(dir: "higher" | "lower") {
+	const r = await fetch("/api/hilo/guess", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dir }) });
+	const d = await r.json().catch(() => ({}));
+	if (!r.ok) throw new Error(d?.error ?? "Erreur");
+	return d;
+}
+export async function hiloCashout() {
+	const r = await fetch("/api/hilo/cashout", { method: "POST" });
+	const d = await r.json().catch(() => ({}));
+	if (!r.ok) throw new Error(d?.error ?? "Erreur");
+	setBalance(d.balance);
+	return d;
+}
+
+// ── Tower ─────────────────────────────────────────────────────────────────────
+export async function getTowerSession() {
+	const r = await fetch("/api/tower/session");
+	return r.ok ? (await r.json()).session : null;
+}
+export async function towerStart(bet: number) {
+	const r = await fetch("/api/tower/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bet }) });
+	const d = await r.json().catch(() => ({}));
+	if (!r.ok) throw new Error(d?.error ?? "Erreur");
+	setBalance(d.balance);
+	return d;
+}
+export async function towerPick(tile: number) {
+	const r = await fetch("/api/tower/pick", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tile }) });
+	const d = await r.json().catch(() => ({}));
+	if (!r.ok) throw new Error(d?.error ?? "Erreur");
+	return d;
+}
+export async function towerCashout() {
+	const r = await fetch("/api/tower/cashout", { method: "POST" });
+	const d = await r.json().catch(() => ({}));
+	if (!r.ok) throw new Error(d?.error ?? "Erreur");
+	setBalance(d.balance);
+	return d;
+}
+
 // ── Daily ─────────────────────────────────────────────────────────────────────
 export async function getDailyStatus() {
 	const r = await fetch("/api/daily/status");
@@ -836,6 +909,192 @@ export async function giftPoints(to_login: string, amount: number)
 	setBalance(d.balance);
 	return d;
 }
+
+// ── Jackpot ───────────────────────────────────────────────────────────────────
+type JackpotListener = (amount: number) => void;
+const jackpotListeners = new Set<JackpotListener>();
+export function onJackpot(fn: JackpotListener) { jackpotListeners.add(fn); }
+export async function getJackpot(): Promise<number>
+{
+	try
+	{
+		const r = await fetch("/api/jackpot");
+		return r.ok ? (await r.json()).amount : 0;
+	} catch { return 0; }
+}
+
+// ── Live feed ─────────────────────────────────────────────────────────────────
+export interface FeedItem
+{
+	login: string;
+	display_name: string | null;
+	game: string;
+	bet: number;
+	payout: number;
+	ts: number;
+}
+type FeedListener = (item: FeedItem) => void;
+const feedListeners = new Set<FeedListener>();
+export function onFeed(fn: FeedListener) { feedListeners.add(fn); }
+export async function getFeed(): Promise<FeedItem[]>
+{
+	try
+	{
+		const r = await fetch("/api/feed");
+		return r.ok ? (await r.json()).feed : [];
+	} catch { return []; }
+}
+
+// ── Rain ──────────────────────────────────────────────────────────────────────
+let rainEl: HTMLElement | null = null;
+
+function hideRainBanner()
+{
+	rainEl?.remove();
+	rainEl = null;
+}
+
+function showRainBanner(rain: { id: string; share: number; expires: number })
+{
+	hideRainBanner();
+	const el = document.createElement("div");
+	el.className = "rain-banner";
+	el.innerHTML = `
+		<span class="rain-txt">🌧️ Il pleut des points ! <b>+${fmt(rain.share)} pts</b> pour les plus rapides</span>
+		<button class="rain-claim">Réclamer</button>`;
+	el.querySelector<HTMLButtonElement>(".rain-claim")!.addEventListener("click", async (e) =>
+	{
+		const btn = e.currentTarget as HTMLButtonElement;
+		btn.disabled = true;
+		try
+		{
+			const r = await fetch("/api/rain/claim", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ id: rain.id }),
+			});
+			const d = await r.json().catch(() => ({}));
+			if (!r.ok) throw new Error(d?.error ?? "Trop tard !");
+			setBalance(d.balance);
+			toast(`🌧️ +${fmt(d.amount)} pts réclamés !`);
+		}
+		catch (err: any)
+		{
+			toast(err?.message ?? "Trop tard !");
+		}
+		hideRainBanner();
+	});
+	document.body.appendChild(el);
+	rainEl = el;
+	setTimeout(hideRainBanner, Math.max(0, rain.expires - Date.now()));
+}
+
+/** Check for an active rain on page load. */
+export async function checkRain()
+{
+	try
+	{
+		const r = await fetch("/api/rain");
+		if (!r.ok) return;
+		const { rain } = await r.json();
+		if (rain && !rain.claimed && rain.remaining > 0) showRainBanner(rain);
+	} catch {}
+}
+
+export const adminStartRain = (amount: number, winners: number) =>
+	post("/api/rain/start", { amount, winners });
+
+// ── Duels ─────────────────────────────────────────────────────────────────────
+type DuelListener = (msg: any) => void;
+const duelListeners = new Set<DuelListener>();
+export function onDuel(fn: DuelListener) { duelListeners.add(fn); }
+export async function getMyDuels()
+{
+	try
+	{
+		const r = await fetch("/api/duels/me");
+		return r.ok ? (await r.json()).duels : [];
+	} catch { return []; }
+}
+export const challengeDuel = (login: string, stake: number) =>
+	post("/api/duels", { login, stake }).then((d) => { if (d.balance !== undefined) setBalance(d.balance); return d; });
+export const acceptDuel = (id: number) =>
+	post(`/api/duels/${id}/accept`).then((d) => { if (d.balance !== undefined) setBalance(d.balance); return d; });
+export const declineDuel = (id: number) => post(`/api/duels/${id}/decline`);
+export const cancelDuel = (id: number) =>
+	post(`/api/duels/${id}/cancel`).then((d) => { if (d.balance !== undefined) setBalance(d.balance); return d; });
+
+// ── Shop ──────────────────────────────────────────────────────────────────────
+export async function getShop()
+{
+	try
+	{
+		const r = await fetch("/api/shop");
+		return r.ok ? await r.json() : { items: [], owned: [], equipped: {} };
+	} catch { return { items: [], owned: [], equipped: {} }; }
+}
+export const buyItem = (key: string) =>
+	post("/api/shop/buy", { key }).then((d) => { if (d.balance !== undefined) setBalance(d.balance); return d; });
+export const equipItem = (key: string | null, kind?: "title" | "color") =>
+	post("/api/shop/equip", key ? { key } : { kind });
+
+// ── History ───────────────────────────────────────────────────────────────────
+export async function getMyHistory()
+{
+	try
+	{
+		const r = await fetch("/api/history/me");
+		return r.ok ? (await r.json()).history : [];
+	} catch { return []; }
+}
+
+// ── Provably fair ─────────────────────────────────────────────────────────────
+export async function getFairSeeds()
+{
+	try
+	{
+		const r = await fetch("/api/fair");
+		return r.ok ? await r.json() : null;
+	} catch { return null; }
+}
+export const rotateFairSeeds = (client_seed?: string) =>
+	post("/api/fair/rotate", { client_seed });
+
+// ── Poker ─────────────────────────────────────────────────────────────────────
+type PokerListener = (msg: any) => void;
+const pokerListeners = new Set<PokerListener>();
+export function onPoker(fn: PokerListener)
+{
+	pokerListeners.add(fn);
+	return () => pokerListeners.delete(fn);
+}
+const pokerApi = async (path: string, body?: unknown) =>
+{
+	const r = await fetch(`/api/poker${path}`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: body ? JSON.stringify(body) : undefined,
+	});
+	const data = await r.json().catch(() => ({}));
+	if (!r.ok) throw new Error(data?.error ?? "Erreur");
+	return data;
+};
+export const pokerCreateRoom = (name: string, isPublic: boolean) =>
+	pokerApi("/rooms", { name, isPublic });
+export async function pokerListRooms()
+{
+	try
+	{
+		const r = await fetch("/api/poker/rooms");
+		return r.ok ? (await r.json()).rooms : [];
+	} catch { return []; }
+}
+export const pokerJoin = (id: string) => pokerApi(`/rooms/${id}/join`);
+export const pokerJoinByCode = (code: string) => pokerApi("/join", { code });
+export const pokerLeave = (id: string) => pokerApi(`/rooms/${id}/leave`);
+export const pokerStart = (id: string) => pokerApi(`/rooms/${id}/start`);
+export const pokerAction = (id: string, action: "fold" | "check" | "call" | "raise", amount?: number) =>
+	pokerApi(`/rooms/${id}/action`, amount !== undefined ? { action, amount } : { action });
 
 export const clampBet = (v: number) =>
 	Math.max(1, Math.min(1_000_000, Math.floor(v || 0)));

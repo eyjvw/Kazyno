@@ -1,0 +1,369 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+import Footer from "../../components/Footer.astro";
+---
+
+<Layout title="PISCASINO — Poker">
+  <Nav />
+  <main class="poker">
+    <header class="game-header">
+      <span class="gh-icon">♠️</span>
+      <div>
+        <h1>Poker</h1>
+        <p>Texas Hold'em · blinds 10/20 · le pot au meilleur</p>
+      </div>
+    </header>
+
+    <!-- Table (création/join via le modal du lobby, ?room=<id> obligatoire) -->
+    <section class="pk-table" data-pk-table hidden>
+      <div class="pk-topbar">
+        <span class="pk-name" data-pk-name></span>
+        <span class="pk-code">Code : <b data-pk-roomcode></b></span>
+        <button class="ghost-btn sm" data-pk-leave>Quitter</button>
+      </div>
+
+      <div class="pk-felt">
+        <div class="pk-board" data-pk-board></div>
+        <div class="pk-pot" data-pk-pot></div>
+        <div class="pk-seats" data-pk-seats></div>
+      </div>
+
+      <div class="pk-me">
+        <div class="pk-hole" data-pk-hole></div>
+        <div class="pk-ctrl" data-pk-ctrl hidden>
+          <button class="btn pk-btn" data-pk-fold>Se coucher</button>
+          <button class="btn pk-btn" data-pk-check>Check</button>
+          <button class="btn pk-btn" data-pk-call>Suivre</button>
+          <div class="pk-raise-row">
+            <input class="input pk-raise-in" data-pk-raise-amt type="number" min="20" step="10" />
+            <button class="btn pk-btn" data-pk-raise>Relancer</button>
+          </div>
+        </div>
+        <button class="btn" data-pk-start hidden>Lancer la main ▶</button>
+        <p class="pk-status" data-pk-status></p>
+      </div>
+    </section>
+  </main>
+  <Footer />
+</Layout>
+
+<script>
+	import {
+		loadMe,
+		connectRealtime,
+		subscribeRoom,
+		unsubscribeRoom,
+		onPoker,
+		pokerJoin,
+		pokerLeave,
+		pokerStart,
+		pokerAction,
+		fmt,
+		toast,
+	} from "../../lib/casino";
+
+	const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
+
+	const tableEl = $("[data-pk-table]");
+	const seatsEl = $("[data-pk-seats]");
+	const boardEl = $("[data-pk-board]");
+	const potEl = $("[data-pk-pot]");
+	const holeEl = $("[data-pk-hole]");
+	const ctrlEl = $("[data-pk-ctrl]");
+	const startBtn = $<HTMLButtonElement>("[data-pk-start]");
+	const statusEl = $("[data-pk-status]");
+	const checkBtn = $<HTMLButtonElement>("[data-pk-check]");
+	const callBtn = $<HTMLButtonElement>("[data-pk-call]");
+	const raiseAmt = $<HTMLInputElement>("[data-pk-raise-amt]");
+
+	let myId: number | null = null;
+	let roomId: string | null = null;
+	let myHole: Array<{ r: string; s: string }> = [];
+	let lastRoom: any = null;
+
+	function cardHtml(c: { r: string; s: string }, hidden = false): string
+	{
+		if (hidden) return `<span class="pcard back">🂠</span>`;
+		const red = c.s === "♥" || c.s === "♦";
+		return `<span class="pcard${red ? " red" : ""}">${c.r}${c.s}</span>`;
+	}
+
+	// ── Table ─────────────────────────────────────────────────────────────────
+	function enterRoom(id: string)
+	{
+		roomId = id;
+		myHole = [];
+		tableEl.hidden = false;
+		subscribeRoom(id);
+	}
+
+	// Création/join se font depuis le modal du lobby → retour à /app
+	function exitRoom()
+	{
+		if (roomId) unsubscribeRoom(roomId);
+		roomId = null;
+		location.href = "/app";
+	}
+
+	$("[data-pk-leave]").addEventListener("click", async () =>
+	{
+		if (roomId) await pokerLeave(roomId).catch(() => {});
+		exitRoom();
+	});
+
+	startBtn.addEventListener("click", async () =>
+	{
+		startBtn.disabled = true;
+		try { if (roomId) await pokerStart(roomId); }
+		catch (err: any) { toast(err?.message ?? "Erreur"); }
+		startBtn.disabled = false;
+	});
+
+	async function act(action: "fold" | "check" | "call" | "raise", amount?: number)
+	{
+		if (!roomId) return;
+		try { await pokerAction(roomId, action, amount); }
+		catch (err: any) { toast(err?.message ?? "Erreur"); }
+	}
+
+	$("[data-pk-fold]").addEventListener("click", () => void act("fold"));
+	checkBtn.addEventListener("click", () => void act("check"));
+	callBtn.addEventListener("click", () => void act("call"));
+	$("[data-pk-raise]").addEventListener("click", () =>
+	{
+		const amt = Math.floor(Number(raiseAmt.value));
+		if (amt > 0) void act("raise", amt);
+	});
+
+	// ── Render ────────────────────────────────────────────────────────────────
+	const PHASE_TXT: Record<string, string> = {
+		waiting: "En attente de joueurs…",
+		preflop: "Pré-flop",
+		flop: "Flop",
+		turn: "Turn",
+		river: "River",
+		showdown: "Showdown !",
+	};
+
+	function render(room: any)
+	{
+		lastRoom = room;
+		$("[data-pk-name]").textContent = room.name;
+		$("[data-pk-roomcode]").textContent = room.code;
+		potEl.textContent = room.pot > 0 ? `Pot : ${fmt(room.pot)} pts` : "";
+		boardEl.innerHTML = room.board.length
+			? room.board.map((c: any) => cardHtml(c)).join("")
+			: `<span class="pk-empty">${PHASE_TXT[room.phase] ?? ""}</span>`;
+
+		const mySeat = room.seats.find((s: any) => s && s.userId === myId);
+
+		seatsEl.innerHTML = room.seats
+			.filter((s: any) => s)
+			.map((s: any) =>
+			{
+				const isTurn = s.seatId === room.turnSeatId;
+				const isBtn = s.seatId === room.buttonSeatId;
+				const cards = s.cards?.length
+					? s.cards.map((c: any) => cardHtml(c)).join("")
+					: s.inHand ? cardHtml({ r: "", s: "" }, true) + cardHtml({ r: "", s: "" }, true) : "";
+				return `<div class="pk-seat${isTurn ? " turn" : ""}${s.folded ? " folded" : ""}${s.userId === myId ? " me" : ""}">
+					<span class="pks-name">${isBtn ? "🔘 " : ""}${s.display_name || s.login}</span>
+					<span class="pks-cards">${cards}</span>
+					${s.roundBet > 0 ? `<span class="pks-bet">${fmt(s.roundBet)} pts</span>` : ""}
+					${s.result && room.phase === "showdown" ? `<span class="pks-result${s.won > 0 ? " win" : ""}">${s.won > 0 ? `+${fmt(s.won)} · ` : ""}${s.result}</span>` : ""}
+					${s.allIn ? `<span class="pks-allin">ALL-IN</span>` : ""}
+				</div>`;
+			}).join("");
+
+		holeEl.innerHTML = myHole.length && mySeat?.inHand !== false
+			? myHole.map((c) => cardHtml(c)).join("")
+			: "";
+
+		// Controls
+		const isMyTurn = mySeat && room.turnSeatId === mySeat.seatId;
+		ctrlEl.hidden = !isMyTurn;
+		if (isMyTurn)
+		{
+			const toCall = room.currentBet - mySeat.roundBet;
+			checkBtn.hidden = toCall > 0;
+			callBtn.hidden = toCall <= 0;
+			callBtn.textContent = `Suivre (${fmt(toCall)})`;
+			raiseAmt.value = String(room.currentBet + room.minRaise);
+			raiseAmt.min = String(room.currentBet + room.minRaise);
+		}
+		startBtn.hidden = !(room.phase === "waiting" && room.hostId === myId
+			&& room.seats.filter((s: any) => s).length >= 2);
+		statusEl.textContent = room.phase === "waiting"
+			? (room.seats.filter((s: any) => s).length < 2 ? "Il faut au moins 2 joueurs. Partage le code !" : "Prêt à lancer.")
+			: PHASE_TXT[room.phase] ?? "";
+	}
+
+	onPoker((msg) =>
+	{
+		if (msg.type === "poker" && msg.room?.id === roomId) render(msg.room);
+		else if (msg.type === "poker_hole" && msg.roomId === roomId)
+		{
+			myHole = msg.cards;
+			if (lastRoom) render(lastRoom);
+			else holeEl.innerHTML = myHole.map((c: any) => cardHtml(c)).join("");
+		}
+		else if (msg.type === "poker_kick" && msg.roomId === roomId)
+		{
+			toast(`Éjecté de la table : ${msg.reason}`);
+			exitRoom();
+		}
+		else if (msg.type === "room_closed" && msg.id === roomId)
+		{
+			toast("Table fermée");
+			exitRoom();
+		}
+	});
+
+	loadMe().then((me) =>
+	{
+		if (!me) return;
+		myId = me.id;
+		connectRealtime();
+		const q = new URLSearchParams(location.search).get("room");
+		if (!q)
+		{
+			location.href = "/app";
+			return;
+		}
+		// Déjà assis (créateur) → join échoue sans gravité, on entre quand même
+		pokerJoin(q).catch(() => {}).then(() => enterRoom(q));
+	});
+</script>
+
+<style>
+  .poker {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 980px;
+    margin: 0 auto;
+    padding: clamp(20px, 4vw, 40px) clamp(20px, 5vw, 64px);
+  }
+
+  [hidden] { display: none !important; }
+
+  .pk-empty, :global(.pk-empty) { color: var(--muted); font-size: 12px; }
+
+  /* Table */
+  .pk-topbar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  .pk-name { font-weight: 800; font-size: 16px; }
+  .pk-code { color: var(--muted); font-size: 12px; }
+  .pk-code b { color: var(--accent); letter-spacing: 0.1em; }
+  .pk-topbar .ghost-btn { margin-left: auto; }
+
+  .pk-felt {
+    background: radial-gradient(ellipse at center, rgba(16, 84, 48, 0.55), rgba(8, 40, 26, 0.75));
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 24px;
+    padding: 28px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    min-height: 300px;
+  }
+  .pk-board {
+    display: flex;
+    gap: 8px;
+    min-height: 64px;
+    align-items: center;
+  }
+  .pk-pot {
+    color: #f59e0b;
+    font-weight: 800;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+    min-height: 20px;
+  }
+  .pk-seats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    width: 100%;
+  }
+  :global(.pk-seat) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 14px;
+    min-width: 120px;
+    transition: border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+  }
+  :global(.pk-seat.turn) {
+    border-color: var(--accent);
+    box-shadow: 0 0 16px rgba(59, 130, 246, 0.35);
+  }
+  :global(.pk-seat.folded) { opacity: 0.45; }
+  :global(.pk-seat.me) { background: rgba(59, 130, 246, 0.1); }
+  :global(.pks-name) { font-size: 12px; font-weight: 700; }
+  :global(.pks-cards) { display: flex; gap: 4px; min-height: 30px; }
+  :global(.pks-bet) {
+    color: #f59e0b; font-size: 11px; font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  :global(.pks-result) { color: var(--muted); font-size: 11px; font-weight: 700; }
+  :global(.pks-result.win) { color: #22c55e; }
+  :global(.pks-allin) {
+    background: #ef4444; color: #fff; font-size: 9px; font-weight: 800;
+    border-radius: 4px; padding: 1px 6px; letter-spacing: 0.06em;
+  }
+
+  :global(.pcard) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #f8fafc;
+    color: #0f172a;
+    border-radius: 6px;
+    padding: 4px 7px;
+    font-size: 15px;
+    font-weight: 800;
+    min-width: 34px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  }
+  :global(.pcard.red) { color: #dc2626; }
+  :global(.pcard.back) {
+    background: linear-gradient(135deg, #1e3a8a, #172554);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 18px;
+  }
+  .pk-board :global(.pcard) { font-size: 20px; padding: 10px 12px; min-width: 44px; }
+
+  /* My controls */
+  .pk-me {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .pk-hole { display: flex; gap: 8px; }
+  .pk-hole :global(.pcard) { font-size: 24px; padding: 12px 14px; min-width: 52px; }
+  .pk-ctrl {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+  }
+  .pk-btn { font-size: 13px; padding: 10px 18px; }
+  .pk-raise-row { display: flex; gap: 6px; }
+  .pk-raise-in { width: 110px; }
+  .pk-status { color: var(--muted); font-size: 13px; margin: 0; }
+</style>

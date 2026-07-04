@@ -101,12 +101,28 @@ export function publishAdminLog(event: Record<string, unknown>)
 	`.catch(() => {});
 }
 
-/** Push the refreshed leaderboard to everyone watching. */
+/** Push the refreshed leaderboard to everyone watching.
+ * Débouncé : chaque pari réglé l'appelle, sous charge ça ferait une requête
+ * DB par mise. On coalesce en 1 push/seconde max. */
+let lbTimer: ReturnType<typeof setTimeout> | null = null;
+let lbLast = 0;
 export async function publishLeaderboard()
+{
+	if (!server || lbTimer) return;
+	const wait = Math.max(0, 1000 - (Date.now() - lbLast));
+	lbTimer = setTimeout(() =>
+	{
+		lbTimer = null;
+		lbLast = Date.now();
+		void pushLeaderboardNow();
+	}, wait);
+}
+
+async function pushLeaderboardNow()
 {
 	if (!server) return;
 	const leaderboard = await sql`
-		SELECT login, display_name, image_url, points
+		SELECT login, display_name, image_url, points, title, name_color
 		FROM users
 		ORDER BY points DESC, created_at ASC
 		LIMIT 50

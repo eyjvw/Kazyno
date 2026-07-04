@@ -4,15 +4,20 @@ import Nav from "../components/Nav.astro";
 import Footer from "../components/Footer.astro";
 
 const games = [
+	{ href: "#poker",         name: "Poker",          tag: "Texas Hold'em · multijoueur",   emoji: "♠️", hot: true },
 	{ href: "/games/crash",    name: "Crash",          tag: "Cashout avant le crash",       emoji: "📈", hot: true },
 	{ href: "/games/mines",    name: "Mines",          tag: "Évite les bombes",              emoji: "💣", hot: true },
 	{ href: "/games/roulette", name: "Roulette",       tag: "Européenne · 37 numéros",      emoji: "🎡", hot: true },
-	{ href: "/blackjack",     name: "Blackjack",      tag: "Solo ou en ligne · multijoueur",emoji: "🃏" },
+	{ href: "/games/tower",   name: "Tower",          tag: "Grimpe 8 étages · ~25× max",    emoji: "🗼", hot: true },
+	{ href: "/games/hilo",    name: "Hi-Lo",          tag: "Plus haut ou plus bas ?",       emoji: "🃏" },
+	{ href: "/games/wheel",   name: "Wheel",          tag: "50 segments · jusqu'à 5.5×",    emoji: "🛞" },
+	{ href: "#blackjack",     name: "Blackjack",      tag: "Solo ou en ligne · multijoueur",emoji: "🃏" },
 	{ href: "/games/dice",    name: "Dice",           tag: "Roll under / over",             emoji: "🎲" },
 	{ href: "/games/limbo",   name: "Limbo",          tag: "Bust avant ta cible ?",         emoji: "🚀" },
 	{ href: "/games/plinko",  name: "Plinko",         tag: "Laisse tomber la bille",        emoji: "🔻" },
 	{ href: "/games/coinflip",name: "Coinflip",       tag: "Pile ou face · 1.98x",          emoji: "🪙" },
 	{ href: "/games/slots",   name: "Machine à sous", tag: "3 rouleaux · jackpot 7️⃣",      emoji: "🎰" },
+	{ href: "#keno",          name: "Keno",           tag: "10 numéros · jusqu'à 100×",     emoji: "🔢" },
 ];
 ---
 
@@ -30,18 +35,26 @@ const games = [
       </div>
 
       <div class="hero-side">
+        <div class="stat-box panel jackpot-box">
+          <span class="lbl">💰 Jackpot progressif</span>
+          <b data-jackpot>—</b>
+        </div>
         <div class="stat-box panel">
           <span class="lbl">Ton rang</span>
           <b data-rank>—</b>
-        </div>
-        <div class="stat-box panel">
-          <span class="lbl">Joueurs</span>
-          <b data-players>—</b>
         </div>
         <a class="stat-box panel link" href="/leaderboard">
           <span class="lbl">Classement</span>
           <b>Voir le top →</b>
         </a>
+      </div>
+    </section>
+
+    <!-- Live win feed -->
+    <section class="feed-section">
+      <h2 class="section-title">🔥 Gros gains en direct</h2>
+      <div class="feed-strip" data-feed>
+        <span class="feed-empty" data-feed-empty>Aucun gros gain récent — à toi de jouer !</span>
       </div>
     </section>
 
@@ -55,7 +68,7 @@ const games = [
     <section class="grid">
       {
         games.map((g) => (
-          <a class="card" href={g.href}>
+          <a class="card" href={g.href} data-bj={g.href === "#blackjack" ? "" : undefined} data-keno-open={g.href === "#keno" ? "" : undefined} data-pk-open={g.href === "#poker" ? "" : undefined}>
             <span class="emoji">{g.emoji}</span>
             <span class="meta">
               <b>{g.name}{(g as any).hot ? <span class="hot-badge">NEW</span> : ""}</b>
@@ -81,26 +94,152 @@ const games = [
     </div>
   </div>
 
+  <!-- Blackjack modal -->
+  <div class="daily-modal" data-bj-modal hidden>
+    <div class="daily-card bj-card">
+      <button class="daily-close" data-bj-close aria-label="Fermer">✕</button>
+      <div class="daily-fire">🃏</div>
+      <h2 class="daily-title">Blackjack</h2>
+
+      <div class="bj-actions">
+        <button class="bj-action" data-bj-solo>
+          <span class="bja-ico">🤵</span>
+          <span class="bja-meta"><b>Solo</b><small>Face au croupier, table privée</small></span>
+        </button>
+        <button class="bj-action" data-bj-create>
+          <span class="bja-ico">➕</span>
+          <span class="bja-meta"><b>Créer une table</b><small>Publique ou privée · 5 joueurs</small></span>
+        </button>
+      </div>
+
+      <!-- Create table form (hidden until "Créer une table") -->
+      <div class="bj-create-form" data-bj-form hidden>
+        <input class="input" data-bj-name placeholder="Nom de la table (optionnel)" maxlength="40" />
+        <div class="bj-vis">
+          <button class="bjv is-active" data-vis="public">🌍 Publique<small>Visible par tous</small></button>
+          <button class="bjv" data-vis="private">🔒 Privée<small>Code + invitations</small></button>
+        </div>
+        <button class="btn" data-bj-confirm>Créer la table</button>
+      </div>
+
+      <div class="bj-joinrow">
+        <input class="input" data-bj-code placeholder="Code (ex: A3K7X)" maxlength="5" />
+        <button class="btn" data-bj-joincode>Rejoindre</button>
+      </div>
+
+      <div class="bj-rooms-head">
+        <span>Tables publiques</span>
+        <button class="bj-refresh" data-bj-refresh>↻</button>
+      </div>
+      <div class="bj-rooms" data-bj-rooms>
+        <span class="bj-empty">Chargement…</span>
+      </div>
+      <p class="bj-err" data-bj-err hidden></p>
+    </div>
+  </div>
+
+  <!-- Poker modal -->
+  <div class="daily-modal" data-pk-modal hidden>
+    <div class="daily-card bj-card">
+      <button class="daily-close" data-pk-close aria-label="Fermer">✕</button>
+      <div class="daily-fire">♠️</div>
+      <h2 class="daily-title">Poker</h2>
+
+      <div class="bj-actions">
+        <button class="bj-action" data-pk-create>
+          <span class="bja-ico">➕</span>
+          <span class="bja-meta"><b>Créer une table</b><small>Publique ou privée · Texas Hold'em</small></span>
+        </button>
+      </div>
+
+      <div class="bj-create-form" data-pk-form hidden>
+        <input class="input" data-pk-name placeholder="Nom de la table (optionnel)" maxlength="40" />
+        <div class="bj-vis">
+          <button class="bjv is-active" data-pk-vis="public">🌍 Publique<small>Visible par tous</small></button>
+          <button class="bjv" data-pk-vis="private">🔒 Privée<small>Code + invitations</small></button>
+        </div>
+        <button class="btn" data-pk-confirm>Créer la table</button>
+      </div>
+
+      <div class="bj-joinrow">
+        <input class="input" data-pk-code placeholder="Code (ex: A3K7X)" maxlength="5" />
+        <button class="btn" data-pk-joincode>Rejoindre</button>
+      </div>
+
+      <div class="bj-rooms-head">
+        <span>Tables publiques</span>
+        <button class="bj-refresh" data-pk-refresh>↻</button>
+      </div>
+      <div class="bj-rooms" data-pk-rooms>
+        <span class="bj-empty">Chargement…</span>
+      </div>
+      <p class="bj-err" data-pk-err hidden></p>
+    </div>
+  </div>
+
+  <!-- Keno modal -->
+  <div class="daily-modal" data-keno-modal hidden>
+    <div class="daily-card keno-card">
+      <button class="daily-close" data-keno-close aria-label="Fermer">✕</button>
+      <div class="daily-fire">🔢</div>
+      <h2 class="daily-title">Keno</h2>
+      <iframe class="keno-frame" data-keno-frame title="Keno"></iframe>
+    </div>
+  </div>
+
   <Footer />
 </Layout>
 
 <script>
-	import { loadMe, getMyRank, getStats, onBalance, fmt, getDailyStatus, claimDaily, getMyChallenges, onChallengeComplete } from "../lib/casino";
+	import { loadMe, getMyRank, onBalance, fmt, getDailyStatus, claimDaily, getMyChallenges, onChallengeComplete, bjCreateRoom, bjListRooms, bjJoin, bjJoinByCode, bjStart, pokerCreateRoom, pokerListRooms, pokerJoin, pokerJoinByCode,getJackpot, onJackpot, getFeed, onFeed, type FeedItem } from "../lib/casino";
 
 	const helloEl = document.querySelector<HTMLElement>("[data-hello]")!;
 	const balEl = document.querySelector<HTMLElement>("[data-hero-balance]")!;
 	const rankEl = document.querySelector<HTMLElement>("[data-rank]")!;
-	const playersEl = document.querySelector<HTMLElement>("[data-players]")!;
+	const jackpotEl = document.querySelector<HTMLElement>("[data-jackpot]")!;
 
 	onBalance((pts) => (balEl.textContent = fmt(pts)));
+
+	// ── Jackpot ───────────────────────────────────────────────────────────────
+	getJackpot().then((n) => (jackpotEl.textContent = `${fmt(n)} pts`));
+	onJackpot((n) => (jackpotEl.textContent = `${fmt(n)} pts`));
+
+	// ── Live feed ─────────────────────────────────────────────────────────────
+	const feedEl = document.querySelector<HTMLElement>("[data-feed]")!;
+	const feedEmpty = document.querySelector<HTMLElement>("[data-feed-empty]")!;
+
+	function feedChip(item: FeedItem): HTMLElement
+	{
+		const el = document.createElement("div");
+		el.className = "feed-chip";
+		const mult = item.bet > 0 ? (item.payout / item.bet).toFixed(1) : "?";
+		el.innerHTML = `
+			<b>${item.display_name || item.login}</b>
+			<span class="feed-game">${item.game}</span>
+			<span class="feed-win">+${fmt(item.payout)} pts</span>
+			<span class="feed-mult">×${mult}</span>`;
+		return el;
+	}
+
+	function pushFeedChip(item: FeedItem, animate = true)
+	{
+		feedEmpty.hidden = true;
+		const chip = feedChip(item);
+		if (animate) chip.classList.add("pop");
+		feedEl.prepend(chip);
+		while (feedEl.querySelectorAll(".feed-chip").length > 12)
+			feedEl.querySelector(".feed-chip:last-of-type")?.remove();
+	}
+
+	getFeed().then((items) => items.slice(0, 12).reverse().forEach((i) => pushFeedChip(i, false)));
+	onFeed((item) => pushFeedChip(item));
 
 	loadMe().then(async (me) =>
 	{
 		if (!me) return; // Nav handles redirect
 		helloEl.textContent = `Salut, ${me.display_name || me.login} 👋`;
 
-		const [rank, stats] = await Promise.all([getMyRank(), getStats()]);
-		playersEl.textContent = fmt(stats.players);
+		const rank = await getMyRank();
 		rankEl.textContent = rank ? `#${rank}` : "—";
 
 		// Weekly challenges
@@ -223,6 +362,254 @@ const games = [
 		if (e.target === dailyModal) dailyModal.hidden = true;
 	});
 
+	// ── Poker modal ───────────────────────────────────────────────────────────
+	const pkModal   = document.querySelector<HTMLElement>("[data-pk-modal]")!;
+	const pkRoomsEl = document.querySelector<HTMLElement>("[data-pk-rooms]")!;
+	const pkCodeIn  = document.querySelector<HTMLInputElement>("[data-pk-code]")!;
+	const pkErr     = document.querySelector<HTMLElement>("[data-pk-err]")!;
+	const pkForm    = document.querySelector<HTMLElement>("[data-pk-form]")!;
+	const pkNameIn  = document.querySelector<HTMLInputElement>("[data-pk-name]")!;
+	let pkVis: "public" | "private" = "public";
+
+	function pkError(msg: string)
+	{
+		pkErr.textContent = msg;
+		pkErr.hidden = false;
+	}
+
+	async function pkRefreshRooms()
+	{
+		pkRoomsEl.innerHTML = `<span class="bj-empty">Chargement…</span>`;
+		const rooms = await pokerListRooms();
+		pkRoomsEl.innerHTML = rooms.length
+			? rooms.map((r: any) => `
+				<button class="bj-room" data-room="${r.id}">
+					<span class="bjr-name">${r.name}</span>
+					<span class="bjr-meta">${r.host} · ${r.players}/${r.maxSeats} · ${r.phase === "waiting" ? "en attente" : "en jeu"}</span>
+					<span class="bjr-go">→</span>
+				</button>`).join("")
+			: `<span class="bj-empty">Aucune table publique — crée la tienne !</span>`;
+	}
+
+	document.querySelector("[data-pk-open]")?.addEventListener("click", (e) =>
+	{
+		e.preventDefault();
+		pkErr.hidden = true;
+		pkModal.hidden = false;
+		void pkRefreshRooms();
+	});
+	document.querySelector("[data-pk-close]")?.addEventListener("click", () => (pkModal.hidden = true));
+	pkModal.addEventListener("click", (e) =>
+	{
+		if (e.target === pkModal) pkModal.hidden = true;
+	});
+	document.querySelector("[data-pk-refresh]")?.addEventListener("click", () => void pkRefreshRooms());
+
+	document.querySelector("[data-pk-create]")?.addEventListener("click", () =>
+	{
+		pkForm.hidden = !pkForm.hidden;
+		if (!pkForm.hidden) pkNameIn.focus();
+	});
+
+	document.querySelectorAll<HTMLButtonElement>("[data-pk-vis]").forEach((b) =>
+	{
+		b.addEventListener("click", () =>
+		{
+			pkVis = b.dataset.pkVis as "public" | "private";
+			document.querySelectorAll("[data-pk-vis]").forEach((x) => x.classList.toggle("is-active", x === b));
+		});
+	});
+
+	document.querySelector<HTMLButtonElement>("[data-pk-confirm]")?.addEventListener("click", async (e) =>
+	{
+		const btn = e.currentTarget as HTMLButtonElement;
+		btn.disabled = true;
+		try
+		{
+			const r = await pokerCreateRoom(pkNameIn.value.trim(), pkVis === "public");
+			location.href = `/games/poker?room=${r.id}`;
+		}
+		catch (err: any)
+		{
+			pkError(err?.message ?? "Erreur");
+			btn.disabled = false;
+		}
+	});
+
+	document.querySelector("[data-pk-joincode]")?.addEventListener("click", async () =>
+	{
+		const code = pkCodeIn.value.trim();
+		if (code.length < 4) return pkError("Code invalide");
+		try
+		{
+			const r = await pokerJoinByCode(code);
+			location.href = `/games/poker?room=${r.id}`;
+		}
+		catch (err: any)
+		{
+			pkError(err?.message ?? "Room introuvable");
+		}
+	});
+
+	pkRoomsEl.addEventListener("click", async (e) =>
+	{
+		const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-room]");
+		if (!btn) return;
+		try
+		{
+			const r = await pokerJoin(btn.dataset.room!);
+			location.href = `/games/poker?room=${r.id}`;
+		}
+		catch (err: any)
+		{
+			pkError(err?.message ?? "Impossible de rejoindre");
+			void pkRefreshRooms();
+		}
+	});
+
+	// ── Keno modal ────────────────────────────────────────────────────────────
+	const kenoModal = document.querySelector<HTMLElement>("[data-keno-modal]")!;
+	const kenoFrame = document.querySelector<HTMLIFrameElement>("[data-keno-frame]")!;
+
+	document.querySelector("[data-keno-open]")?.addEventListener("click", (e) =>
+	{
+		e.preventDefault();
+		// iframe chargée à la première ouverture seulement
+		if (!kenoFrame.src) kenoFrame.src = "/games/keno?embed=1";
+		kenoModal.hidden = false;
+	});
+	document.querySelector("[data-keno-close]")?.addEventListener("click", () => (kenoModal.hidden = true));
+	kenoModal.addEventListener("click", (e) =>
+	{
+		if (e.target === kenoModal) kenoModal.hidden = true;
+	});
+
+	// ── Blackjack modal ───────────────────────────────────────────────────────
+	const bjModal   = document.querySelector<HTMLElement>("[data-bj-modal]")!;
+	const bjRoomsEl = document.querySelector<HTMLElement>("[data-bj-rooms]")!;
+	const bjCodeIn  = document.querySelector<HTMLInputElement>("[data-bj-code]")!;
+	const bjErr     = document.querySelector<HTMLElement>("[data-bj-err]")!;
+
+	function bjError(msg: string)
+	{
+		bjErr.textContent = msg;
+		bjErr.hidden = false;
+	}
+
+	async function refreshRooms()
+	{
+		bjRoomsEl.innerHTML = `<span class="bj-empty">Chargement…</span>`;
+		const rooms = await bjListRooms();
+		bjRoomsEl.innerHTML = rooms.length
+			? rooms.map((r: any) => `
+				<button class="bj-room" data-room="${r.id}">
+					<span class="bjr-name">${r.name}</span>
+					<span class="bjr-meta">${r.host} · ${r.players}/${r.maxSeats}</span>
+					<span class="bjr-go">→</span>
+				</button>`).join("")
+			: `<span class="bj-empty">Aucune table publique — crée la tienne !</span>`;
+	}
+
+	document.querySelector("[data-bj]")?.addEventListener("click", (e) =>
+	{
+		e.preventDefault();
+		bjErr.hidden = true;
+		bjModal.hidden = false;
+		void refreshRooms();
+	});
+
+	document.querySelector("[data-bj-close]")?.addEventListener("click", () => (bjModal.hidden = true));
+	bjModal.addEventListener("click", (e) =>
+	{
+		if (e.target === bjModal) bjModal.hidden = true;
+	});
+
+	document.querySelector("[data-bj-refresh]")?.addEventListener("click", () => void refreshRooms());
+
+	document.querySelector<HTMLButtonElement>("[data-bj-solo]")?.addEventListener("click", async (e) =>
+	{
+		const btn = e.currentTarget as HTMLButtonElement;
+		btn.disabled = true;
+		try
+		{
+			const r = await bjCreateRoom("Solo vs croupier", false);
+			await bjStart(r.id).catch(() => {}); // lance direct la phase de mise
+			location.href = `/table?room=${r.id}`;
+		}
+		catch (err: any)
+		{
+			bjError(err?.message ?? "Erreur");
+			btn.disabled = false;
+		}
+	});
+
+	// "Créer une table" → affiche le formulaire nom + visibilité
+	const bjForm   = document.querySelector<HTMLElement>("[data-bj-form]")!;
+	const bjNameIn = document.querySelector<HTMLInputElement>("[data-bj-name]")!;
+	let bjVis: "public" | "private" = "public";
+
+	document.querySelector("[data-bj-create]")?.addEventListener("click", () =>
+	{
+		bjForm.hidden = !bjForm.hidden;
+		if (!bjForm.hidden) bjNameIn.focus();
+	});
+
+	document.querySelectorAll<HTMLButtonElement>("[data-vis]").forEach((b) =>
+	{
+		b.addEventListener("click", () =>
+		{
+			bjVis = b.dataset.vis as "public" | "private";
+			document.querySelectorAll("[data-vis]").forEach((x) => x.classList.toggle("is-active", x === b));
+		});
+	});
+
+	document.querySelector<HTMLButtonElement>("[data-bj-confirm]")?.addEventListener("click", async (e) =>
+	{
+		const btn = e.currentTarget as HTMLButtonElement;
+		btn.disabled = true;
+		try
+		{
+			const r = await bjCreateRoom(bjNameIn.value.trim(), bjVis === "public");
+			location.href = `/table?room=${r.id}`;
+		}
+		catch (err: any)
+		{
+			bjError(err?.message ?? "Erreur");
+			btn.disabled = false;
+		}
+	});
+
+	document.querySelector("[data-bj-joincode]")?.addEventListener("click", async () =>
+	{
+		const code = bjCodeIn.value.trim();
+		if (code.length < 4) return bjError("Code invalide");
+		try
+		{
+			const r = await bjJoinByCode(code);
+			location.href = `/table?room=${r.id}`;
+		}
+		catch (err: any)
+		{
+			bjError(err?.message ?? "Room introuvable");
+		}
+	});
+
+	bjRoomsEl.addEventListener("click", async (e) =>
+	{
+		const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-room]");
+		if (!btn) return;
+		try
+		{
+			const r = await bjJoin(btn.dataset.room!);
+			location.href = `/table?room=${r.id}`;
+		}
+		catch (err: any)
+		{
+			bjError(err?.message ?? "Impossible de rejoindre");
+			void refreshRooms();
+		}
+	});
+
 </script>
 
 <style>
@@ -313,6 +700,7 @@ const games = [
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-auto-rows: 1fr;
     gap: 18px;
   }
   .card {
@@ -355,6 +743,7 @@ const games = [
     color: var(--muted);
   }
   .go {
+    margin-top: auto;
     color: var(--accent);
     font-weight: 700;
     font-size: 14px;
@@ -393,6 +782,50 @@ const games = [
   .grid .card:nth-child(3) { animation-delay: 0.3s; }
   .grid .card:nth-child(4) { animation-delay: 0.36s; }
   .grid .card:nth-child(5) { animation-delay: 0.42s; }
+  /* ── Jackpot box ── */
+  .jackpot-box {
+    border-color: rgba(245, 158, 11, 0.45);
+    background: linear-gradient(135deg, rgba(120, 72, 10, 0.35), rgba(26, 44, 56, 0.72));
+  }
+  .jackpot-box b {
+    color: #f59e0b;
+    text-shadow: 0 0 18px rgba(245, 158, 11, 0.35);
+  }
+
+  /* ── Live feed ── */
+  .feed-section { margin-bottom: 32px; }
+  .feed-strip {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    scrollbar-width: thin;
+  }
+  .feed-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+  :global(.feed-chip) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  :global(.feed-chip.pop) { animation: fadeUp 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  :global(.feed-chip b) { font-size: 12px; }
+  :global(.feed-game) { color: var(--muted); text-transform: capitalize; }
+  :global(.feed-win) { color: #22c55e; font-weight: 800; font-variant-numeric: tabular-nums; }
+  :global(.feed-mult) {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    font-weight: 800;
+    border-radius: 5px;
+    padding: 1px 6px;
+  }
+
   /* ── Weekly challenges ── */
   .challenges-section {
     margin-bottom: 8px;
@@ -577,6 +1010,174 @@ const games = [
     color: var(--muted);
     font-size: 13px;
     margin: 8px 0 0;
+  }
+
+  /* ── Blackjack modal ── */
+  .bj-card { gap: 12px; }
+
+  .keno-card {
+    max-width: 1000px;
+    gap: 10px;
+  }
+  .keno-frame {
+    width: 100%;
+    height: min(72vh, 720px);
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+  }
+
+  .bj-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+    margin-top: 6px;
+  }
+  .bj-action {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 10px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--raise);
+    color: var(--fg);
+    font-family: inherit;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.12s, transform 0.1s, background 0.12s;
+  }
+  .bj-action:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--panel-2);
+    transform: translateY(-2px);
+  }
+  .bj-action:disabled { opacity: 0.6; cursor: wait; }
+  .bja-ico { font-size: 26px; line-height: 1; }
+  .bja-meta { display: flex; flex-direction: column; gap: 2px; }
+  .bja-meta b { font-size: 14px; }
+  .bja-meta small { color: var(--muted); font-size: 11px; }
+
+  .bj-create-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.15);
+  }
+  .bj-vis {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .bjv {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--raise);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .bjv small {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 400;
+  }
+  .bjv.is-active {
+    border-color: var(--accent);
+    background: rgba(59, 130, 246, 0.12);
+  }
+
+  .bj-joinrow {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+  }
+  .bj-joinrow .input { flex: 1; text-transform: uppercase; }
+
+  .bj-rooms-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .bj-refresh {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 15px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-family: inherit;
+  }
+  .bj-refresh:hover { color: var(--fg); background: var(--raise); }
+
+  .bj-rooms {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+  :global(.bj-room) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--raise);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s;
+  }
+  :global(.bj-room:hover) {
+    border-color: var(--accent);
+    background: var(--panel-2);
+  }
+  :global(.bjr-name) {
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.bjr-meta) {
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: auto;
+    flex: none;
+  }
+  :global(.bjr-go) { color: var(--accent); font-weight: 700; flex: none; }
+  :global(.bj-empty) {
+    color: var(--muted);
+    font-size: 12px;
+    padding: 8px 0;
+  }
+  .bj-err {
+    color: var(--lose, #ef4444);
+    font-size: 12px;
+    margin: 0;
   }
 
   @media (prefers-reduced-motion: reduce) {

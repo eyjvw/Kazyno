@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { jwt } from "@elysiajs/jwt";
 import { sql } from "./db";
 import { getServer, publishBalance, publishLeaderboard, publishAdminLog } from "./realtime";
+import { rl, BUCKETS } from "./ratelimit";
 import { recordStat } from "./gamestats";
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? "dev-insecure-change-me";
@@ -101,6 +102,7 @@ async function doCrash()
 	history.push(round.crashAt);
 	if (history.length > 50) history.shift();
 
+	const { updateChallengeProgress } = await import("./achievements");
 	for (const [, bet] of round.bets)
 	{
 		if (bet.cashedOut !== null) continue;
@@ -109,6 +111,9 @@ async function doCrash()
 			bet: bet.amount, payout: 0, win: false,
 		});
 		void recordStat(bet.userId, "crash", bet.amount, 0);
+		// Un pari perdant compte aussi comme partie jouée pour les défis
+		void updateChallengeProgress(bet.userId, "play_crash_3");
+		void updateChallengeProgress(bet.userId, "play_5_games");
 	}
 
 	publish({
@@ -171,6 +176,7 @@ export const crash = new Elysia({ prefix: "/api/crash" })
 			return { error: "non authentifie" };
 		}
 	})
+	.onBeforeHandle(({ userId, set }) => rl(`games:${userId}`, BUCKETS.games, set))
 
 	.post(
 		"/bet",
@@ -233,7 +239,14 @@ export const crash = new Elysia({ prefix: "/api/crash" })
 			return { error: "Pas de pari actif" };
 		}
 
-		const mult   = multNow();
+		// Le timer de crash peut être en retard : si le multiplicateur réel a
+		// déjà dépassé le point de crash, le pari est perdu.
+		const mult = multNow();
+		if (mult >= round.crashAt)
+		{
+			set.status = 409;
+			return { error: "Crashed" };
+		}
 		const payout = Math.floor(bet.amount * mult);
 		bet.cashedOut = mult;
 

@@ -7,7 +7,7 @@ import Nav from "../components/Nav.astro";
   <Nav />
   <main class="wrap">
     <div class="topbar">
-      <a class="back" href="/blackjack">← Quitter</a>
+      <a class="back" href="/app" data-quit>← Quitter</a>
       <span class="rname" data-rname>Table</span>
       <span class="code">Code <b data-code>—</b></span>
     </div>
@@ -47,7 +47,7 @@ import Nav from "../components/Nav.astro";
 	const felt2d = $("[data-felt2d]");
 	let scene: any = null;
 
-	if (!roomId) location.href = "/blackjack";
+	if (!roomId) { location.href = "/app"; throw new Error("no room"); }
 
 	// ── 2D DOM fallback renderer (always available) ───────────────────────
 	const RED = (s: string) => s === "♥" || s === "♦";
@@ -79,8 +79,8 @@ import Nav from "../components/Nav.astro";
 							s.result && room.phase === "payout"
 								? `<span class="r2 ${s.result}">${RES[s.result] ?? ""}${s.win > 0 ? " +" + s.win : ""}</span>`
 								: "";
-						return `<div class="seat2 ${turn ? "turn" : ""} ${s.userId === myId ? "me" : ""}">
-							<span class="sn">${s.display_name || s.login}${s.isBot ? " 🤖" : ""}</span>
+						return `<div class="seat2 ${turn ? "turn" : ""} ${s.userId === myId ? "me" : ""} ${s.left ? "gone" : ""}">
+							<span class="sn">${s.display_name || s.login}${s.isBot ? " 🤖" : ""}${s.left ? " 📴" : ""}</span>
 							<div class="row2">${(s.cards || []).map(cardHtml).join("") || '<span class="c2 empty"></span>'}</div>
 							<span class="sf">${s.cards?.length ? `<b>${s.value}</b>` : ""}${s.bet ? ` · ${s.bet} pts` : ""} ${res}</span>
 						</div>`;
@@ -90,6 +90,7 @@ import Nav from "../components/Nav.astro";
 	}
 
 	// ── Controls ──────────────────────────────────────────────────────────
+	let lastControlsKey = "";
 	function renderControls(room: any)
 	{
 		const myId = getMyId();
@@ -97,6 +98,17 @@ import Nav from "../components/Nav.astro";
 		const isHost = room.hostId === myId;
 		const isMyTurn =
 			room.phase === "playing" && mySeat && room.turnSeatId === mySeat.seatId;
+		// Ne pas reconstruire le DOM si l'état des contrôles n'a pas changé —
+		// sinon chaque broadcast efface la saisie de mise en cours.
+		const key = [
+			room.phase, isHost, !!isMyTurn,
+			mySeat ? mySeat.bet > 0 : "none",
+			isMyTurn ? mySeat.cards.length : 0,
+			room.turnSeatId,
+			room.phase === "waiting" ? room.seats.filter(Boolean).length : 0,
+		].join("|");
+		if (key === lastControlsKey) return;
+		lastControlsKey = key;
 		let html = "";
 		if (room.phase === "waiting")
 		{
@@ -106,7 +118,8 @@ import Nav from "../components/Nav.astro";
 				html = `<button class="btn" data-start ${n < 1 ? "disabled" : ""}>Démarrer la manche</button>
 					<button class="btn ghost" data-bot>+ Bot</button>
 					<button class="btn ghost" data-invite>Inviter un ami</button>`;
-			} else html = `<span class="wait">En attente que l'hôte lance la manche…</span>`;
+			} else html = `<span class="wait">En attente que l'hôte lance la manche…</span>
+					<button class="btn ghost" data-invite>Inviter un ami</button>`;
 		}
 		else if (room.phase === "betting")
 		{
@@ -157,7 +170,6 @@ import Nav from "../components/Nav.astro";
 
 	async function openInvite()
 	{
-		const friends: FriendCard[] = await getFriends();
 		const ex = document.querySelector(".invite-pop");
 		if (ex)
 		{
@@ -166,29 +178,47 @@ import Nav from "../components/Nav.astro";
 		}
 		const pop = document.createElement("div");
 		pop.className = "invite-pop panel";
-		pop.innerHTML = friends.length
+		pop.innerHTML = `<div class="inv-head">Inviter des amis</div><span class="inv-empty">Chargement…</span>`;
+		controls.appendChild(pop);
+
+		const friends: FriendCard[] = await getFriends();
+		// En ligne d'abord, comme Steam
+		friends.sort((a, b) => Number(b.online ?? false) - Number(a.online ?? false));
+		const avatar = (f: FriendCard) =>
+			f.image_url
+				? `<img class="inv-pp" src="${f.image_url}" alt="" loading="lazy" />`
+				: `<span class="inv-pp inv-pp-fallback">${(f.display_name || f.login)[0].toUpperCase()}</span>`;
+		pop.innerHTML = `<div class="inv-head">Inviter des amis</div>` + (friends.length
 			? friends
 					.map(
-						(f) =>
-							`<button class="inv-item" data-inv="${f.id}">${f.display_name || f.login}${f.online ? " 🟢" : ""}</button>`,
+						(f) => `
+						<button class="inv-item ${f.online ? "on" : "off"}" data-inv="${f.id}">
+							<span class="inv-pp-wrap">${avatar(f)}<i class="inv-dot ${f.online ? "on" : ""}"></i></span>
+							<span class="inv-meta">
+								<b>${f.display_name || f.login}</b>
+								<small>${f.online ? "En ligne" : "Hors ligne"}</small>
+							</span>
+							<span class="inv-go">Inviter</span>
+						</button>`,
 					)
 					.join("")
-			: `<span class="inv-empty">Aucun ami à inviter.</span>`;
-		controls.appendChild(pop);
+			: `<span class="inv-empty">Aucun ami à inviter.</span>`);
+
 		pop.addEventListener("click", async (e) =>
 		{
-			const id = (e.target as HTMLElement).dataset.inv;
-			if (!id) return;
+			const item = (e.target as HTMLElement).closest<HTMLElement>("[data-inv]");
+			if (!item) return;
+			const go = item.querySelector<HTMLElement>(".inv-go")!;
 			try
 			{
-				await bjInvite(roomId, Number(id));
-				toast("Invitation envoyée");
+				await bjInvite(roomId, Number(item.dataset.inv));
+				go.textContent = "Envoyée ✓";
+				item.classList.add("sent");
 			}
 			catch (err: any)
 			{
 				toast(err?.message ?? "Erreur");
 			}
-			pop.remove();
 		});
 	}
 
@@ -199,7 +229,7 @@ import Nav from "../components/Nav.astro";
 		if (msg.type === "room_closed")
 		{
 			toast("La table a été fermée");
-			setTimeout(() => (location.href = "/blackjack"), 1200);
+			setTimeout(() => (location.href = "/app"), 1200);
 			return;
 		}
 		if (msg.type === "room" && msg.room.id === roomId)
@@ -212,23 +242,33 @@ import Nav from "../components/Nav.astro";
 		}
 	});
 
-	window.addEventListener("beforeunload", () =>
+	// Pas de leave sur unload : un reload doit retrouver la table (le siège
+	// reste, doJoin re-attache). Les sièges fantômes sont nettoyés par le
+	// timer d'inactivité serveur. On quitte uniquement via le bouton.
+	window.addEventListener("beforeunload", () => unsubscribeRoom(roomId));
+
+	$("[data-quit]").addEventListener("click", async (e) =>
 	{
-		unsubscribeRoom(roomId);
-		navigator.sendBeacon?.(`/api/bj/rooms/${roomId}/leave`);
+		e.preventDefault();
+		await fetch(`/api/bj/rooms/${roomId}/leave`, { method: "POST" }).catch(() => {});
+		location.href = "/app";
 	});
 
 	// Subscribe FIRST so the table works even if 3D/WebGL is unavailable.
 	loadMe().then(async () =>
 	{
 		subscribeRoom(roomId);
+		// Re-attache le siège si on revient après un refresh mid-round
+		// (le serveur nous avait marqué "left"). Erreur ignorée : simple spectateur.
+		const { bjJoin } = await import("../lib/casino");
+		bjJoin(roomId).catch(() => {});
 		// Room gone (server restarted / bad id) -> back to lobby.
 		setTimeout(() =>
 		{
 			if (!gotState)
 			{
 				toast("Table introuvable");
-				location.href = "/blackjack";
+				location.href = "/app";
 			}
 		}, 2500);
 		try
@@ -379,6 +419,9 @@ import Nav from "../components/Nav.astro";
     border-color: var(--accent);
     box-shadow: 0 0 16px rgba(59, 130, 246, 0.4);
   }
+  .felt2d :global(.seat2.gone) {
+    opacity: 0.5;
+  }
   .felt2d :global(.seat2.me) {
     background: rgba(59, 130, 246, 0.1);
   }
@@ -431,26 +474,108 @@ import Nav from "../components/Nav.astro";
     position: absolute;
     bottom: calc(100% + 8px);
     right: 16px;
-    padding: 6px;
+    padding: 8px;
     display: flex;
     flex-direction: column;
     gap: 2px;
-    min-width: 200px;
+    min-width: 280px;
+    max-height: 340px;
+    overflow-y: auto;
     z-index: 30;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  }
+  .invite-pop :global(.inv-head) {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    padding: 6px 10px 8px;
   }
   .invite-pop :global(.inv-item) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     text-align: left;
     background: transparent;
     border: none;
     color: var(--fg);
     font-family: inherit;
     font-size: 13px;
-    padding: 10px;
-    border-radius: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
     cursor: pointer;
+    width: 100%;
   }
   .invite-pop :global(.inv-item:hover) {
     background: var(--panel-2);
+  }
+  .invite-pop :global(.inv-item.off) {
+    opacity: 0.55;
+  }
+  .invite-pop :global(.inv-item.sent .inv-go) {
+    color: var(--win);
+  }
+  .invite-pop :global(.inv-pp-wrap) {
+    position: relative;
+    flex: none;
+    width: 34px;
+    height: 34px;
+  }
+  .invite-pop :global(.inv-pp) {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+    background: var(--raise);
+  }
+  .invite-pop :global(.inv-pp-fallback) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 15px;
+    color: var(--muted);
+  }
+  .invite-pop :global(.inv-dot) {
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #64748b;
+    border: 2px solid var(--panel);
+  }
+  .invite-pop :global(.inv-dot.on) {
+    background: #22c55e;
+  }
+  .invite-pop :global(.inv-meta) {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+  .invite-pop :global(.inv-meta b) {
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .invite-pop :global(.inv-meta small) {
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .invite-pop :global(.inv-item.on .inv-meta small) {
+    color: #22c55e;
+  }
+  .invite-pop :global(.inv-go) {
+    margin-left: auto;
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 12px;
+    flex: none;
   }
   .invite-pop :global(.inv-empty) {
     color: var(--muted);

@@ -13,11 +13,11 @@ export const stats = new Elysia({ prefix: "/api" })
 
 		const leaderboard = (await sql`
 			WITH ranked AS (
-				SELECT id, login, display_name, image_url, points,
+				SELECT id, login, display_name, image_url, points, title, name_color,
 							 ROW_NUMBER() OVER (ORDER BY points DESC, created_at ASC) AS rank
 				FROM users
 			)
-			SELECT rank, login, display_name, image_url, points
+			SELECT rank, login, display_name, image_url, points, title, name_color
 			FROM ranked
 			WHERE ${q} = '' OR lower(login) LIKE ${prefix} OR lower(display_name) LIKE ${like}
 			ORDER BY rank
@@ -40,7 +40,7 @@ export const stats = new Elysia({ prefix: "/api" })
 
 	.get("/leaderboard/game/:game", async ({ params }) =>
 	{
-		const valid = ["coinflip", "dice", "limbo", "plinko", "slots", "roulette", "crash", "mines"];
+		const valid = ["coinflip", "dice", "limbo", "plinko", "slots", "roulette", "crash", "mines", "wheel", "hilo", "tower", "blackjack"];
 		if (!valid.includes(params.game)) return { leaderboard: [] };
 
 		const rows = await sql`

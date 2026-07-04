@@ -1,0 +1,177 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Layout title="PISCASINO — Boutique">
+  <Nav />
+  <main class="shop">
+    <header class="game-header">
+      <span class="gh-icon">🛍️</span>
+      <div>
+        <h1>Boutique</h1>
+        <p>Dépense tes points : titres et couleurs de pseudo</p>
+      </div>
+    </header>
+
+    <section class="shop-sec">
+      <h2 class="section-title">Titres</h2>
+      <div class="shop-grid" data-titles></div>
+    </section>
+
+    <section class="shop-sec">
+      <h2 class="section-title">Couleurs de pseudo</h2>
+      <div class="shop-grid" data-colors></div>
+    </section>
+  </main>
+  <Footer />
+</Layout>
+
+<script>
+	import { getShop, buyItem, equipItem, fmt, toast, getBalance } from "../lib/casino";
+
+	const titlesEl = document.querySelector<HTMLElement>("[data-titles]")!;
+	const colorsEl = document.querySelector<HTMLElement>("[data-colors]")!;
+
+	interface Item
+	{
+		key: string;
+		kind: "title" | "color";
+		label: string;
+		value: string;
+		price: number;
+	}
+
+	let owned: string[] = [];
+	let equipped: { title: string | null; name_color: string | null } = { title: null, name_color: null };
+	let items: Item[] = [];
+
+	function render()
+	{
+		titlesEl.innerHTML = "";
+		colorsEl.innerHTML = "";
+		for (const item of items)
+		{
+			const has = owned.includes(item.key);
+			const isEquipped = item.kind === "title"
+				? equipped.title === item.value
+				: equipped.name_color === item.value;
+			const card = document.createElement("div");
+			card.className = "shop-card" + (isEquipped ? " equipped" : "");
+			card.innerHTML = `
+				<div class="shop-preview">${
+					item.kind === "title"
+						? `<span class="title-badge">${item.value}</span>`
+						: `<span class="color-preview" style="color:${item.value}">sbonneau</span>`
+				}</div>
+				<b class="shop-label">${item.label}</b>
+				<span class="shop-price">${has ? (isEquipped ? "Équipé ✓" : "Possédé") : `${fmt(item.price)} pts`}</span>
+				<button class="btn shop-btn" data-key="${item.key}">
+					${isEquipped ? "Retirer" : has ? "Équiper" : "Acheter"}
+				</button>`;
+			const btn = card.querySelector<HTMLButtonElement>(".shop-btn")!;
+			btn.addEventListener("click", async () =>
+			{
+				btn.disabled = true;
+				try
+				{
+					if (isEquipped)
+					{
+						await equipItem(null, item.kind);
+						if (item.kind === "title") equipped.title = null;
+						else equipped.name_color = null;
+					}
+					else if (has)
+					{
+						await equipItem(item.key);
+						if (item.kind === "title") equipped.title = item.value;
+						else equipped.name_color = item.value;
+					}
+					else
+					{
+						if (getBalance() < item.price) throw new Error("Solde insuffisant");
+						await buyItem(item.key);
+						owned.push(item.key);
+						toast(`🛍️ ${item.label} acheté !`);
+					}
+					render();
+				}
+				catch (e: any)
+				{
+					toast(e?.message ?? "Erreur");
+					btn.disabled = false;
+				}
+			});
+			(item.kind === "title" ? titlesEl : colorsEl).appendChild(card);
+		}
+	}
+
+	getShop().then((d) =>
+	{
+		items = d.items ?? [];
+		owned = d.owned ?? [];
+		equipped = d.equipped ?? { title: null, name_color: null };
+		render();
+	});
+</script>
+
+<style>
+  .shop {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    margin: 0 auto;
+    padding: clamp(20px, 4vw, 40px) clamp(20px, 5vw, 64px);
+  }
+  .shop-sec { margin-bottom: 32px; }
+  .section-title {
+    margin: 0 0 16px;
+    font-size: 20px;
+    font-weight: 800;
+  }
+  .shop-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 16px;
+  }
+  :global(.shop-card) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 20px 16px;
+    text-align: center;
+    transition: border-color 0.15s, transform 0.15s;
+  }
+  :global(.shop-card:hover) { transform: translateY(-2px); }
+  :global(.shop-card.equipped) {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.05);
+  }
+  :global(.shop-preview) {
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+  }
+  :global(.title-badge) {
+    background: rgba(245, 158, 11, 0.14);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 13px;
+    font-weight: 800;
+  }
+  :global(.color-preview) { font-size: 17px; font-weight: 800; }
+  :global(.shop-label) { font-size: 13px; }
+  :global(.shop-price) {
+    color: var(--muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  :global(.shop-btn) { width: 100%; font-size: 13px; padding: 9px; }
+</style>

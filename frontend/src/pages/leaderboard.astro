@@ -80,10 +80,12 @@ import Footer from "../components/Footer.astro";
 		const av = r.image_url
 			? `<img class="av" src="${r.image_url}" width="28" height="28" alt="" />`
 			: `<span class="av fb">${initial(name)}</span>`;
+		const color = (r as any).name_color ? ` style="color:${(r as any).name_color}"` : "";
+		const title = (r as any).title ? `<span class="lb-title">${(r as any).title}</span>` : "";
 		return `<li class="row${isMe ? " me" : ""}" data-login="${r.login}">
 			<span class="${rankCls}">${r.rank}</span>
 			${av}
-			<a class="name" href="/profile?u=${r.login}">${name}<small>@${r.login}</small></a>
+			<a class="name" href="/profile?u=${r.login}"><span${color}>${name}${title}</span><small>@${r.login}</small></a>
 			<span class="pts">${fmt(r.points)} <em>pts</em></span>
 		</li>`;
 	}
@@ -200,6 +202,10 @@ import Footer from "../components/Footer.astro";
 		{ id: "roulette",  label: "Roulette",  icon: "🎡" },
 		{ id: "crash",     label: "Crash",     icon: "🚀" },
 		{ id: "mines",     label: "Mines",     icon: "💣" },
+		{ id: "wheel",     label: "Wheel",     icon: "🛞" },
+		{ id: "hilo",      label: "Hi-Lo",     icon: "🃏" },
+		{ id: "tower",     label: "Tower",     icon: "🗼" },
+		{ id: "keno",      label: "Keno",      icon: "🔢" },
 	];
 
 	const gameTabs = $("[data-game-tabs]");
@@ -353,6 +359,18 @@ import Footer from "../components/Footer.astro";
     color: var(--muted);
     font-weight: 400;
     font-size: 11px;
+  }
+  .list :global(.lb-title) {
+    background: rgba(245, 158, 11, 0.14);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: 10px;
+    font-weight: 800;
+    margin-left: 7px;
+    vertical-align: middle;
+    white-space: nowrap;
   }
   .list :global(.pts) {
     font-weight: 800;

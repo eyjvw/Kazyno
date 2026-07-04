@@ -14,5 +14,9 @@
   "dependencies": {
     "astro": "^7.0.0",
     "three": "^0.184.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.9",
+    "typescript": "^6.0.3"
   }
 }

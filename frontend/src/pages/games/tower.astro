@@ -1,0 +1,302 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+---
+
+<Layout title="PISCASINO — Tower">
+  <Nav />
+  <header class="game-header">
+    <span class="gh-icon">🗼</span>
+    <h1>Tower</h1>
+    <span class="gh-sub">· Grimpe 8 étages, 1 piège par étage · jusqu'à ~25×</span>
+  </header>
+  <div class="shell">
+    <aside class="panel betpanel">
+      <div class="field">
+        <label>Mise</label>
+        <input class="input" data-bet type="number" min="1" value="100" />
+        <div class="chips">
+          <button data-amt="half">½</button>
+          <button data-amt="double">2×</button>
+          <button data-amt="max">Max</button>
+        </div>
+      </div>
+
+      <div class="mult-info" data-mult-box hidden>
+        <span class="mult-lbl">Multiplicateur</span>
+        <span class="mult-big" data-cur-mult>1.00×</span>
+      </div>
+
+      <button class="btn bet-btn" data-play>Jouer</button>
+      <button class="btn cashout-btn" data-cashout hidden>Cashout</button>
+      <p class="result" data-result></p>
+
+      <div class="stat-row">
+        <div class="stat"><span>Étage</span><b data-stat-row>0/8</b></div>
+        <div class="stat"><span>Prochain</span><b data-stat-next>1.46×</b></div>
+      </div>
+      <div class="sess-stats" data-sess></div>
+    </aside>
+
+    <main class="panel stage tower-stage">
+      <div class="tower" data-tower></div>
+    </main>
+  </div>
+</Layout>
+
+<script>
+	import { loadMe, setupAmount, fmt, towerStart, towerPick, towerCashout, getTowerSession } from "../../lib/casino";
+	import { GameSession } from "../../lib/session";
+
+	const ROWS = 8, COLS = 3;
+	const EDGE = 0.97;
+	const rowMult = (n: number) => (n === 0 ? 1 : EDGE / Math.pow(2 / 3, n));
+
+	const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
+	const playBtn  = document.querySelector<HTMLButtonElement>("[data-play]")!;
+	const cashBtn  = document.querySelector<HTMLButtonElement>("[data-cashout]")!;
+	const resultEl = document.querySelector<HTMLElement>("[data-result]")!;
+	const towerEl  = document.querySelector<HTMLElement>("[data-tower]")!;
+	const multBox  = document.querySelector<HTMLElement>("[data-mult-box]")!;
+	const curMult  = document.querySelector<HTMLElement>("[data-cur-mult]")!;
+	const statRow  = document.querySelector<HTMLElement>("[data-stat-row]")!;
+	const statNext = document.querySelector<HTMLElement>("[data-stat-next]")!;
+	const session  = new GameSession(null, document.querySelector("[data-sess]"));
+
+	setupAmount(betInput);
+
+	let active  = false;
+	let gameBet = 0;
+	let row     = 0; // prochain étage à jouer
+	let picks: number[] = []; // case choisie par étage franchi
+
+	// Rangée 0 en bas → construite de haut en bas dans le DOM.
+	function buildTower(traps: number[] | null = null)
+	{
+		towerEl.innerHTML = "";
+		for (let r = ROWS - 1; r >= 0; r--)
+		{
+			const line = document.createElement("div");
+			line.className = "trow" + (active && r === row ? " current" : "") + (r < row ? " cleared" : "");
+			const lbl = document.createElement("span");
+			lbl.className = "tmult";
+			lbl.textContent = rowMult(r + 1).toFixed(2) + "×";
+			line.appendChild(lbl);
+			for (let c = 0; c < COLS; c++)
+			{
+				const cell = document.createElement("button");
+				cell.className = "tcell";
+				if (r < row && picks[r] === c) { cell.classList.add("safe"); cell.textContent = "✓"; }
+				if (traps && traps[r] === c && r <= row) { cell.classList.add("trap"); cell.textContent = "💥"; }
+				if (active && r === row)
+					cell.addEventListener("click", () => void onPick(c));
+				else cell.disabled = true;
+				line.appendChild(cell);
+			}
+			towerEl.appendChild(line);
+		}
+	}
+
+	function refreshPanel()
+	{
+		const m = rowMult(row);
+		curMult.textContent = m.toFixed(2) + "×";
+		statRow.textContent = `${row}/${ROWS}`;
+		statNext.textContent = row < ROWS ? rowMult(row + 1).toFixed(2) + "×" : "—";
+		cashBtn.textContent = `Cashout ${m.toFixed(2)}× · +${fmt(Math.floor(gameBet * m))} pts`;
+		cashBtn.hidden = !active || row === 0;
+	}
+
+	function endGame()
+	{
+		active = false;
+		multBox.hidden = true;
+		cashBtn.hidden = true;
+		playBtn.hidden = false;
+	}
+
+	async function onPick(tile: number)
+	{
+		if (!active) return;
+		try
+		{
+			const r = await towerPick(tile);
+			if (r.safe)
+			{
+				picks[row] = tile;
+				row++;
+				buildTower();
+				refreshPanel();
+				if (r.topReached)
+				{
+					// Sommet atteint : cashout auto
+					const c = await towerCashout();
+					endGame();
+					buildTower(c.traps as number[]);
+					resultEl.textContent = `🏆 Sommet ! ${(c.multiplier as number).toFixed(2)}× · +${fmt(c.payout)} pts`;
+					resultEl.className = "result win";
+					session.record(true, gameBet, c.payout);
+				}
+			}
+			else
+			{
+				endGame();
+				buildTower(r.traps as number[]);
+				resultEl.textContent = `💥 Piège ! −${fmt(gameBet)} pts`;
+				resultEl.className = "result lose";
+				session.record(false, gameBet, 0);
+			}
+		}
+		catch (e: any)
+		{
+			resultEl.textContent = e.message ?? "Erreur";
+			resultEl.className = "result lose";
+		}
+	}
+
+	cashBtn.addEventListener("click", async () =>
+	{
+		cashBtn.disabled = true;
+		try
+		{
+			const r = await towerCashout();
+			endGame();
+			buildTower(r.traps as number[]);
+			resultEl.textContent = `${(r.multiplier as number).toFixed(2)}× · +${fmt(r.payout)} pts`;
+			resultEl.className = "result win";
+			session.record(true, gameBet, r.payout);
+		}
+		catch (e: any)
+		{
+			resultEl.textContent = e.message ?? "Erreur";
+			resultEl.className = "result lose";
+		}
+		finally
+		{
+			cashBtn.disabled = false;
+		}
+	});
+
+	playBtn.addEventListener("click", async () =>
+	{
+		playBtn.disabled = true;
+		resultEl.textContent = "";
+		resultEl.className = "result";
+		try
+		{
+			const amount = Math.max(1, Math.floor(Number(betInput.value)));
+			await towerStart(amount);
+			gameBet = amount;
+			active  = true;
+			row     = 0;
+			picks   = [];
+			playBtn.hidden = true;
+			multBox.hidden = false;
+			buildTower();
+			refreshPanel();
+		}
+		catch (e: any)
+		{
+			resultEl.textContent = e.message ?? "Erreur";
+			resultEl.className = "result lose";
+		}
+		finally
+		{
+			playBtn.disabled = false;
+		}
+	});
+
+	buildTower();
+
+	loadMe().then(async () =>
+	{
+		const s = await getTowerSession();
+		if (s)
+		{
+			active  = true;
+			gameBet = s.bet;
+			row     = s.row;
+			picks   = []; // cases exactes inconnues après refresh, étages franchis grisés
+			playBtn.hidden = true;
+			multBox.hidden = false;
+			buildTower();
+			refreshPanel();
+		}
+	});
+</script>
+
+<style>
+  .tower-stage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    min-height: 520px;
+  }
+  .tower {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(360px, 100%);
+  }
+  :global(.trow) {
+    display: grid;
+    grid-template-columns: 54px repeat(3, 1fr);
+    gap: 8px;
+    align-items: center;
+    opacity: 0.55;
+  }
+  :global(.trow.current) { opacity: 1; }
+  :global(.trow.cleared) { opacity: 0.8; }
+  :global(.tmult) {
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    padding-right: 4px;
+  }
+  :global(.trow.current .tmult) { color: var(--accent); font-weight: 700; }
+  :global(.tcell) {
+    height: 44px;
+    border-radius: 9px;
+    background: var(--raise);
+    border: 1px solid var(--line);
+    font-size: 18px;
+    cursor: pointer;
+    transition: background 0.12s, transform 0.1s, border-color 0.12s;
+  }
+  :global(.trow.current .tcell:hover:not(:disabled)) {
+    border-color: var(--accent);
+    background: var(--panel-2, #213743);
+    transform: scale(1.05);
+  }
+  :global(.tcell:disabled) { cursor: default; }
+  :global(.tcell.safe) {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: #22c55e;
+    color: #22c55e;
+  }
+  :global(.tcell.trap) {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: #ef4444;
+  }
+
+  .cashout-btn { background: #16a34a !important; margin-top: 4px; font-size: 13px; }
+  .cashout-btn:hover { filter: brightness(1.12); }
+  [hidden] { display: none !important; }
+
+  .mult-info { display: flex; flex-direction: column; gap: 2px; margin: 10px 0 4px; }
+  .mult-lbl {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .mult-big {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+</style>

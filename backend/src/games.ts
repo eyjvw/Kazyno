@@ -5,18 +5,12 @@ import { publishBalance, publishLeaderboard, publishAdminLog } from "./realtime"
 import { rl, BUCKETS } from "./ratelimit";
 import { checkAchievements, updateChallengeProgress } from "./achievements";
 import { recordStat } from "./gamestats";
+import { fairRoll } from "./fair";
+import { contributeJackpot, takeJackpot } from "./jackpot";
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? "dev-insecure-change-me";
 const EDGE = 0.99; // 1% house edge
 const MAX_BET = 1_000_000;
-
-// Crypto-strong float in [0, 1).
-function rand(): number
-{
-	const buf = new Uint32Array(1);
-	crypto.getRandomValues(buf);
-	return buf[0] / 2 ** 32;
-}
 
 class InsufficientFunds extends Error {}
 
@@ -38,11 +32,18 @@ async function settle(userId: number, bet: number, payout: number, game?: string
 	{
 		publishAdminLog({ action: "bet", game, login, bet, payout, win: payout > 0, balance: points });
 		void recordStat(userId, game, bet, payout);
+		if (payout === 0) contributeJackpot(bet);
 	}
 	return points;
 }
 
 const betField = t.Integer({ minimum: 1, maximum: MAX_BET });
+
+// ── Wheel ── 50 segments, layout partagé avec le front (index = segment) ──────
+// 0×24, 1.5×16, 2×7, 3×2, 5.5×1 → RTP 49.5/50 = 99 %
+const WHEEL_ODD = [1.5,2,1.5,2,1.5,3,1.5,2,1.5,1.5,2,1.5,5.5,1.5,2,1.5,1.5,2,1.5,3,1.5,2,1.5,1.5,1.5];
+export const WHEEL_SLICES = Array.from({ length: 50 }, (_, i) =>
+	i % 2 === 0 ? (i === 48 ? 1.5 : 0) : WHEEL_ODD[(i - 1) / 2]);
 
 export const games = new Elysia({ prefix: "/api/games" })
 	.use(jwt({ name: "jwt", secret: SESSION_SECRET }))
@@ -78,7 +79,8 @@ export const games = new Elysia({ prefix: "/api/games" })
 		async ({ body, userId }) =>
 		{
 			const mult = 2 * EDGE;
-			const outcome = rand() < 0.5 ? "heads" : "tails";
+			const { values, nonce } = await fairRoll(userId!);
+				const outcome = values[0] < 0.5 ? "heads" : "tails";
 			const win = outcome === body.side;
 			const payout = win ? Math.floor(body.bet * mult) : 0;
 			const balance = await settle(userId!, body.bet, payout, "coinflip");
@@ -87,7 +89,7 @@ export const games = new Elysia({ prefix: "/api/games" })
 			if (win) void updateChallengeProgress(userId!, "win_5_games");
 			if (win && payout - body.bet >= 1000) void updateChallengeProgress(userId!, "win_1000_pts");
 			if (win && payout >= 500) void updateChallengeProgress(userId!, "big_win_500");
-			return { win, outcome, multiplier: win ? mult : 0, payout, balance };
+			return { win, outcome, multiplier: win ? mult : 0, payout, balance, nonce };
 		},
 		{
 			body: t.Object({
@@ -105,7 +107,8 @@ export const games = new Elysia({ prefix: "/api/games" })
 			const { bet, target, direction } = body;
 			const winChance = direction === "under" ? target : 100 - target;
 			const mult = (100 / winChance) * EDGE;
-			const roll = Math.round(rand() * 10000) / 100; // 0.00 - 100.00
+			const { values, nonce } = await fairRoll(userId!);
+				const roll = Math.round(values[0] * 10000) / 100; // 0.00 - 100.00
 			const win = direction === "under" ? roll < target : roll > target;
 			const payout = win ? Math.floor(bet * mult) : 0;
 			const balance = await settle(userId!, bet, payout, "dice");
@@ -114,7 +117,7 @@ export const games = new Elysia({ prefix: "/api/games" })
 			if (win) void updateChallengeProgress(userId!, "win_5_games");
 			if (win && payout - bet >= 1000) void updateChallengeProgress(userId!, "win_1000_pts");
 			if (win && payout >= 500) void updateChallengeProgress(userId!, "big_win_500");
-			return { win, roll, multiplier: Number(mult.toFixed(4)), payout, balance };
+			return { win, roll, multiplier: Number(mult.toFixed(4)), payout, balance, nonce };
 		},
 		{
 			body: t.Object({
@@ -131,7 +134,8 @@ export const games = new Elysia({ prefix: "/api/games" })
 		async ({ body, userId }) =>
 		{
 			const { bet, target } = body;
-			const r = rand() || 1e-9;
+			const { values, nonce } = await fairRoll(userId!);
+				const r = values[0] || 1e-9;
 			const result = Math.max(1, Math.floor((EDGE / r) * 100) / 100);
 			const win = result >= target;
 			const payout = win ? Math.floor(bet * target) : 0;
@@ -141,7 +145,7 @@ export const games = new Elysia({ prefix: "/api/games" })
 			if (win) void updateChallengeProgress(userId!, "win_5_games");
 			if (win && payout - bet >= 1000) void updateChallengeProgress(userId!, "win_1000_pts");
 			if (win && payout >= 500) void updateChallengeProgress(userId!, "big_win_500");
-			return { win, result, multiplier: target, payout, balance };
+			return { win, result, multiplier: target, payout, balance, nonce };
 		},
 		{
 			body: t.Object({
@@ -157,11 +161,12 @@ export const games = new Elysia({ prefix: "/api/games" })
 		async ({ body, userId }) =>
 		{
 			const MULT = [5.6, 2.1, 1.1, 1, 0.5, 1, 1.1, 2.1, 5.6];
+				const { values, nonce } = await fairRoll(userId!, 8);
 			const path: number[] = [];
 			let bucket = 0;
 			for (let i = 0; i < 8; i++)
 			{
-				const right = rand() < 0.5 ? 0 : 1;
+				const right = values[i] < 0.5 ? 0 : 1;
 				path.push(right);
 				bucket += right;
 			}
@@ -181,6 +186,7 @@ export const games = new Elysia({ prefix: "/api/games" })
 				multiplier: mult,
 				payout,
 				balance,
+				nonce,
 			};
 		},
 		{ body: t.Object({ bet: betField }) },
@@ -201,9 +207,11 @@ export const games = new Elysia({ prefix: "/api/games" })
 				["7️⃣", 1, 250],
 			];
 			const total = REELS.reduce((a, r) => a + r[1], 0);
+				const { values, nonce } = await fairRoll(userId!, 3);
+				let spinIdx = 0;
 			const spin = () =>
 			{
-				let n = rand() * total;
+				let n = values[spinIdx++] * total;
 				for (const r of REELS)
 				{
 					if (n < r[1]) return r;
@@ -231,7 +239,14 @@ export const games = new Elysia({ prefix: "/api/games" })
 				else if (counts["💎"] === 2) mult = 5;
 			}
 
-			const payout = Math.floor(body.bet * mult);
+			// Triple 7 also wins the whole progressive jackpot.
+			let jackpotWon = 0;
+			if (mult > 0 && reels[0] === "7\uFE0F\u20E3" && reels[1] === "7\uFE0F\u20E3" && reels[2] === "7\uFE0F\u20E3")
+			{
+				const [u] = (await sql`SELECT login FROM users WHERE id = ${userId!}`) as Array<{ login: string }>;
+				jackpotWon = await takeJackpot(u?.login ?? "?");
+			}
+			const payout = Math.floor(body.bet * mult) + jackpotWon;
 			const balance = await settle(userId!, body.bet, payout, "slots");
 			const win = mult > 0;
 			void checkAchievements(userId!, { win, payout, bet: body.bet, mult: win ? mult : 0, game: "slots" });
@@ -239,7 +254,28 @@ export const games = new Elysia({ prefix: "/api/games" })
 			if (win) void updateChallengeProgress(userId!, "win_5_games");
 			if (win && payout - body.bet >= 1000) void updateChallengeProgress(userId!, "win_1000_pts");
 			if (win && payout >= 500) void updateChallengeProgress(userId!, "big_win_500");
-			return { win, reels, multiplier: mult, payout, balance };
+			return { win, reels, multiplier: mult, payout, balance, nonce, jackpotWon };
+		},
+		{ body: t.Object({ bet: betField }) },
+	)
+
+	// ── Wheel ── roue 50 segments, voir WHEEL_SLICES ──────────────────────────
+	.post(
+		"/wheel",
+		async ({ body, userId }) =>
+		{
+			const { values, nonce } = await fairRoll(userId!);
+				const slice = Math.floor(values[0] * WHEEL_SLICES.length);
+			const mult = WHEEL_SLICES[slice];
+			const payout = Math.floor(body.bet * mult);
+			const balance = await settle(userId!, body.bet, payout, "wheel");
+			const win = mult > 0;
+			void checkAchievements(userId!, { win, payout, bet: body.bet, mult: win ? mult : 0, game: "wheel" });
+			void updateChallengeProgress(userId!, "play_5_games");
+			if (win) void updateChallengeProgress(userId!, "win_5_games");
+			if (win && payout - body.bet >= 1000) void updateChallengeProgress(userId!, "win_1000_pts");
+			if (win && payout >= 500) void updateChallengeProgress(userId!, "big_win_500");
+			return { win, slice, multiplier: mult, payout, balance, nonce };
 		},
 		{ body: t.Object({ bet: betField }) },
 	)
@@ -247,16 +283,23 @@ export const games = new Elysia({ prefix: "/api/games" })
 	// ── Roulette ── European (0-36), 1% house edge ───────────────────────────
 	.post(
 		"/roulette",
-		async ({ body, userId }) =>
+		async ({ body, userId, set }) =>
 		{
 			const REDS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
-			const result = Math.floor(rand() * 37); // 0-36
+			const { values, nonce } = await fairRoll(userId!);
+				const result = Math.floor(values[0] * 37); // 0-36
 			const { bet_type, number, bet } = body;
+			if (bet_type === "number" && number === undefined)
+			{
+				set.status = 422;
+				return { error: "numéro requis" };
+			}
 			let mult = 0;
 
 			switch (bet_type)
 			{
-				case "number":  if (number === result) mult = 35 * EDGE; break;
+				// Plein paye 35:1 + mise = retour total 36x
+				case "number":  if (number === result) mult = 36 * EDGE; break;
 				case "red":     if (REDS.has(result)) mult = 2 * EDGE; break;
 				case "black":   if (!REDS.has(result) && result !== 0) mult = 2 * EDGE; break;
 				case "even":    if (result !== 0 && result % 2 === 0) mult = 2 * EDGE; break;
@@ -281,7 +324,7 @@ export const games = new Elysia({ prefix: "/api/games" })
 			if (win && payout >= 500) void updateChallengeProgress(userId!, "big_win_500");
 			if (win && payout - bet >= 1000) void updateChallengeProgress(userId!, "win_1000_pts");
 
-			return { result, win, multiplier: mult, payout, balance };
+			return { result, win, multiplier: mult, payout, balance, nonce };
 		},
 		{
 			body: t.Object({
@@ -296,4 +339,65 @@ export const games = new Elysia({ prefix: "/api/games" })
 				number: t.Optional(t.Integer({ minimum: 0, maximum: 36 })),
 			}),
 		},
+	)
+
+	// ── Keno ── 40 numéros, 10 tirés, choisis 1-10 ────────────────────────────
+	// Table de gains par (nb choisis → hits), edge inclus dans les multiplicateurs.
+	.post(
+		"/keno",
+		async ({ body, userId, set }) =>
+		{
+			const { bet, picks } = body;
+			if (new Set(picks).size !== picks.length)
+			{
+				set.status = 422;
+				return { error: "numéros en double" };
+			}
+
+			// Tirage : Fisher-Yates partiel sur 40 numéros avec 10 valeurs fair.
+			const { values, nonce } = await fairRoll(userId!, 10);
+			const pool = Array.from({ length: 40 }, (_, i) => i + 1);
+			const drawn: number[] = [];
+			for (let i = 0; i < 10; i++)
+			{
+				const j = i + Math.floor(values[i] * (pool.length - i));
+				[pool[i], pool[j]] = [pool[j], pool[i]];
+				drawn.push(pool[i]);
+			}
+
+			const drawnSet = new Set(drawn);
+			const hits = picks.filter((n) => drawnSet.has(n)).length;
+			const mult = KENO_PAYTABLE[picks.length][hits];
+			const win = mult > 0;
+			const payout = Math.floor(bet * mult);
+			const balance = await settle(userId!, bet, payout, "keno");
+
+			void checkAchievements(userId!, { win, payout, bet, mult: win ? mult : 0, game: "keno" });
+			void updateChallengeProgress(userId!, "play_5_games");
+			if (win) void updateChallengeProgress(userId!, "win_5_games");
+			if (win && payout - bet >= 1000) void updateChallengeProgress(userId!, "win_1000_pts");
+			if (win && payout >= 500) void updateChallengeProgress(userId!, "big_win_500");
+
+			return { win, drawn, hits, multiplier: mult, payout, balance, nonce };
+		},
+		{
+			body: t.Object({
+				bet:   betField,
+				picks: t.Array(t.Integer({ minimum: 1, maximum: 40 }), { minItems: 1, maxItems: 10 }),
+			}),
+		},
 	);
+
+// Index = nb de hits. Partagé avec le front (keno.astro) pour l'affichage.
+export const KENO_PAYTABLE: Record<number, number[]> = {
+	1:  [0, 3.96],
+	2:  [0, 1.9, 4.5],
+	3:  [0, 1, 3.1, 10.4],
+	4:  [0, 0.8, 1.8, 5, 22.5],
+	5:  [0, 0.25, 1.4, 4.1, 16.5, 36],
+	6:  [0, 0, 1, 3.7, 7, 16.5, 40],
+	7:  [0, 0, 0.5, 3, 4.5, 14, 31, 60],
+	8:  [0, 0, 0, 2.2, 4, 13, 22, 55, 70],
+	9:  [0, 0, 0, 1.55, 3, 8, 15, 44, 60, 85],
+	10: [0, 0, 0, 1.4, 2.25, 4.5, 8, 17, 50, 80, 100],
+};

@@ -60,6 +60,16 @@ import Footer from "../components/Footer.astro";
         <p class="msg" data-pts-res></p>
       </section>
 
+      <section class="panel card">
+        <h2>🌧️ Faire pleuvoir des points</h2>
+        <label class="lbl">Montant total</label>
+        <input class="input" data-rain-amount type="number" value="1000" min="10" />
+        <label class="lbl">Nombre de gagnants</label>
+        <input class="input" data-rain-winners type="number" value="5" min="1" max="100" />
+        <button class="btn" data-rain-start>Lancer la pluie 🌧️</button>
+        <p class="msg" data-rain-res></p>
+      </section>
+
       <section class="panel card danger-card">
         <h2>Zone dangereuse</h2>
         <p class="danger-desc">Remet tous les joueurs à 1 000 pts. Irréversible.</p>
@@ -138,6 +148,7 @@ import Footer from "../components/Footer.astro";
 		adminNotify,
 		adminAddPoints,
 		adminResetAll,
+		adminStartRain,
 		adminGetLogs,
 		getExams,
 		adminCreateExam,
@@ -149,6 +160,23 @@ import Footer from "../components/Footer.astro";
 	} from "../lib/casino";
 
 	const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
+
+	// ── Rain ────────────────────────────────────────────────────────────────
+	$("[data-rain-start]").addEventListener("click", async () =>
+	{
+		const amount = Math.floor(Number($<HTMLInputElement>("[data-rain-amount]").value));
+		const winners = Math.floor(Number($<HTMLInputElement>("[data-rain-winners]").value));
+		const res = $("[data-rain-res]");
+		try
+		{
+			await adminStartRain(amount, winners);
+			res.textContent = `🌧️ Pluie lancée : ${fmt(Math.floor(amount / winners))} pts × ${winners} gagnants (60s)`;
+		}
+		catch (e: any)
+		{
+			res.textContent = e?.message ?? "Erreur";
+		}
+	});
 
 	function makePicker(root: HTMLElement)
 	{

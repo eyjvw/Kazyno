@@ -27,6 +27,10 @@ import Footer from "../components/Footer.astro";
 		loadPresence,
 		fmt,
 		getAchievements,
+		getMyHistory,
+		getFairSeeds,
+		rotateFairSeeds,
+		toast,
 		type Profile,
 	} from "../lib/casino";
 
@@ -91,7 +95,111 @@ import Footer from "../components/Footer.astro";
 			<section class="ach-section">
 				<h2 class="ach-title">Succès <span class="ach-count">${achievements.length}</span></h2>
 				${achHtml}
-			</section>`;
+			</section>
+			${p.status === "self" ? `
+			<section class="ach-section" data-hist-section>
+				<h2 class="ach-title">Mes parties <span class="ach-count" data-hist-count>0</span></h2>
+				<div class="hist-graph" data-hist-graph></div>
+				<div class="hist-rows" data-hist-rows></div>
+			</section>
+			<section class="ach-section">
+				<h2 class="ach-title">Provably fair 🔒</h2>
+				<div class="fair-box" data-fair-box><span class="fair-muted">Chargement…</span></div>
+			</section>` : ""}`;
+
+		if (p.status === "self")
+		{
+			void renderHistory();
+			void renderFair();
+		}
+	}
+
+	// ── Personal history + profit sparkline ───────────────────────────────────
+	async function renderHistory()
+	{
+		const rows = await getMyHistory();
+		const graphEl = document.querySelector<HTMLElement>("[data-hist-graph]");
+		const rowsEl = document.querySelector<HTMLElement>("[data-hist-rows]");
+		const countEl = document.querySelector<HTMLElement>("[data-hist-count]");
+		if (!graphEl || !rowsEl || !countEl) return;
+		countEl.textContent = String(rows.length);
+		if (!rows.length)
+		{
+			graphEl.innerHTML = `<span class="fair-muted">Aucune partie enregistrée.</span>`;
+			return;
+		}
+
+		// Cumulative profit sparkline (SVG).
+		let cum = 0;
+		const pts: number[] = rows.map((r: any) => (cum += r.payout - r.bet));
+		const min = Math.min(0, ...pts);
+		const max = Math.max(0, ...pts);
+		const W = 460, H = 90, span = max - min || 1;
+		const x = (i: number) => (i / Math.max(1, pts.length - 1)) * W;
+		const y = (v: number) => H - ((v - min) / span) * H;
+		const path = pts.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+		const zero = y(0);
+		const last = pts[pts.length - 1];
+		graphEl.innerHTML = `
+			<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+				<line x1="0" y1="${zero}" x2="${W}" y2="${zero}" class="hist-zero" />
+				<path d="${path}" class="hist-line ${last >= 0 ? "up" : "down"}" />
+			</svg>
+			<div class="hist-total ${last >= 0 ? "up" : "down"}">${last >= 0 ? "+" : ""}${fmt(last)} pts sur ${rows.length} parties</div>`;
+
+		rowsEl.innerHTML = rows.slice(-15).reverse().map((r: any) =>
+		{
+			const profit = r.payout - r.bet;
+			return `<div class="hist-row">
+				<span class="hist-game">${r.game}</span>
+				<span class="hist-bet">${fmt(r.bet)} pts</span>
+				<span class="hist-profit ${profit >= 0 ? "up" : "down"}">${profit >= 0 ? "+" : ""}${fmt(profit)}</span>
+			</div>`;
+		}).join("");
+	}
+
+	// ── Provably fair panel ───────────────────────────────────────────────────
+	async function renderFair()
+	{
+		const box = document.querySelector<HTMLElement>("[data-fair-box]");
+		if (!box) return;
+		const s = await getFairSeeds();
+		if (!s)
+		{
+			box.innerHTML = `<span class="fair-muted">Erreur de chargement.</span>`;
+			return;
+		}
+		box.innerHTML = `
+			<p class="fair-muted">Chaque mise dérive son résultat de HMAC-SHA256(server_seed, client_seed:nonce).
+			Le hash du seed serveur est publié avant tes mises ; change de seed pour révéler l'ancien et vérifier.</p>
+			<div class="fair-row"><span>Hash seed serveur</span><code>${s.server_seed_hash}</code></div>
+			<div class="fair-row"><span>Client seed</span><code>${s.client_seed}</code></div>
+			<div class="fair-row"><span>Nonce</span><code>${s.nonce}</code></div>
+			<button class="btn fair-rotate" data-fair-rotate>Changer de seed (révèle l'ancien)</button>
+			<div class="fair-revealed" data-fair-revealed hidden></div>`;
+		box.querySelector<HTMLButtonElement>("[data-fair-rotate]")!.addEventListener("click", async (e) =>
+		{
+			const btn = e.currentTarget as HTMLButtonElement;
+			btn.disabled = true;
+			try
+			{
+				const r = await rotateFairSeeds();
+				const rev = box.querySelector<HTMLElement>("[data-fair-revealed]")!;
+				rev.hidden = false;
+				rev.innerHTML = `
+					<b>Ancien seed révélé :</b>
+					<div class="fair-row"><span>Server seed</span><code>${r.revealed.server_seed}</code></div>
+					<div class="fair-row"><span>Client seed</span><code>${r.revealed.client_seed}</code></div>
+					<div class="fair-row"><span>Dernier nonce</span><code>${r.revealed.last_nonce}</code></div>`;
+				toast("🔒 Nouveau seed généré");
+				setTimeout(() => void renderFair(), 4000);
+			}
+			catch (err: any)
+			{
+				toast(err?.message ?? "Erreur");
+				btn.disabled = false;
+			}
+		});
 	}
 
 	async function load()
@@ -295,6 +403,99 @@ import Footer from "../components/Footer.astro";
   .wrap :global(.ach-chip:hover) { border-color: var(--accent); }
   .wrap :global(.ach-ico)  { font-size: 18px; line-height: 1; }
   .wrap :global(.ach-name) { font-size: 12px; font-weight: 700; }
+  /* History */
+  .wrap :global(.hist-graph svg) {
+    width: 100%;
+    height: 90px;
+    display: block;
+  }
+  .wrap :global(.hist-zero) {
+    stroke: var(--line);
+    stroke-width: 1;
+    stroke-dasharray: 4 4;
+  }
+  .wrap :global(.hist-line) {
+    fill: none;
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+  }
+  .wrap :global(.hist-line.up)   { stroke: #22c55e; }
+  .wrap :global(.hist-line.down) { stroke: #ef4444; }
+  .wrap :global(.hist-total) {
+    font-size: 12px;
+    font-weight: 800;
+    margin: 8px 0 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  .wrap :global(.hist-total.up)   { color: #22c55e; }
+  .wrap :global(.hist-total.down) { color: #ef4444; }
+  .wrap :global(.hist-rows) {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .wrap :global(.hist-row) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    background: var(--raise);
+    border-radius: 8px;
+    font-size: 12px;
+  }
+  .wrap :global(.hist-game) { font-weight: 700; text-transform: capitalize; flex: 1; text-align: left; }
+  .wrap :global(.hist-bet)  { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .wrap :global(.hist-profit) { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 70px; text-align: right; }
+  .wrap :global(.hist-profit.up)   { color: #22c55e; }
+  .wrap :global(.hist-profit.down) { color: #ef4444; }
+
+  /* Provably fair */
+  .wrap :global(.fair-muted) {
+    color: var(--muted);
+    font-size: 12px;
+    margin: 0 0 10px;
+    line-height: 1.5;
+    display: block;
+    text-align: left;
+  }
+  .wrap :global(.fair-row) {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 8px;
+    text-align: left;
+  }
+  .wrap :global(.fair-row span) {
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .wrap :global(.fair-row code) {
+    font-size: 11px;
+    background: var(--raise);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 5px 8px;
+    word-break: break-all;
+  }
+  .wrap :global(.fair-rotate) {
+    width: 100%;
+    font-size: 13px;
+    padding: 10px;
+    margin-top: 4px;
+  }
+  .wrap :global(.fair-revealed) {
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-radius: 10px;
+    background: rgba(245, 158, 11, 0.06);
+    text-align: left;
+    font-size: 12px;
+  }
+  .wrap :global(.fair-revealed b) { display: block; margin-bottom: 8px; }
+
   .wrap :global(.ach-empty) {
     color: var(--muted);
     font-size: 13px;

@@ -43,6 +43,7 @@ interface Seat
 	result: string | null;
 	win: number;
 	doubled: boolean;
+	left: boolean; // déconnecté mid-round : la main se joue, siège libéré en fin de manche
 }
 interface Room
 {
@@ -145,7 +146,7 @@ const genCode = () =>
 	return c;
 };
 const occupied = (room: Room) => room.seats.filter((s): s is Seat => !!s);
-const humans = (room: Room) => occupied(room).filter((s) => !s.isBot);
+const humans = (room: Room) => occupied(room).filter((s) => !s.isBot && !s.left);
 const seatOfUser = (room: Room, userId: number) =>
 	room.seats.find((s) => s && s.userId === userId) ?? null;
 
@@ -198,6 +199,7 @@ function publicView(room: Room, forReveal = false)
 							result: s.result,
 							win: s.win,
 							doubled: s.doubled,
+							left: s.left,
 						}
 					: null,
 			),
@@ -415,11 +417,15 @@ async function settle(room: Room)
 	clearTimer(room);
 	room.timer = setTimeout(() =>
 	{
+		// Libère les sièges des joueurs partis mid-round et non revenus.
+		room.seats = room.seats.map((s) => (s && s.left ? null : s));
 		if (humans(room).length === 0)
 		{
 			closeRoom(room);
 			return;
 		}
+		if (!humans(room).some((s) => s.userId === room.hostId))
+			room.hostId = humans(room)[0].userId!;
 		room.phase = "waiting";
 		room.dealer = [];
 		for (const s of occupied(room))
@@ -516,12 +522,37 @@ export const blackjack = new Elysia({ prefix: "/api/bj" })
 		return doJoin(room, userId!, set);
 	})
 
-	.post("/rooms/:id/leave", ({ userId, params }) =>
+	.post("/rooms/:id/leave", async ({ userId, params }) =>
 	{
 		const room = rooms.get(params.id);
 		if (!room) return { ok: true };
 		const idx = room.seats.findIndex((s) => s && s.userId === userId);
-		if (idx >= 0) room.seats[idx] = null;
+		if (idx < 0) return { ok: true };
+		const s = room.seats[idx]!;
+		const wasTurn = room.phase === "playing" && room.turn === idx;
+
+		if ((room.phase === "playing" || room.phase === "dealer" || room.phase === "payout") && s.inRound)
+		{
+			// Cartes déjà distribuées : la main reste et se joue (stand), le
+			// siège est libéré en fin de manche. Un refresh peut re-rejoindre.
+			s.left = true;
+			if (s.status === "playing") s.status = "stand";
+			if (humans(room).length === 0 && room.phase === "payout")
+			{
+				closeRoom(room);
+				return { ok: true };
+			}
+			if (room.hostId === userId && humans(room).length)
+				room.hostId = humans(room)[0].userId!;
+			broadcast(room);
+			if (wasTurn) nextTurn(room);
+			return { ok: true };
+		}
+
+		// Avant le deal : refund la mise éventuelle et libère le siège.
+		const refund = room.phase === "betting" && s.bet > 0 ? s.bet : 0;
+		room.seats[idx] = null;
+		if (refund) await credit(userId!, refund);
 		if (humans(room).length === 0)
 		{
 			closeRoom(room);
@@ -529,6 +560,7 @@ export const blackjack = new Elysia({ prefix: "/api/bj" })
 		}
 		if (room.hostId === userId) room.hostId = humans(room)[0].userId!;
 		broadcast(room);
+		if (room.phase === "betting") maybeDeal(room);
 		return { ok: true };
 	})
 
@@ -564,6 +596,7 @@ export const blackjack = new Elysia({ prefix: "/api/bj" })
 			result: null,
 			win: 0,
 			doubled: false,
+			left: false,
 		};
 		broadcast(room);
 		return { ok: true };
@@ -584,6 +617,13 @@ export const blackjack = new Elysia({ prefix: "/api/bj" })
 				return err(set, 422, `mise entre ${MIN_BET} et ${MAX_BET}`);
 			s.bet = -1; // optimistic lock avant l'await
 			if (!(await debit(userId!, amount))) { s.bet = 0; return err(set, 400, "solde insuffisant"); }
+			// La phase a pu changer pendant l'await (timer deal, leave) — refund
+			if (room.phase !== "betting" || seatOfUser(room, userId!) !== s)
+			{
+				s.bet = 0;
+				await credit(userId!, amount);
+				return err(set, 400, "trop tard pour miser");
+			}
 			s.bet = amount;
 			s.inRound = true;
 			s.status = "bet";
@@ -648,6 +688,13 @@ export const blackjack = new Elysia({ prefix: "/api/bj" })
 		if (s.cards.length !== 2 || s.doubled) return err(set, 400, "double impossible");
 		s.doubled = true; // optimistic lock avant l'await
 		if (!(await debit(userId!, s.bet))) { s.doubled = false; return err(set, 400, "solde insuffisant"); }
+		// Tour passé pendant l'await (timeout / leave) — refund la 2e mise
+		if (currentSeat(room, userId!) !== s)
+		{
+			s.doubled = false;
+			await credit(userId!, s.bet);
+			return err(set, 400, "trop tard");
+		}
 		s.bet *= 2;
 		s.cards.push(draw(room));
 		s.status = handValue(s.cards).total > 21 ? "bust" : "stand";
@@ -722,6 +769,7 @@ function newSeat(u: {
 		result: null,
 		win: 0,
 		doubled: false,
+		left: false,
 	};
 }
 async function card(userId: number)
@@ -742,7 +790,17 @@ async function doJoin(
 	set: { status?: number | string },
 )
 {
-	if (seatOfUser(room, userId)) return { id: room.id };
+	const mine = seatOfUser(room, userId);
+	if (mine)
+	{
+		// Reconnexion : le siège avait été marqué "left" mid-round.
+		if (mine.left)
+		{
+			mine.left = false;
+			broadcast(room);
+		}
+		return { id: room.id };
+	}
 	if (room.phase !== "waiting") return err(set, 400, "partie en cours");
 	const idx = room.seats.findIndex((s) => !s);
 	if (idx < 0) return err(set, 400, "table pleine");

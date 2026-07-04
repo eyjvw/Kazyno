@@ -3,6 +3,7 @@ import { jwtVerify } from "jose";
 import { sql } from "./db";
 import { addPresence, removePresence } from "./realtime";
 import { roomViewJSON } from "./blackjack";
+import { pokerViewJSON } from "./poker";
 
 const secret = new TextEncoder().encode(
 	process.env.SESSION_SECRET ?? "dev-insecure-change-me",
@@ -71,7 +72,7 @@ export const realtimeWs = new Elysia().ws("/api/ws", {
 		if (msg?.type === "room:sub" && msg.id)
 		{
 			ws.subscribe(`room:${msg.id}`);
-			const view = roomViewJSON(String(msg.id));
+			const view = roomViewJSON(String(msg.id)) ?? pokerViewJSON(String(msg.id));
 			if (view) ws.send(view);
 		}
 		else if (msg?.type === "room:unsub" && msg.id)

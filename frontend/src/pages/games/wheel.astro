@@ -1,0 +1,212 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+---
+
+<Layout title="PISCASINO — Wheel">
+  <Nav />
+  <header class="game-header">
+    <span class="gh-icon">🛞</span>
+    <h1>Wheel</h1>
+    <span class="gh-sub">· 50 segments · jusqu'à 5.5×</span>
+  </header>
+  <div class="shell">
+    <aside class="panel betpanel">
+      <div class="field">
+        <label>Mise</label>
+        <input class="input" data-bet type="number" min="1" value="100" />
+        <div class="chips">
+          <button data-amt="half">½</button>
+          <button data-amt="double">2×</button>
+          <button data-amt="max">Max</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Segments</label>
+        <div class="seg-legend" data-seg-legend></div>
+      </div>
+
+      <button class="btn bet-btn" data-play>Lancer</button>
+      <p class="result" data-result></p>
+      <div class="sess-stats" data-sess></div>
+    </aside>
+
+    <main class="panel stage wheel-stage">
+      <div class="wheel-wrap">
+        <div class="pointer">▼</div>
+        <div class="wheel" data-wheel></div>
+        <div class="hub" data-hub>—</div>
+      </div>
+      <div class="hist-bar" data-hist></div>
+    </main>
+  </div>
+</Layout>
+
+<script>
+	import { bet, setupAmount, fmt, BetError } from "../../lib/casino";
+	import { GameSession } from "../../lib/session";
+
+	// Même layout que le serveur (games.ts WHEEL_SLICES)
+	const ODD = [1.5,2,1.5,2,1.5,3,1.5,2,1.5,1.5,2,1.5,5.5,1.5,2,1.5,1.5,2,1.5,3,1.5,2,1.5,1.5,1.5];
+	const SLICES = Array.from({ length: 50 }, (_, i) =>
+		i % 2 === 0 ? (i === 48 ? 1.5 : 0) : ODD[(i - 1) / 2]);
+	const COLORS: Record<string, string> = {
+		"0":   "#25313d",
+		"1.5": "#3b82f6",
+		"2":   "#22c55e",
+		"3":   "#a855f7",
+		"5.5": "#f59e0b",
+	};
+
+	const betInput = document.querySelector<HTMLInputElement>("[data-bet]")!;
+	const play     = document.querySelector<HTMLButtonElement>("[data-play]")!;
+	const result   = document.querySelector<HTMLElement>("[data-result]")!;
+	const wheelEl  = document.querySelector<HTMLElement>("[data-wheel]")!;
+	const hubEl    = document.querySelector<HTMLElement>("[data-hub]")!;
+	const legendEl = document.querySelector<HTMLElement>("[data-seg-legend]")!;
+	const session  = new GameSession(
+		document.querySelector("[data-hist]"),
+		document.querySelector("[data-sess]"),
+	);
+
+	setupAmount(betInput);
+
+	// Roue en conic-gradient
+	const SEG = 360 / SLICES.length;
+	wheelEl.style.background = `conic-gradient(${SLICES
+		.map((m, i) => `${COLORS[String(m)]} ${i * SEG}deg ${(i + 1) * SEG}deg`)
+		.join(",")})`;
+
+	// Légende : couleur → multiplicateur + nb de segments + chance
+	const counts = new Map<string, number>();
+	for (const m of SLICES) counts.set(String(m), (counts.get(String(m)) ?? 0) + 1);
+	legendEl.innerHTML = ["0", "1.5", "2", "3", "5.5"]
+		.map((m) =>
+		{
+			const n = counts.get(m) ?? 0;
+			const pct = ((n / SLICES.length) * 100).toFixed(0);
+			return `<div class="lg-row">
+				<i style="background:${COLORS[m]}"></i>
+				<b>${m === "0" ? "Perdu" : m + "×"}</b>
+				<span>${n} seg · ${pct}%</span>
+			</div>`;
+		})
+		.join("");
+
+	let rotation = 0;
+	let spinning = false;
+
+	play.addEventListener("click", async () =>
+	{
+		if (spinning) return;
+		spinning = true;
+		play.disabled = true;
+		result.textContent = "";
+		result.className = "result";
+		const amount = Number(betInput.value);
+
+		try
+		{
+			const r: any = await bet("wheel", { bet: amount });
+
+			// Tourne 5 tours + s'arrête pile sur le segment (pointeur en haut).
+			const target = 360 - (r.slice + 0.5) * SEG;
+			rotation += 5 * 360 + ((target - (rotation % 360)) + 360) % 360;
+			wheelEl.style.transform = `rotate(${rotation}deg)`;
+
+			setTimeout(() =>
+			{
+				hubEl.textContent = r.multiplier + "×";
+				hubEl.style.color = r.win ? "var(--win)" : "var(--lose)";
+				result.textContent = r.win
+					? `${r.multiplier}× · +${fmt(r.payout)} pts`
+					: `Perdu −${fmt(amount)} pts`;
+				result.classList.add(r.win ? "win" : "lose");
+				session.record(r.win, amount, r.payout);
+				spinning = false;
+				play.disabled = false;
+			}, 4200);
+		}
+		catch (e)
+		{
+			result.textContent = e instanceof BetError ? e.message : "Erreur";
+			result.classList.add("lose");
+			spinning = false;
+			play.disabled = false;
+		}
+	});
+</script>
+
+<style>
+  .wheel-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    min-height: 520px;
+  }
+  .wheel-wrap {
+    position: relative;
+    width: min(380px, 80vw);
+    aspect-ratio: 1;
+  }
+  .wheel {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 6px solid var(--line);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.4) inset, 0 8px 30px rgba(0, 0, 0, 0.35);
+    transition: transform 4s cubic-bezier(0.12, 0.6, 0.08, 1);
+  }
+  .pointer {
+    position: absolute;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--accent);
+    font-size: 26px;
+    z-index: 2;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  }
+  .hub {
+    position: absolute;
+    inset: 34%;
+    border-radius: 50%;
+    background: var(--panel);
+    border: 2px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .seg-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .seg-legend :global(.lg-row) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+  .seg-legend :global(.lg-row i) {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    flex: none;
+  }
+  .seg-legend :global(.lg-row b) {
+    min-width: 48px;
+    font-variant-numeric: tabular-nums;
+  }
+  .seg-legend :global(.lg-row span) {
+    color: var(--muted);
+    font-size: 12px;
+    margin-left: auto;
+  }
+</style>
