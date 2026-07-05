@@ -4,7 +4,7 @@ import Nav from "../components/Nav.astro";
 import Footer from "../components/Footer.astro";
 ---
 
-<Layout title="PISCASINO — Admin">
+<Layout title="Kazyno — Admin">
   <Nav />
   <main class="wrap">
     <header class="head">
@@ -88,6 +88,14 @@ import Footer from "../components/Footer.astro";
         <input class="input exam-input" data-exam-label placeholder="Libellé (ex: Exam 01)" maxlength="80" />
         <input class="input exam-input exam-date" data-exam-date type="date" />
         <input class="input exam-input exam-time" data-exam-time type="time" value="08:42" />
+        <select class="input exam-input" data-exam-rank>
+          <option value="">Rang : tous</option>
+          <option value="2">Exam 02</option>
+          <option value="3">Exam 03</option>
+          <option value="4">Exam 04</option>
+          <option value="5">Exam 05</option>
+          <option value="6">Exam 06</option>
+        </select>
         <label class="final-check">
           <input type="checkbox" data-exam-final />
           Exam final
@@ -97,6 +105,27 @@ import Footer from "../components/Footer.astro";
       <p class="msg" data-exam-res></p>
 
       <ul class="exam-list" data-exam-list>
+        <li class="exam-empty">Chargement…</li>
+      </ul>
+    </section>
+
+    <section class="panel card exam-card" data-giveaway-section hidden>
+      <div class="exam-header">
+        <h2>Giveaways</h2>
+        <span class="exam-help">Un gagnant est tiré au hasard automatiquement à la date de fin.</span>
+      </div>
+
+      <div class="exam-form">
+        <input class="input exam-input" data-gw-title placeholder="Titre (ex: Giveaway Noël)" maxlength="80" />
+        <input class="input exam-input" data-gw-prize type="number" min="1" placeholder="Points" />
+        <input class="input exam-input exam-date" data-gw-date type="date" />
+        <input class="input exam-input exam-time" data-gw-time type="time" value="20:00" />
+        <button class="btn exam-add-btn" data-gw-add>Créer</button>
+      </div>
+      <input class="input" data-gw-desc placeholder="Description (optionnel)" maxlength="280" style="margin-top:8px" />
+      <p class="msg" data-gw-res></p>
+
+      <ul class="exam-list" data-gw-list>
         <li class="exam-empty">Chargement…</li>
       </ul>
     </section>
@@ -154,6 +183,9 @@ import Footer from "../components/Footer.astro";
 		adminCreateExam,
 		adminLockExam,
 		adminDeleteExam,
+		getGiveaways,
+		adminCreateGiveaway,
+		adminDeleteGiveaway,
 		connectRealtime,
 		onAdminLog,
 		fmt,
@@ -341,11 +373,12 @@ import Footer from "../components/Footer.astro";
 			const dateVal  = $<HTMLInputElement>("[data-exam-date]").value;
 			const timeVal  = $<HTMLInputElement>("[data-exam-time]").value || "08:42";
 			const final    = $<HTMLInputElement>("[data-exam-final]").checked;
+			const rankVal  = $<HTMLSelectElement>("[data-exam-rank]").value;
 			if (!label)   { examRes.textContent = "Libellé requis"; examRes.className = "msg err"; return; }
 			if (!dateVal) { examRes.textContent = "Date requise";   examRes.className = "msg err"; return; }
 			try
 			{
-				await adminCreateExam(label, new Date(`${dateVal}T${timeVal}`).toISOString(), final);
+				await adminCreateExam(label, new Date(`${dateVal}T${timeVal}`).toISOString(), final, rankVal ? Number(rankVal) : undefined);
 				examRes.textContent = "Exam ajouté ✓";
 				examRes.className = "msg ok";
 				$<HTMLInputElement>("[data-exam-label]").value = "";
@@ -358,6 +391,84 @@ import Footer from "../components/Footer.astro";
 			{
 				examRes.textContent = e?.message ?? "Erreur";
 				examRes.className = "msg err";
+			}
+		});
+
+		// ── Giveaway management ─────────────────────────────────────────────────
+		$("[data-giveaway-section]").hidden = false;
+		const gwList = $("[data-gw-list]");
+		const gwRes  = $("[data-gw-res]");
+
+		function renderGiveaways(active: any[])
+		{
+			if (!active.length)
+			{
+				gwList.innerHTML = `<li class="exam-empty">Aucun giveaway en cours.</li>`;
+				return;
+			}
+			gwList.innerHTML = active.map((g: any) =>
+			{
+				const date = new Date(g.ends_at).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
+				return `<li class="exam-row" data-gid="${g.id}">
+					<div class="exam-info">
+						<span class="exam-label">${g.title}</span>
+						<span class="exam-meta">${date} · ${fmt(g.prize_points)} pts · ${g.entry_count} participant${g.entry_count !== 1 ? "s" : ""}</span>
+					</div>
+					<div class="exam-actions">
+						<button class="ghost-btn exam-del-btn" data-gw-del="${g.id}">Suppr.</button>
+					</div>
+				</li>`;
+			}).join("");
+
+			gwList.querySelectorAll<HTMLButtonElement>("[data-gw-del]").forEach((btn) =>
+			{
+				btn.addEventListener("click", async () =>
+				{
+					if (!confirm("Supprimer ce giveaway ?")) return;
+					try
+					{
+						await adminDeleteGiveaway(Number(btn.dataset.gwDel));
+						await refreshGiveaways();
+					} catch (e: any) { alert(e?.message ?? "Erreur"); }
+				});
+			});
+		}
+
+		async function refreshGiveaways()
+		{
+			const { active } = await getGiveaways();
+			renderGiveaways(active);
+		}
+		await refreshGiveaways();
+
+		$("[data-gw-add]").addEventListener("click", async () =>
+		{
+			gwRes.textContent = "";
+			gwRes.className = "msg";
+			const title   = $<HTMLInputElement>("[data-gw-title]").value.trim();
+			const desc    = $<HTMLInputElement>("[data-gw-desc]").value.trim();
+			const prize   = Math.floor(Number($<HTMLInputElement>("[data-gw-prize]").value));
+			const dateVal = $<HTMLInputElement>("[data-gw-date]").value;
+			const timeVal = $<HTMLInputElement>("[data-gw-time]").value || "20:00";
+			if (!title)        { gwRes.textContent = "Titre requis";  gwRes.className = "msg err"; return; }
+			if (!prize)        { gwRes.textContent = "Points requis"; gwRes.className = "msg err"; return; }
+			if (!dateVal)      { gwRes.textContent = "Date requise";  gwRes.className = "msg err"; return; }
+			try
+			{
+				await adminCreateGiveaway(title, desc, prize, new Date(`${dateVal}T${timeVal}`).toISOString());
+				gwRes.textContent = "Giveaway créé ✓";
+				gwRes.className = "msg ok";
+				$<HTMLInputElement>("[data-gw-title]").value = "";
+				$<HTMLInputElement>("[data-gw-desc]").value = "";
+				$<HTMLInputElement>("[data-gw-prize]").value = "";
+				$<HTMLInputElement>("[data-gw-date]").value = "";
+				$<HTMLInputElement>("[data-gw-time]").value = "20:00";
+				await refreshGiveaways();
+			}
+			catch (e: any)
+			{
+				gwRes.textContent = e?.message ?? "Erreur";
+				gwRes.className = "msg err";
 			}
 		});
 

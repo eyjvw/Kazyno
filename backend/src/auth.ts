@@ -1,7 +1,8 @@
-import { Elysia } from "elysia";
+import { Elysia, t } from "elysia";
 import { jwt } from "@elysiajs/jwt";
 import { sql, type PublicUser } from "./db";
 import { rl, BUCKETS } from "./ratelimit";
+import { applyCursus, maybeSyncUser } from "./cursussync";
 
 const FT_AUTHORIZE = "https://api.intra.42.fr/oauth/authorize";
 const FT_TOKEN = "https://api.intra.42.fr/oauth/token";
@@ -16,7 +17,7 @@ const SESSION_SECRET = process.env.SESSION_SECRET ?? "dev-insecure-change-me";
 
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
-const PUBLIC_COLUMNS = sql`id, login, email, display_name, image_url, points`;
+const PUBLIC_COLUMNS = sql`id, login, email, display_name, image_url, points, locale, show_presence, notif_prefs, welcomed`;
 
 interface SessionCookie
 {
@@ -114,6 +115,12 @@ export const auth = new Elysia({ prefix: "/api/auth" })
 				email?: string;
 				displayname?: string;
 				image?: { link?: string };
+				cursus_users?: Array<{ cursus_id: number; grade: string | null }>;
+				projects_users?: Array<{
+					project: { name: string };
+					status: string;
+					"validated?": boolean | null;
+				}>;
 			};
 
 			const rows = (await sql`
@@ -124,11 +131,16 @@ export const auth = new Elysia({ prefix: "/api/auth" })
 					email        = EXCLUDED.email,
 					display_name = EXCLUDED.display_name,
 					image_url    = EXCLUDED.image_url
-				RETURNING id
-			`) as Array<{ id: number }>;
+				RETURNING id, welcomed
+			`) as Array<{ id: number; welcomed: boolean }>;
+			const userId = rows[0].id;
 
-			issueSession(session, await jwt.sign({ sub: String(rows[0].id) }));
-			return redirect(`${FRONTEND_ORIGIN}/app`);
+			// Cursus signals (common core / exam rank) from the same /v2/me payload.
+			await applyCursus(userId, me);
+
+			issueSession(session, await jwt.sign({ sub: String(userId) }));
+			// First visit: onboarding page instead of the lobby.
+			return redirect(`${FRONTEND_ORIGIN}${rows[0].welcomed ? "/app" : "/welcome"}`);
 		},
 	)
 
@@ -149,7 +161,22 @@ export const auth = new Elysia({ prefix: "/api/auth" })
 			set.status = 401;
 			return { authenticated: false };
 		}
+		// Refresh 42 cursus signals in the background (throttled per user).
+		void maybeSyncUser(rows[0].id);
 		return { authenticated: true, user: rows[0] };
+	})
+
+	// Mark the onboarding page as seen.
+	.post("/welcome", async ({ jwt, cookie: { session }, set }) =>
+	{
+		const payload = session.value ? await jwt.verify(session.value as string) : false;
+		if (!payload || !payload.sub)
+		{
+			set.status = 401;
+			return { error: "non authentifie" };
+		}
+		await sql`UPDATE users SET welcomed = true WHERE id = ${Number(payload.sub)}`;
+		return { ok: true };
 	})
 
 	.post("/logout", ({ cookie: { session } }) =>
@@ -157,6 +184,70 @@ export const auth = new Elysia({ prefix: "/api/auth" })
 		session.remove();
 		return { ok: true };
 	})
+
+	// ── Update the current user's preferred locale ───────────────────────────
+	.patch("/locale", async ({ jwt, cookie: { session }, body, set }) =>
+	{
+		const payload = session.value ? await jwt.verify(session.value as string) : false;
+		if (!payload || !payload.sub)
+		{
+			set.status = 401;
+			return { error: "non authentifie" };
+		}
+		if (body.locale !== "fr" && body.locale !== "en")
+		{
+			set.status = 422;
+			return { error: "locale invalide" };
+		}
+		await sql`UPDATE users SET locale = ${body.locale} WHERE id = ${Number(payload.sub)}`;
+		return { ok: true };
+	}, { body: t.Object({ locale: t.String() }) })
+
+	// ── Update notification/presence preferences (merged with existing) ─────
+	.patch(
+		"/prefs",
+		async ({ jwt, cookie: { session }, body, set }) =>
+		{
+			const payload = session.value ? await jwt.verify(session.value as string) : false;
+			if (!payload || !payload.sub)
+			{
+				set.status = 401;
+				return { error: "non authentifie" };
+			}
+			const userId = Number(payload.sub);
+			if (body.show_presence !== undefined)
+			{
+				await sql`UPDATE users SET show_presence = ${body.show_presence} WHERE id = ${userId}`;
+			}
+			if (body.notif_prefs)
+			{
+				await sql`
+					UPDATE users SET notif_prefs = notif_prefs || ${JSON.stringify(body.notif_prefs)}::jsonb
+					WHERE id = ${userId}
+				`;
+			}
+			const rows = (await sql`
+				SELECT ${PUBLIC_COLUMNS} FROM users WHERE id = ${userId}
+			`) as PublicUser[];
+			return { ok: true, user: rows[0] };
+		},
+		{
+			body: t.Object({
+				show_presence: t.Optional(t.Boolean()),
+				notif_prefs: t.Optional(
+					t.Partial(
+						t.Object({
+							rain: t.Boolean(),
+							giveaway: t.Boolean(),
+							social: t.Boolean(),
+							exam: t.Boolean(),
+							admin: t.Boolean(),
+						}),
+					),
+				),
+			}),
+		},
+	)
 
 	// ── RGPD: permanently delete the account and its data ────────────────────
 	.delete("/account", async ({ jwt, cookie: { session }, set }) =>

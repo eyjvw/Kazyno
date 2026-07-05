@@ -1,0 +1,56 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+import Footer from "../../components/Footer.astro";
+---
+
+<Layout title="Kazyno — Provably fair">
+  <Nav />
+  <main class="wrap">
+    <a class="back" href="/profile" data-back>← Retour</a>
+    <div class="panel doc">
+      <h1>Provably fair 🔒</h1>
+      <p class="lede">Chaque tirage est vérifiable : personne, pas même l'admin, ne peut truquer un résultat après coup.</p>
+
+      <h2>Le principe</h2>
+      <p>Chaque résultat (dé, mine, carte…) est dérivé d'un <b>HMAC-SHA256(server_seed, client_seed:nonce)</b>. Le <i>server seed</i> est généré côté serveur et son hash (empreinte) t'est communiqué <b>avant</b> que tu ne joues — il est donc figé et impossible à changer après ta mise.</p>
+
+      <h2>Comment vérifier</h2>
+      <ol>
+        <li>Depuis ton profil, tu vois le hash du seed serveur actuel, ton seed client et le nonce (compteur incrémenté à chaque mise).</li>
+        <li>Quand tu changes de seed, l'ancien <b>server seed en clair</b> est révélé — tu peux alors recalculer toi-même chaque résultat passé et comparer au hash publié avant.</li>
+        <li>Si le seed révélé ne correspond pas au hash annoncé au moment de tes mises, il y a triche. Ça n'arrivera jamais : le hash est publié en avance, mathématiquement impossible à falsifier après coup.</li>
+      </ol>
+
+      <h2>Pourquoi ça compte</h2>
+      <p>Kazyno tourne avec des points fictifs, pas de l'argent réel — mais la transparence du tirage reste le principe fondateur d'un casino qui se respecte. Tu peux prouver à tout moment que le jeu n'est pas truqué.</p>
+    </div>
+  </main>
+  <Footer />
+</Layout>
+
+<script>
+	// Real history back when possible; href is only the no-referrer fallback.
+	document.querySelector("[data-back]")?.addEventListener("click", (e) =>
+	{
+		if (history.length > 1)
+		{
+			e.preventDefault();
+			history.back();
+		}
+	});
+</script>
+
+<style>
+  .wrap { max-width: 720px; margin: 0 auto; padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 40px); }
+  .back { color: var(--muted); font-size: 13px; }
+  .back:hover { color: var(--fg); }
+  .doc { margin-top: 18px; padding: 32px clamp(20px, 4vw, 36px); }
+  .doc h1 { margin: 0 0 6px; font-size: clamp(26px, 4vw, 34px); font-weight: 800; letter-spacing: -0.02em; }
+  .doc .lede { color: var(--muted); margin: 0 0 26px; font-size: 15px; }
+  .doc h2 { margin: 26px 0 10px; font-size: 17px; font-weight: 800; }
+  .doc p, .doc li { color: var(--fg); font-size: 14px; line-height: 1.7; }
+  .doc p { margin: 0 0 12px; }
+  .doc ol { margin: 0 0 12px; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+  .doc b { color: var(--accent); }
+</style>

@@ -27,6 +27,7 @@ import { feedRoutes } from "./feed";
 import { history } from "./history";
 import { poker } from "./poker";
 import { initWeeklyReset } from "./weeklyreset";
+import { giveaways, initGiveaways } from "./giveaways";
 
 await initDb();
 
@@ -56,11 +57,13 @@ const app = new Elysia()
 	.use(feedRoutes)
 	.use(history)
 	.use(poker)
+	.use(giveaways)
 	.use(realtimeWs)
 	.listen({ port: 3000, hostname: "0.0.0.0" });
 
 if (app.server) setServer(app.server);
 
 await initWeeklyReset();
+await initGiveaways();
 
 console.log(`backend up on http://${app.server?.hostname}:${app.server?.port}`);

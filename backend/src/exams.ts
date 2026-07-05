@@ -23,18 +23,27 @@ export const exams = new Elysia({ prefix: "/api/exams" })
 		return { userId, isAdmin };
 	})
 
-	// Public: list all exams ordered by date
-	.get("/", async () =>
+	// Public: list all exams ordered by date, plus the viewer's cursus context.
+	.get("/", async ({ userId }) =>
 	{
 		const rows = (await sql`
-			SELECT e.id, e.label, e.exam_date, e.is_final, e.locked, e.created_at,
+			SELECT e.id, e.label, e.exam_date, e.is_final, e.locked, e.rank, e.created_at,
 						 COUNT(eb.id)::int AS bet_count
 			FROM exams e
 			LEFT JOIN exam_bets eb ON eb.exam_id = e.id AND eb.status = 'pending'
 			GROUP BY e.id
 			ORDER BY e.exam_date ASC
 		`) as unknown[];
-		return { exams: rows };
+
+		let ctx: { common_core_done: boolean; exam_rank: number | null } | null = null;
+		if (userId)
+		{
+			const u = (await sql`
+				SELECT common_core_done, exam_rank FROM users WHERE id=${userId}
+			`) as Array<{ common_core_done: boolean; exam_rank: number | null }>;
+			ctx = u[0] ?? null;
+		}
+		return { exams: rows, ctx };
 	})
 
 	// Admin: create exam
@@ -44,9 +53,9 @@ export const exams = new Elysia({ prefix: "/api/exams" })
 		{
 			if (!isAdmin) return forbid(set);
 			const rows = (await sql`
-				INSERT INTO exams (label, exam_date, is_final)
-				VALUES (${body.label.trim()}, ${body.exam_date}, ${body.is_final ?? false})
-				RETURNING id, label, exam_date, is_final, locked, created_at
+				INSERT INTO exams (label, exam_date, is_final, rank)
+				VALUES (${body.label.trim()}, ${body.exam_date}, ${body.is_final ?? false}, ${body.rank ?? null})
+				RETURNING id, label, exam_date, is_final, locked, rank, created_at
 			`) as unknown[];
 			return { exam: rows[0] };
 		},
@@ -55,6 +64,7 @@ export const exams = new Elysia({ prefix: "/api/exams" })
 				label: t.String({ minLength: 1, maxLength: 80 }),
 				exam_date: t.String(),
 				is_final: t.Optional(t.Boolean()),
+				rank: t.Optional(t.Integer({ minimum: 2, maximum: 6 })),
 			}),
 		},
 	)

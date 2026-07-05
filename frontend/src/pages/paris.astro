@@ -4,7 +4,7 @@ import Nav from "../components/Nav.astro";
 import Footer from "../components/Footer.astro";
 ---
 
-<Layout title="PISCASINO — Paris">
+<Layout title="Kazyno — Paris">
   <Nav />
   <main class="wrap">
     <header class="head">
@@ -54,8 +54,9 @@ import Footer from "../components/Footer.astro";
 <script>
 	import {
 		loadMe,
-		getExams,
+		getExamsWithCtx,
 		getExamBets,
+		type ExamCtx,
 		getExamFeed,
 		placeExamBet,
 		modifyExamBet,
@@ -351,8 +352,20 @@ import Footer from "../components/Footer.astro";
 	}
 
 	// ── Render all exam cards ───────────────────────────────────────────────
-	function renderExamCards(exams: any[], pendingBets: any[])
+	function renderExamCards(exams: any[], pendingBets: any[], ctx: ExamCtx | null)
 	{
+		// Common core done: exam bets are over for this player.
+		if (ctx?.common_core_done)
+		{
+			cardsEl.innerHTML = `
+				<div class="core-done panel">
+					<span class="cd-emoji">🎓</span>
+					<b>Tronc commun terminé !</b>
+					<p>Plus d'exams à parier pour toi — les +2000 pts de félicitations sont déjà sur ton compte. Profite du casino.</p>
+				</div>`;
+			return;
+		}
+
 		// Filter to upcoming or recently locked (last 7 days)
 		const cutoff = Date.now() - 7 * 86400000;
 		const visible = exams.filter((e) => !e.locked || new Date(e.exam_date).getTime() > cutoff);
@@ -369,8 +382,24 @@ import Footer from "../components/Footer.astro";
 		visible.forEach((exam) =>
 		{
 			const card = document.createElement("div");
-			card.className = `exam-card panel${exam.locked ? " locked" : ""}`;
+			// Rank-reserved exam the viewer isn't registered to: visible but not bettable.
+			const rankLocked = exam.rank != null && ctx != null && ctx.exam_rank !== exam.rank;
+			card.className = `exam-card panel${exam.locked || rankLocked ? " locked" : ""}`;
 			cardsEl.appendChild(card);
+			if (rankLocked)
+			{
+				const date = new Date(exam.exam_date).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
+				card.innerHTML = `
+					<div class="ec-header">
+						<div class="ec-title">${exam.label}</div>
+						<div class="ec-meta">
+							<span class="ec-type ${exam.is_final ? "final" : "standard"}">${exam.is_final ? "Final" : "Standard"}</span>
+							<span class="ec-date">${date}</span>
+						</div>
+					</div>
+					<div class="ec-locked">Réservé aux inscrits Exam 0${exam.rank} — tu es sur l'Exam 0${ctx!.exam_rank ?? "?"}.</div>`;
+				return;
+			}
 			renderCard(exam, betByExam.get(exam.id) ?? null, card);
 		});
 	}
@@ -421,8 +450,8 @@ import Footer from "../components/Footer.astro";
 
 	async function refresh()
 	{
-		const [exams, myBets, feed] = await Promise.all([getExams(), getExamBets(), getExamFeed()]);
-		renderExamCards(exams, myBets.pending ?? []);
+		const [examsData, myBets, feed] = await Promise.all([getExamsWithCtx(), getExamBets(), getExamFeed()]);
+		renderExamCards(examsData.exams, myBets.pending ?? [], examsData.ctx);
 		renderHistory(myBets.history ?? []);
 		renderFeed(feed);
 	}
@@ -495,14 +524,31 @@ import Footer from "../components/Footer.astro";
     font-size: 14px;
   }
 
+  /* ── Common core done state ── */
+  .exam-cards :global(.core-done) {
+    flex: 1 1 100%;
+    max-width: 560px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 8px;
+    padding: 36px 28px;
+  }
+  .exam-cards :global(.cd-emoji) { font-size: 44px; line-height: 1; }
+  .exam-cards :global(.core-done b) { font-size: 18px; }
+  .exam-cards :global(.core-done p) { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+
   /* ── Exam cards grid ── */
   .exam-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 460px));
-    gap: 14px;
+    display: flex;
+    flex-wrap: wrap;
     justify-content: center;
+    gap: 14px;
   }
   .exam-cards :global(.exam-card) {
+    flex: 1 1 320px;
+    max-width: 460px;
     padding: 18px;
     display: flex;
     flex-direction: column;

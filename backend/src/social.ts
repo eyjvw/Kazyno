@@ -24,6 +24,16 @@ async function card(userId: number): Promise<UserCard | null>
 	return rows[0] ?? null;
 }
 
+/** Trade-off: if you hide your own presence, you don't see anyone else's either. */
+async function canSeePresence(viewerId: number | null): Promise<boolean>
+{
+	if (!viewerId) return true;
+	const rows = (await sql`SELECT show_presence FROM users WHERE id = ${viewerId}`) as Array<{
+		show_presence: boolean;
+	}>;
+	return rows[0]?.show_presence ?? true;
+}
+
 export const social = new Elysia({ prefix: "/api" })
 	.use(jwt({ name: "jwt", secret: SESSION_SECRET }))
 	.derive(async ({ jwt, cookie: { session } }) =>
@@ -39,21 +49,29 @@ export const social = new Elysia({ prefix: "/api" })
 			return { error: "non authentifie" };
 		}
 	})
-	.onBeforeHandle(({ userId, set }) => rl(`friends:${userId}`, BUCKETS.friends, set))
+	.onBeforeHandle(({ userId, set, request }) =>
+	{
+		const write = request.method !== "GET";
+		return write
+			? rl(`social-w:${userId}`, BUCKETS.socialWrite, set)
+			: rl(`social-r:${userId}`, BUCKETS.socialRead, set);
+	})
 
 	// Who is online right now (excluding self).
-	.get("/presence", ({ userId }) => ({
-		online: onlineList().filter((u) => u.id !== userId),
-	}))
+	.get("/presence", async ({ userId }) =>
+	{
+		if (!(await canSeePresence(userId))) return { online: [] };
+		return { online: onlineList().filter((u) => u.id !== userId) };
+	})
 
 	// Public profile of a user by login, with my relationship + rank.
 	.get("/users/:login", async ({ userId, params, set }) =>
 	{
 		const login = params.login.toLowerCase();
 		const rows = (await sql`
-			SELECT id, login, display_name, image_url, points, created_at
+			SELECT id, login, display_name, image_url, points, created_at, title, name_color
 			FROM users WHERE lower(login) = ${login}
-		`) as Array<UserCard & { points: number; created_at: string }>;
+		`) as Array<UserCard & { points: number; created_at: string; title: string | null; name_color: string | null }>;
 		const u = rows[0];
 		if (!u)
 		{
@@ -92,8 +110,9 @@ export const social = new Elysia({ prefix: "/api" })
 			}
 		}
 
+		const seePresence = await canSeePresence(userId);
 		return {
-			user: { ...u, rank: rk[0]?.rank ?? null, online: isOnline(u.id), status },
+			user: { ...u, rank: rk[0]?.rank ?? null, online: seePresence && isOnline(u.id), status },
 		};
 	})
 
@@ -139,11 +158,12 @@ export const social = new Elysia({ prefix: "/api" })
 			return r.requester_id === userId ? "pending_out" : "pending_in";
 		};
 
+		const seePresence = await canSeePresence(userId);
 		return {
 			results: rows.map((u) => ({
 				...u,
 				status: statusFor(u.id),
-				online: isOnline(u.id),
+				online: seePresence && isOnline(u.id),
 			})),
 		};
 	})
@@ -160,8 +180,9 @@ export const social = new Elysia({ prefix: "/api" })
 				AND f.status = 'accepted'
 			ORDER BY u.login
 		`) as Array<UserCard & { points: number }>;
+		const seePresence = await canSeePresence(userId);
 		return {
-			friends: rows.map((r) => ({ ...r, online: isOnline(r.id) })),
+			friends: rows.map((r) => ({ ...r, online: seePresence && isOnline(r.id) })),
 		};
 	})
 

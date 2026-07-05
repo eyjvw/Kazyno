@@ -3,7 +3,7 @@ interface Props
 {
 	title?: string;
 }
-const { title = "PISCASINO" } = Astro.props;
+const { title = "Kazyno" } = Astro.props;
 ---
 
 <!doctype html>
@@ -33,18 +33,19 @@ const { title = "PISCASINO" } = Astro.props;
 
 <style is:global>
   :root {
-    --bg: #0f212e;
-    --bg-2: #0b1a24;
-    --panel: #1a2c38;
-    --panel-2: #213743;
-    --raise: #2f4553;
-    --fg: #ffffff;
-    --muted: #b1bad3;
-    --line: #2a3b47;
-    --accent: #3b82f6;
-    --accent-hover: #5b9bff;
-    --win: #00e701;
-    --lose: #ed4163;
+    --bg: #0a1612;
+    --bg-2: #0e1e18;
+    --panel: #142b21;
+    --panel-2: #1a352a;
+    --raise: #234233;
+    --fg: #f2f5ef;
+    --muted: #9bb5a4;
+    --line: #1f3a2c;
+    --accent: #d4af37;
+    --accent-hover: #e8c766;
+    --accent-ink: #16281d;
+    --win: #4ade80;
+    --lose: #ef4444;
     --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
       Arial, sans-serif;
     --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
@@ -88,9 +89,29 @@ const { title = "PISCASINO" } = Astro.props;
     color: inherit;
     text-decoration: none;
   }
+  /* Animated gradient names (shop cosmetics, name_color = rainbow/fire/ocean/galaxy/toxic) */
+  .rainbow-name, .grad-rainbow, .grad-fire, .grad-ocean, .grad-galaxy, .grad-toxic {
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent !important;
+    animation: rainbowShift 3s linear infinite;
+  }
+  .rainbow-name, .grad-rainbow {
+    background-image: linear-gradient(90deg, #ef4444, #f59e0b, #22c55e, #06b6d4, #a855f7, #ec4899, #ef4444);
+  }
+  .grad-fire   { background-image: linear-gradient(90deg, #ef4444, #f97316, #fbbf24, #f97316, #ef4444); }
+  .grad-ocean  { background-image: linear-gradient(90deg, #06b6d4, #3b82f6, #22d3ee, #06b6d4); }
+  .grad-galaxy { background-image: linear-gradient(90deg, #a855f7, #ec4899, #6366f1, #a855f7); }
+  .grad-toxic  { background-image: linear-gradient(90deg, #22c55e, #84cc16, #a3e635, #22c55e); }
+  @keyframes rainbowShift {
+    from { background-position: 0% 50%; }
+    to   { background-position: 300% 50%; }
+  }
+
   ::selection {
     background: var(--accent);
-    color: #fff;
+    color: var(--accent-ink);
   }
 
   /* ── Top nav ────────────────────────────────────────────────────────── */
@@ -152,25 +173,27 @@ const { title = "PISCASINO" } = Astro.props;
   .panel {
     background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: 10px;
   }
   .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     background: var(--accent);
-    color: #fff;
+    color: var(--accent-ink);
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     font-family: inherit;
     font-weight: 700;
     font-size: 15px;
     padding: 14px 18px;
     cursor: pointer;
-    transition: background 0.15s, transform 0.06s, opacity 0.15s;
+    box-shadow: 0 0 0 rgba(212, 175, 55, 0);
+    transition: background 0.15s, transform 0.06s, opacity 0.15s, box-shadow 0.2s;
   }
   .btn:hover {
     background: var(--accent-hover);
+    box-shadow: 0 4px 20px rgba(212, 175, 55, 0.25);
   }
   .btn:active {
     transform: translateY(1px);
@@ -270,6 +293,25 @@ const { title = "PISCASINO" } = Astro.props;
     font-size: clamp(20px, 3.5vw, 28px);
     font-weight: 800;
     letter-spacing: -0.02em;
+  }
+  .gh-rules {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 20px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+  .gh-rules:hover {
+    color: var(--accent);
+    border-color: var(--accent);
   }
   .game-header .gh-sub {
     margin: 0 0 0 4px;
@@ -418,12 +460,12 @@ const { title = "PISCASINO" } = Astro.props;
     display: flex;
     align-items: center;
     gap: 14px;
-    background: linear-gradient(135deg, rgba(6, 55, 105, 0.95), rgba(12, 30, 60, 0.95));
+    background: linear-gradient(135deg, rgba(20, 43, 33, 0.95), rgba(14, 30, 24, 0.95));
     border: 1px solid var(--accent);
     border-radius: 12px;
     padding: 12px 18px;
     z-index: 1100;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 24px rgba(59, 130, 246, 0.35);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 24px rgba(212, 175, 55, 0.3);
     animation: rainDrop 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   @keyframes rainDrop {
@@ -434,7 +476,7 @@ const { title = "PISCASINO" } = Astro.props;
   .rain-txt b { color: var(--accent); }
   .rain-claim {
     background: var(--accent);
-    color: #fff;
+    color: var(--accent-ink);
     border: none;
     border-radius: 8px;
     padding: 8px 16px;

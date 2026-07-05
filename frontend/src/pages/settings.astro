@@ -1,0 +1,190 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Layout title="Kazyno — Réglages">
+  <Nav />
+  <main class="wrap">
+    <a class="back" href="/profile" data-i18n="settings.back">← Retour au profil</a>
+    <h1 class="page-title" data-i18n="settings.title">Réglages</h1>
+
+    <section class="panel card">
+      <h2 class="card-title" data-i18n="settings.lang_section">Langue</h2>
+      <div class="lang-picker" data-lang-picker></div>
+    </section>
+
+    <section class="panel card">
+      <h2 class="card-title" data-i18n="settings.presence_section">Statut en ligne</h2>
+      <p class="card-help" data-i18n="settings.presence_help">Si tu masques ton statut, tu ne verras pas non plus celui des autres.</p>
+      <label class="switch-row">
+        <span data-i18n="settings.presence_toggle">Afficher mon statut en ligne</span>
+        <span class="switch" data-presence-switch><span class="knob"></span></span>
+      </label>
+    </section>
+
+    <section class="panel card">
+      <h2 class="card-title" data-i18n="settings.notif_section">Notifications</h2>
+      <div data-notif-prefs-list></div>
+    </section>
+  </main>
+  <Footer />
+</Layout>
+
+<script>
+	import { loadMe, getShowPresence, getNotifPrefs, setPrefs, type NotifPrefs } from "../lib/casino";
+	import { t, getLocale, setLocale, onLocaleChange, type Locale, type TKey } from "../lib/i18n";
+
+	function applyI18n()
+	{
+		document.querySelectorAll<HTMLElement>("[data-i18n]").forEach((el) =>
+		{
+			el.textContent = t(el.dataset.i18n as TKey);
+		});
+	}
+
+	function renderLangPicker()
+	{
+		const picker = document.querySelector<HTMLElement>("[data-lang-picker]")!;
+		const current = getLocale();
+		const opts: { key: Locale; label: string }[] = [
+			{ key: "fr", label: t("settings.lang_fr") },
+			{ key: "en", label: t("settings.lang_en") },
+		];
+		picker.innerHTML = opts.map((o) => `
+			<button class="opt-btn ${current === o.key ? "is-active" : ""}" data-lang-key="${o.key}">${o.label}</button>
+		`).join("");
+		picker.querySelectorAll<HTMLButtonElement>("[data-lang-key]").forEach((btn) =>
+		{
+			btn.addEventListener("click", () => setLocale(btn.dataset.langKey as Locale));
+		});
+	}
+
+	function renderPresenceSwitch()
+	{
+		const el = document.querySelector<HTMLElement>("[data-presence-switch]")!;
+		el.classList.toggle("is-on", getShowPresence());
+		el.onclick = () =>
+		{
+			setPrefs({ show_presence: !getShowPresence() });
+			renderPresenceSwitch();
+		};
+	}
+
+	const NOTIF_KEYS: (keyof NotifPrefs)[] = ["rain", "giveaway", "social", "exam", "admin"];
+
+	function renderNotifList()
+	{
+		const host = document.querySelector<HTMLElement>("[data-notif-prefs-list]")!;
+		const prefs = getNotifPrefs();
+		host.innerHTML = NOTIF_KEYS.map((k) => `
+			<label class="switch-row">
+				<span>${t(("settings.notif_" + k) as TKey)}</span>
+				<span class="switch ${prefs[k] ? "is-on" : ""}" data-notif-key="${k}"><span class="knob"></span></span>
+			</label>
+		`).join("");
+		host.querySelectorAll<HTMLElement>("[data-notif-key]").forEach((el) =>
+		{
+			el.addEventListener("click", () =>
+			{
+				const key = el.dataset.notifKey as keyof NotifPrefs;
+				const next = !getNotifPrefs()[key];
+				setPrefs({ notif_prefs: { [key]: next } });
+				el.classList.toggle("is-on", next);
+			});
+		});
+	}
+
+	applyI18n();
+	renderLangPicker();
+	renderPresenceSwitch();
+	renderNotifList();
+	onLocaleChange(() => { applyI18n(); renderLangPicker(); renderNotifList(); });
+
+	loadMe().then((me) =>
+	{
+		if (!me) { location.replace("/"); return; }
+		renderPresenceSwitch();
+		renderNotifList();
+	});
+</script>
+
+<style>
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 40px);
+  }
+  .back { color: var(--muted); font-size: 13px; }
+  .back:hover { color: var(--fg); }
+  .page-title {
+    margin: 18px 0 22px;
+    font-size: clamp(26px, 4vw, 34px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  .card {
+    margin-bottom: 16px;
+    padding: 22px;
+  }
+  .card-title { margin: 0 0 6px; font-size: 16px; font-weight: 800; }
+  .card-help { margin: 0 0 14px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+  .wrap :global(.lang-picker) { display: flex; gap: 8px; }
+  .wrap :global(.lang-picker .opt-btn) { flex: 1; text-align: center; }
+
+  .wrap :global(.opt-btn) {
+    background: var(--raise);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .wrap :global(.opt-btn:hover) { color: var(--fg); border-color: var(--accent); }
+  .wrap :global(.opt-btn.is-active) {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  .wrap :global(.switch-row) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0;
+    font-size: 14px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--line);
+  }
+  .wrap :global(.switch-row:last-child) { border-bottom: none; }
+  .wrap :global(.switch) {
+    position: relative;
+    width: 38px;
+    height: 22px;
+    flex: none;
+    border-radius: 11px;
+    background: var(--raise);
+    border: 1px solid var(--line);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .wrap :global(.switch .knob) {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: transform 0.15s, background 0.15s;
+  }
+  .wrap :global(.switch.is-on) { background: var(--accent); border-color: var(--accent); }
+  .wrap :global(.switch.is-on .knob) { background: var(--accent-ink); transform: translateX(16px); }
+</style>

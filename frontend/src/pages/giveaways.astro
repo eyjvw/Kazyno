@@ -1,0 +1,219 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Layout title="Kazyno — Giveaways">
+  <Nav />
+  <main class="wrap">
+    <header class="head">
+      <h1>Giveaways 🎁</h1>
+      <p>Inscris-toi gratuitement, un gagnant est tiré au sort à la clôture.</p>
+    </header>
+
+    <section class="active-section">
+      <h2 class="section-title">En cours</h2>
+      <div class="gw-cards" data-active><p class="loading">Chargement…</p></div>
+    </section>
+
+    <section class="history-section">
+      <h2 class="section-title">Gagnants précédents</h2>
+      <ul class="feed" data-history><li class="empty">Aucun giveaway terminé.</li></ul>
+    </section>
+  </main>
+  <Footer />
+</Layout>
+
+<script>
+	import {
+		loadMe,
+		getGiveaways,
+		enterGiveaway,
+		leaveGiveaway,
+		onGiveawayDrawn,
+		connectRealtime,
+		fmt,
+		type Giveaway,
+		type GiveawayHistoryRow,
+	} from "../lib/casino";
+
+	const $ = <T extends HTMLElement>(s: string, root: ParentNode = document) => root.querySelector<T>(s)!;
+
+	const activeEl  = $("[data-active]");
+	const historyEl = $("[data-history]");
+
+	function countdown(dateStr: string): string
+	{
+		const diff = new Date(dateStr).getTime() - Date.now();
+		if (diff <= 0) return "Terminé";
+		const d = Math.floor(diff / 86400000);
+		const h = Math.floor((diff % 86400000) / 3600000);
+		const m = Math.floor((diff % 3600000) / 60000);
+		if (d > 0) return `${d}j ${h}h`;
+		if (h > 0) return `${h}h ${m}m`;
+		return `${m}m`;
+	}
+
+	function renderActive(list: Giveaway[])
+	{
+		if (!list.length)
+		{
+			activeEl.innerHTML = `<p class="empty-state">Aucun giveaway en cours pour l'instant.</p>`;
+			return;
+		}
+		activeEl.innerHTML = list.map((g) => `
+			<div class="gw-card panel" data-id="${g.id}">
+				<div class="gw-header">
+					<div class="gw-title">${g.title}</div>
+					<span class="gw-countdown">${countdown(g.ends_at)}</span>
+				</div>
+				${g.description ? `<p class="gw-desc">${g.description}</p>` : ""}
+				<div class="gw-prize">${fmt(g.prize_points)} <small>pts</small></div>
+				<div class="gw-foot">
+					<span class="gw-entries">${g.entry_count} participant${g.entry_count > 1 ? "s" : ""}</span>
+					<button class="btn ${g.entered ? "btn-outline" : ""}" data-toggle data-entered="${g.entered}">
+						${g.entered ? "Se désinscrire" : "Participer"}
+					</button>
+				</div>
+			</div>
+		`).join("");
+
+		activeEl.querySelectorAll<HTMLButtonElement>("[data-toggle]").forEach((btn) =>
+		{
+			btn.addEventListener("click", async () =>
+			{
+				const card = btn.closest<HTMLElement>("[data-id]")!;
+				const id = Number(card.dataset.id);
+				const entered = btn.dataset.entered === "true";
+				btn.disabled = true;
+				try
+				{
+					await (entered ? leaveGiveaway(id) : enterGiveaway(id));
+					await refresh();
+				}
+				catch
+				{
+					btn.disabled = false;
+				}
+			});
+		});
+	}
+
+	function renderHistory(list: GiveawayHistoryRow[])
+	{
+		historyEl.innerHTML = list.length
+			? list.map((h) =>
+			{
+					const av = h.winner_image
+						? `<img class="fav" src="${h.winner_image}" width="28" height="28" alt="" />`
+						: `<span class="fav fb">${(h.winner_login ?? "?").charAt(0).toUpperCase()}</span>`;
+					return `<li class="frow">
+						${av}
+						<div class="frow-main">
+							<span class="fn">${h.title}</span>
+							<span class="fp">${h.winner_login ? "Gagné par @" + h.winner_login : "Aucun participant"}</span>
+						</div>
+						<span class="fr win">${fmt(h.prize_points)} pts</span>
+					</li>`;
+				}).join("")
+			: `<li class="empty">Aucun giveaway terminé.</li>`;
+	}
+
+	async function refresh()
+	{
+		const { active, history } = await getGiveaways();
+		renderActive(active);
+		renderHistory(history);
+	}
+
+	onGiveawayDrawn(() => refresh());
+	loadMe().then(() => { connectRealtime(); refresh(); });
+</script>
+
+<style>
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: clamp(20px, 4vw, 40px) clamp(16px, 4vw, 40px);
+  }
+  .head h1 {
+    margin: 0;
+    font-size: clamp(28px, 5vw, 40px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+  .head p {
+    margin: 8px 0 28px;
+    color: var(--muted);
+    max-width: 640px;
+  }
+  .active-section, .history-section { margin-bottom: 32px; }
+  .section-title { margin: 0 0 14px; font-size: 17px; font-weight: 800; }
+  .loading, .empty-state { color: var(--muted); font-size: 14px; }
+
+  .gw-cards {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 14px;
+  }
+  .gw-cards :global(.gw-card) {
+    flex: 1 1 280px;
+    max-width: 360px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .gw-cards :global(.gw-header) { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .gw-cards :global(.gw-title)  { font-weight: 800; font-size: 16px; }
+  .gw-cards :global(.gw-countdown) { font-size: 12px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+  .gw-cards :global(.gw-desc) { margin: 0; color: var(--muted); font-size: 13px; }
+  .gw-cards :global(.gw-prize) { font-size: 32px; font-weight: 800; color: var(--accent); line-height: 1; }
+  .gw-cards :global(.gw-prize small) { font-size: 14px; color: var(--muted); }
+  .gw-cards :global(.gw-foot) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+  .gw-cards :global(.gw-entries) { color: var(--muted); font-size: 12px; }
+  .gw-cards :global(.btn-outline) {
+    background: transparent !important;
+    border: 1px solid var(--accent) !important;
+    color: var(--accent) !important;
+  }
+
+  .feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .feed :global(.empty) { color: var(--muted); font-size: 13px; padding: 12px 0; }
+  .feed :global(.frow) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .feed :global(.fav) { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; background: var(--raise); flex-shrink: 0; }
+  .feed :global(.fav.fb) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--accent-ink);
+    background: var(--accent);
+  }
+  .feed :global(.frow-main) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .feed :global(.fn) { font-weight: 600; font-size: 14px; }
+  .feed :global(.fp) { color: var(--muted); font-size: 12px; }
+  .feed :global(.fr) { font-weight: 800; font-size: 13px; white-space: nowrap; }
+  .feed :global(.fr.win) { color: var(--win); }
+</style>

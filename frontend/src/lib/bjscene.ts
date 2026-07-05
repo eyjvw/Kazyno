@@ -114,7 +114,7 @@ function feltTexture(): THREE.CanvasTexture {
 	x.fillText("PAIE  3  POUR  2", 512, 292);
 	x.fillStyle = "rgba(255,255,255,0.07)";
 	x.font = "bold 40px Inter, Arial";
-	x.fillText("PISCASINO", 512, 470);
+	x.fillText("CASINO", 512, 470);
 	return new THREE.CanvasTexture(c);
 }
 

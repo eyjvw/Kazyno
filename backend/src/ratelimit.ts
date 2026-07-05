@@ -1,7 +1,13 @@
+// Token-bucket rate limiter, Discord-style:
+//  - refill continu (pas de fenêtre fixe => pas de burst x2 en bord de fenêtre)
+//  - headers X-RateLimit-* sur chaque réponse, Retry-After sur 429
+//  - buckets par domaine, lectures/écritures séparées côté social
+//  - blocage exponentiel en cas d'abus répété
+
 interface Bucket
 {
-	hits: number;
-	windowStart: number;
+	tokens: number;
+	last: number;          // dernier refill (ms)
 	violations: number;
 	blockedUntil: number;
 }
@@ -14,72 +20,79 @@ setInterval(() =>
 	const now = Date.now();
 	for (const [k, b] of store)
 	{
-		if (b.blockedUntil < now && now - b.windowStart > 600_000) store.delete(k);
+		if (b.blockedUntil < now && now - b.last > 600_000) store.delete(k);
 	}
 }, 600_000);
 
 export interface RLConfig
 {
-	max: number;        // hits allowed per window
-	window: number;     // window in ms
-	baseBlock: number;  // block duration on first violation (ms)
-	maxBlock: number;   // cap on block duration (ms)
+	name: string;       // bucket id exposé dans X-RateLimit-Bucket
+	max: number;        // capacité du bucket (burst max)
+	window: number;     // ms pour régénérer `max` tokens (débit = max/window)
+	baseBlock: number;  // blocage à la 1re violation (ms)
+	maxBlock: number;   // plafond du blocage (ms)
 }
 
 export const BUCKETS = {
-	// 100 login attempts / 60s → 1 min block doubling up to 24h
-	// Campus: 150 students share one IP, so threshold must accommodate burst logins
-	auth:     { max: 100, window: 60_000,  baseBlock:  60_000, maxBlock: 86_400_000 },
-	// 30 game actions / 10s → 5s block up to 5 min
-	games:    { max: 30,  window: 10_000,  baseBlock:   5_000, maxBlock:    300_000 },
-	// 10 exam bet mutations / 60s → 30s block up to 10 min
-	examBets: { max: 10,  window: 60_000,  baseBlock:  30_000, maxBlock:    600_000 },
-	// 30 social actions / 30s → 10s block up to 5 min
-	friends:  { max: 30,  window: 30_000,  baseBlock:  10_000, maxBlock:    300_000 },
+	// Campus : 150 étudiants derrière une IP, seuil large.
+	auth:        { name: "auth",         max: 100, window: 60_000, baseBlock: 60_000, maxBlock: 86_400_000 },
+	// Actions de jeu : 30 mises en burst, régénérées sur 10s.
+	games:       { name: "games",        max: 30,  window: 10_000, baseBlock:  5_000, maxBlock:    300_000 },
+	// Mutations de paris d'exam, volontairement serré.
+	examBets:    { name: "exam-bets",    max: 10,  window: 60_000, baseBlock: 30_000, maxBlock:    600_000 },
+	// Lectures sociales (presence, amis, profils, notifs) : très large,
+	// chaque navigation en consomme 4-5.
+	socialRead:  { name: "social-read",  max: 240, window: 30_000, baseBlock: 10_000, maxBlock:    300_000 },
+	// Écritures sociales (demandes d'ami, duels, cadeaux) : serré.
+	socialWrite: { name: "social-write", max: 20,  window: 30_000, baseBlock: 10_000, maxBlock:    300_000 },
 } satisfies Record<string, RLConfig>;
 
-export function checkRL(
-	key: string,
-	cfg: RLConfig,
-): { ok: true } | { ok: false; retryAfter: number }
+interface RLResult
+{
+	ok: boolean;
+	remaining: number;
+	resetMs: number;     // ms avant qu'un token soit disponible / fin de blocage
+	retryAfter?: number; // secondes (429 uniquement)
+}
+
+export function checkRL(key: string, cfg: RLConfig): RLResult
 {
 	const now = Date.now();
 	let b = store.get(key);
 	if (!b)
 	{
-		b = { hits: 0, windowStart: now, violations: 0, blockedUntil: 0 };
+		b = { tokens: cfg.max, last: now, violations: 0, blockedUntil: 0 };
 		store.set(key, b);
 	}
 
-	// Still blocked?
 	if (b.blockedUntil > now)
 	{
-		return { ok: false, retryAfter: Math.ceil((b.blockedUntil - now) / 1000) };
+		const wait = b.blockedUntil - now;
+		return { ok: false, remaining: 0, resetMs: wait, retryAfter: Math.ceil(wait / 1000) };
 	}
 
-	// New window — decay violations if last window was clean
-	if (now - b.windowStart >= cfg.window)
+	// Refill continu + décroissance des violations après une longue accalmie.
+	const rate = cfg.max / cfg.window; // tokens per ms
+	const elapsed = now - b.last;
+	b.tokens = Math.min(cfg.max, b.tokens + elapsed * rate);
+	if (elapsed > cfg.window * 2) b.violations = Math.max(0, b.violations - 1);
+	b.last = now;
+
+	if (b.tokens >= 1)
 	{
-		if (b.hits <= cfg.max) b.violations = Math.max(0, b.violations - 1);
-		b.hits = 0;
-		b.windowStart = now;
+		b.tokens -= 1;
+		const resetMs = b.tokens >= 1 ? 0 : Math.ceil((1 - b.tokens) / rate);
+		return { ok: true, remaining: Math.floor(b.tokens), resetMs };
 	}
 
-	b.hits++;
-
-	if (b.hits > cfg.max)
-	{
-		b.violations++;
-		const blockMs = Math.min(cfg.baseBlock * 2 ** (b.violations - 1), cfg.maxBlock);
-		b.blockedUntil = now + blockMs;
-		b.hits = 0;
-		return { ok: false, retryAfter: Math.ceil(blockMs / 1000) };
-	}
-
-	return { ok: true };
+	// À sec : violation + blocage exponentiel.
+	b.violations++;
+	const blockMs = Math.min(cfg.baseBlock * 2 ** (b.violations - 1), cfg.maxBlock);
+	b.blockedUntil = now + blockMs;
+	return { ok: false, remaining: 0, resetMs: blockMs, retryAfter: Math.ceil(blockMs / 1000) };
 }
 
-// Elysia onBeforeHandle helper — returns early-exit payload or undefined
+// Elysia onBeforeHandle helper — pose les headers, early-exit 429 si limité.
 export function rl(
 	key: string,
 	cfg: RLConfig,
@@ -87,6 +100,10 @@ export function rl(
 )
 {
 	const r = checkRL(key, cfg);
+	set.headers["X-RateLimit-Bucket"] = cfg.name;
+	set.headers["X-RateLimit-Limit"] = String(cfg.max);
+	set.headers["X-RateLimit-Remaining"] = String(r.remaining);
+	set.headers["X-RateLimit-Reset"] = ((Date.now() + r.resetMs) / 1000).toFixed(3);
 	if (!r.ok)
 	{
 		set.status = 429;

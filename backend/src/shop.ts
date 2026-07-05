@@ -23,12 +23,22 @@ export const ITEMS: ShopItem[] = [
 	{ key: "title_highroller",kind: "title", label: "Titre « High Roller »",  value: "High Roller",  price: 10_000 },
 	{ key: "title_whale",     kind: "title", label: "Titre « Baleine »",      value: "Baleine 🐋",   price: 25_000 },
 	{ key: "title_legend",    kind: "title", label: "Titre « Légende 42 »",   value: "Légende 42",   price: 50_000 },
+	{ key: "title_pigeon",    kind: "title", label: "Titre « Pigeon »",       value: "Pigeon 🐦",    price: 1_500 },
+	{ key: "title_norminet",  kind: "title", label: "Titre « Norminet »",     value: "Norminet 🐈",  price: 5_000 },
+	{ key: "title_segfault",  kind: "title", label: "Titre « Segfault »",     value: "Segfault 💥",  price: 7_500 },
+	{ key: "title_allin",     kind: "title", label: "Titre « All-in »",       value: "All-in ♠️",    price: 15_000 },
+	{ key: "title_goat",      kind: "title", label: "Titre « GOAT »",         value: "GOAT 🐐",      price: 100_000 },
 	{ key: "color_gold",      kind: "color", label: "Pseudo doré",            value: "#f59e0b",      price: 5_000 },
 	{ key: "color_red",       kind: "color", label: "Pseudo rouge",           value: "#ef4444",      price: 3_000 },
 	{ key: "color_green",     kind: "color", label: "Pseudo vert",            value: "#22c55e",      price: 3_000 },
 	{ key: "color_purple",    kind: "color", label: "Pseudo violet",          value: "#a855f7",      price: 4_000 },
 	{ key: "color_cyan",      kind: "color", label: "Pseudo cyan",            value: "#06b6d4",      price: 3_000 },
 	{ key: "color_pink",      kind: "color", label: "Pseudo rose",            value: "#ec4899",      price: 4_000 },
+	{ key: "color_rainbow",   kind: "color", label: "Pseudo arc-en-ciel",     value: "rainbow",      price: 20_000 },
+	{ key: "color_fire",      kind: "color", label: "Pseudo enflammé",        value: "fire",         price: 20_000 },
+	{ key: "color_ocean",     kind: "color", label: "Pseudo océan",           value: "ocean",        price: 20_000 },
+	{ key: "color_galaxy",    kind: "color", label: "Pseudo galaxie",         value: "galaxy",       price: 20_000 },
+	{ key: "color_toxic",     kind: "color", label: "Pseudo toxique",         value: "toxic",        price: 20_000 },
 ];
 
 const byKey = new Map(ITEMS.map((i) => [i.key, i]));

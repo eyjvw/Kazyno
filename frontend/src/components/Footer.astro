@@ -3,5 +3,31 @@
 ---
 <footer class="site-foot">
   <span>Made by <a href="https://profile.intra.42.fr/users/sbonneau" target="_blank" rel="noopener">@sbonneau</a></span>
-  <span class="muted">PISCASINO · v0.0.1</span>
+  <nav class="foot-links">
+    <a href="/legal/fair" data-i18n="footer.fair">Fair-play</a>
+    <a href="/legal/privacy" data-i18n="footer.privacy">Confidentialité</a>
+    <a href="/legal/terms" data-i18n="footer.terms">CGU</a>
+  </nav>
+  <span class="muted">Kazyno · v0.0.1</span>
 </footer>
+
+<style is:global>
+  .foot-links {
+    display: flex;
+    gap: 16px;
+  }
+</style>
+
+<script>
+	import { t, onLocaleChange, type TKey } from "../lib/i18n";
+
+	function applyI18n()
+	{
+		document.querySelectorAll<HTMLElement>("footer [data-i18n]").forEach((el) =>
+		{
+			el.textContent = t(el.dataset.i18n as TKey);
+		});
+	}
+	applyI18n();
+	onLocaleChange(applyI18n);
+</script>

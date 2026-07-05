@@ -4,15 +4,12 @@ import Nav from "../components/Nav.astro";
 import Footer from "../components/Footer.astro";
 ---
 
-<Layout title="PISCASINO — Boutique">
+<Layout title="Kazyno — Boutique">
   <Nav />
   <main class="shop">
-    <header class="game-header">
-      <span class="gh-icon">🛍️</span>
-      <div>
-        <h1>Boutique</h1>
-        <p>Dépense tes points : titres et couleurs de pseudo</p>
-      </div>
+    <header class="head">
+      <h1>Boutique 🛍️</h1>
+      <p>Dépense tes points : titres et couleurs de pseudo.</p>
     </header>
 
     <section class="shop-sec">
@@ -31,6 +28,7 @@ import Footer from "../components/Footer.astro";
 <script>
 	import { getShop, buyItem, equipItem, fmt, toast, getBalance } from "../lib/casino";
 
+	const GRADS = ["rainbow", "fire", "ocean", "galaxy", "toxic"];
 	const titlesEl = document.querySelector<HTMLElement>("[data-titles]")!;
 	const colorsEl = document.querySelector<HTMLElement>("[data-colors]")!;
 
@@ -63,7 +61,9 @@ import Footer from "../components/Footer.astro";
 				<div class="shop-preview">${
 					item.kind === "title"
 						? `<span class="title-badge">${item.value}</span>`
-						: `<span class="color-preview" style="color:${item.value}">sbonneau</span>`
+						: GRADS.includes(item.value)
+							? `<span class="color-preview grad-${item.value}">sbonneau</span>`
+							: `<span class="color-preview" style="color:${item.value}">sbonneau</span>`
 				}</div>
 				<b class="shop-label">${item.label}</b>
 				<span class="shop-price">${has ? (isEquipped ? "Équipé ✓" : "Possédé") : `${fmt(item.price)} pts`}</span>
@@ -121,8 +121,19 @@ import Footer from "../components/Footer.astro";
     position: relative;
     z-index: 1;
     width: 100%;
+    max-width: 1100px;
     margin: 0 auto;
-    padding: clamp(20px, 4vw, 40px) clamp(20px, 5vw, 64px);
+    padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 40px);
+  }
+  .head h1 {
+    margin: 0;
+    font-size: clamp(28px, 5vw, 40px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+  .head p {
+    margin: 8px 0 26px;
+    color: var(--muted);
   }
   .shop-sec { margin-bottom: 32px; }
   .section-title {
@@ -131,9 +142,14 @@ import Footer from "../components/Footer.astro";
     font-weight: 800;
   }
   .shop-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 16px;
+  }
+  .shop-grid :global(.shop-card) {
+    flex: 1 1 210px;
+    max-width: 250px;
   }
   :global(.shop-card) {
     display: flex;

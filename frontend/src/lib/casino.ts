@@ -1,4 +1,14 @@
 // Shared client helpers for auth state, balance, and placing bets.
+import { syncLocale } from "./i18n";
+
+export interface NotifPrefs
+{
+	rain: boolean;
+	giveaway: boolean;
+	social: boolean;
+	exam: boolean;
+	admin: boolean;
+}
 
 export interface Me
 {
@@ -7,6 +17,10 @@ export interface Me
 	display_name: string | null;
 	image_url: string | null;
 	points: number;
+	locale: string;
+	show_presence: boolean;
+	notif_prefs: NotifPrefs;
+	welcomed: boolean;
 }
 
 type BalanceListener = (points: number) => void;
@@ -15,6 +29,28 @@ let balance = 0;
 let myId: number | null = null;
 
 export const getMyId = () => myId;
+
+const DEFAULT_PREFS: NotifPrefs = { rain: true, giveaway: true, social: true, exam: true, admin: true };
+let showPresence = true;
+let notifPrefs: NotifPrefs = { ...DEFAULT_PREFS };
+
+export const getShowPresence = () => showPresence;
+export const getNotifPrefs = () => notifPrefs;
+
+/** Persist preference changes to the account and update local state. */
+export async function setPrefs(patch: { show_presence?: boolean; notif_prefs?: Partial<NotifPrefs> })
+{
+	if (patch.show_presence !== undefined) showPresence = patch.show_presence;
+	if (patch.notif_prefs) notifPrefs = { ...notifPrefs, ...patch.notif_prefs };
+	try
+	{
+		await fetch("/api/auth/prefs", {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(patch),
+		});
+	} catch {}
+}
 
 /** Subscribe to balance changes; fires immediately with the current value. */
 export function onBalance(fn: BalanceListener)
@@ -45,6 +81,9 @@ export async function loadMe(): Promise<Me | null>
 		if (!data?.authenticated) return null;
 		myId = data.user.id;
 		setBalance(data.user.points);
+		syncLocale(data.user.locale);
+		showPresence = data.user.show_presence ?? true;
+		notifPrefs = { ...DEFAULT_PREFS, ...(data.user.notif_prefs ?? {}) };
 		return data.user as Me;
 	} catch {
 		return null;
@@ -136,6 +175,7 @@ export function connectRealtime()
 				leaderListeners.forEach((fn) => fn(msg.leaderboard));
 				break;
 			case "presence":
+				if (!showPresence) break; // opted out: don't see anyone else's status either
 				if (msg.user.id === myId) break; // ignore self
 				if (msg.online) onlineUsers.set(msg.user.id, msg.user);
 				else onlineUsers.delete(msg.user.id);
@@ -156,6 +196,9 @@ export function connectRealtime()
 				break;
 			case "exam_settled":
 				examListeners.forEach((fn) => fn(msg));
+				break;
+			case "giveaway_drawn":
+				giveawayListeners.forEach((fn) => fn(msg));
 				break;
 			case "crash":
 				crashListeners.forEach((fn) => fn(msg));
@@ -184,7 +227,7 @@ export function connectRealtime()
 				feedListeners.forEach((fn) => fn(msg.item));
 				break;
 			case "rain":
-				showRainBanner(msg);
+				if (notifPrefs.rain) showRainBanner(msg);
 				break;
 			case "rain_update":
 				if (msg.remaining <= 0) hideRainBanner();
@@ -436,6 +479,12 @@ export function onExamSettled(fn: ExamListener)
 {
 	examListeners.add(fn);
 }
+type GiveawayListener = (msg: any) => void;
+const giveawayListeners = new Set<GiveawayListener>();
+export function onGiveawayDrawn(fn: GiveawayListener)
+{
+	giveawayListeners.add(fn);
+}
 export async function getExamBets()
 {
 	try
@@ -566,6 +615,21 @@ export async function getExams(): Promise<any[]>
 		return r.ok ? (await r.json()).exams : [];
 	} catch { return []; }
 }
+export interface ExamCtx
+{
+	common_core_done: boolean;
+	exam_rank: number | null;
+}
+export async function getExamsWithCtx(): Promise<{ exams: any[]; ctx: ExamCtx | null }>
+{
+	try
+	{
+		const r = await fetch("/api/exams");
+		if (!r.ok) return { exams: [], ctx: null };
+		const d = await r.json();
+		return { exams: d.exams ?? [], ctx: d.ctx ?? null };
+	} catch { return { exams: [], ctx: null }; }
+}
 export async function placeExamBet(exam_id: number, predicted: number, stake: number)
 {
 	const r = await fetch("/api/exam-bets", {
@@ -597,12 +661,12 @@ export async function cancelExamBet(betId: number)
 }
 
 // Admin exam management
-export async function adminCreateExam(label: string, exam_date: string, is_final: boolean)
+export async function adminCreateExam(label: string, exam_date: string, is_final: boolean, rank?: number)
 {
 	const r = await fetch("/api/exams", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ label, exam_date, is_final }),
+		body: JSON.stringify({ label, exam_date, is_final, rank }),
 	});
 	const data = await r.json().catch(() => ({}));
 	if (!r.ok) throw new Error(data?.error ?? "Erreur");
@@ -618,6 +682,74 @@ export async function adminLockExam(id: number)
 export async function adminDeleteExam(id: number)
 {
 	const r = await fetch(`/api/exams/${id}`, { method: "DELETE" });
+	const data = await r.json().catch(() => ({}));
+	if (!r.ok) throw new Error(data?.error ?? "Erreur");
+	return data;
+}
+
+// Giveaways
+export interface Giveaway
+{
+	id: number;
+	title: string;
+	description: string | null;
+	prize_points: number;
+	ends_at: string;
+	created_at: string;
+	entry_count: number;
+	entered: boolean;
+}
+export interface GiveawayHistoryRow
+{
+	id: number;
+	title: string;
+	prize_points: number;
+	ends_at: string;
+	winner_login: string | null;
+	winner_name: string | null;
+	winner_image: string | null;
+}
+export async function getGiveaways(): Promise<{ active: Giveaway[]; history: GiveawayHistoryRow[] }>
+{
+	try
+	{
+		const r = await fetch("/api/giveaways");
+		return r.ok ? await r.json() : { active: [], history: [] };
+	} catch { return { active: [], history: [] }; }
+}
+export async function enterGiveaway(id: number)
+{
+	const r = await fetch(`/api/giveaways/${id}/enter`, { method: "POST" });
+	const data = await r.json().catch(() => ({}));
+	if (!r.ok) throw new Error(data?.error ?? "Erreur");
+	return data;
+}
+export async function leaveGiveaway(id: number)
+{
+	const r = await fetch(`/api/giveaways/${id}/enter`, { method: "DELETE" });
+	const data = await r.json().catch(() => ({}));
+	if (!r.ok) throw new Error(data?.error ?? "Erreur");
+	return data;
+}
+export async function adminCreateGiveaway(
+	title: string,
+	description: string,
+	prize_points: number,
+	ends_at: string,
+)
+{
+	const r = await fetch("/api/giveaways", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ title, description: description || undefined, prize_points, ends_at }),
+	});
+	const data = await r.json().catch(() => ({}));
+	if (!r.ok) throw new Error(data?.error ?? "Erreur");
+	return data;
+}
+export async function adminDeleteGiveaway(id: number)
+{
+	const r = await fetch(`/api/giveaways/${id}`, { method: "DELETE" });
 	const data = await r.json().catch(() => ({}));
 	if (!r.ok) throw new Error(data?.error ?? "Erreur");
 	return data;
@@ -694,6 +826,8 @@ export interface Profile
 	rank: number | null;
 	online: boolean;
 	status: "self" | "friend" | "pending_out" | "pending_in" | "none";
+	title: string | null;
+	name_color: string | null;
 }
 export async function getProfile(login: string): Promise<Profile | null>
 {

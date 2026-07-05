@@ -66,16 +66,16 @@ export function initAmbient(canvas: HTMLCanvasElement)
 			const ty = s.y - Math.sin(s.angle) * s.len;
 
 			const grad = ctx.createLinearGradient(tx, ty, s.x, s.y);
-			grad.addColorStop(0, `rgba(180,210,255,0)`);
-			grad.addColorStop(0.6, `rgba(180,210,255,${s.alpha * 0.35})`);
-			grad.addColorStop(1, `rgba(220,235,255,${s.alpha})`);
+			grad.addColorStop(0, `rgba(212,175,55,0)`);
+			grad.addColorStop(0.6, `rgba(212,175,55,${s.alpha * 0.35})`);
+			grad.addColorStop(1, `rgba(232,199,102,${s.alpha})`);
 
 			ctx.save();
 			ctx.strokeStyle = grad;
 			ctx.lineWidth = s.size;
 			ctx.lineCap = "round";
 			ctx.shadowBlur = 5;
-			ctx.shadowColor = `rgba(150,200,255,${s.alpha * 0.4})`;
+			ctx.shadowColor = `rgba(212,175,55,${s.alpha * 0.4})`;
 			ctx.beginPath();
 			ctx.moveTo(tx, ty);
 			ctx.lineTo(s.x, s.y);

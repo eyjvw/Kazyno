@@ -11,17 +11,17 @@ const games = [
 	{ href: "/games/tower",   name: "Tower",          tag: "Grimpe 8 étages · ~25× max",    emoji: "🗼", hot: true },
 	{ href: "/games/hilo",    name: "Hi-Lo",          tag: "Plus haut ou plus bas ?",       emoji: "🃏" },
 	{ href: "/games/wheel",   name: "Wheel",          tag: "50 segments · jusqu'à 5.5×",    emoji: "🛞" },
-	{ href: "#blackjack",     name: "Blackjack",      tag: "Solo ou en ligne · multijoueur",emoji: "🃏" },
+	{ href: "#blackjack",     name: "Blackjack",      tag: "21 sans dépasser · multijoueur",emoji: "🃏" },
 	{ href: "/games/dice",    name: "Dice",           tag: "Roll under / over",             emoji: "🎲" },
 	{ href: "/games/limbo",   name: "Limbo",          tag: "Bust avant ta cible ?",         emoji: "🚀" },
 	{ href: "/games/plinko",  name: "Plinko",         tag: "Laisse tomber la bille",        emoji: "🔻" },
 	{ href: "/games/coinflip",name: "Coinflip",       tag: "Pile ou face · 1.98x",          emoji: "🪙" },
 	{ href: "/games/slots",   name: "Machine à sous", tag: "3 rouleaux · jackpot 7️⃣",      emoji: "🎰" },
-	{ href: "#keno",          name: "Keno",           tag: "10 numéros · jusqu'à 100×",     emoji: "🔢" },
+	{ href: "/games/keno",    name: "Keno",           tag: "10 numéros · jusqu'à 100×",     emoji: "🔢" },
 ];
 ---
 
-<Layout title="PISCASINO — Lobby">
+<Layout title="Kazyno — Lobby">
   <Nav />
   <main class="lobby">
     <section class="hero">
@@ -68,7 +68,7 @@ const games = [
     <section class="grid">
       {
         games.map((g) => (
-          <a class="card" href={g.href} data-bj={g.href === "#blackjack" ? "" : undefined} data-keno-open={g.href === "#keno" ? "" : undefined} data-pk-open={g.href === "#poker" ? "" : undefined}>
+          <a class="card" href={g.href} data-bj={g.href === "#blackjack" ? "" : undefined} data-pk-open={g.href === "#poker" ? "" : undefined}>
             <span class="emoji">{g.emoji}</span>
             <span class="meta">
               <b>{g.name}{(g as any).hot ? <span class="hot-badge">NEW</span> : ""}</b>
@@ -145,7 +145,7 @@ const games = [
       <div class="daily-fire">♠️</div>
       <h2 class="daily-title">Poker</h2>
 
-      <div class="bj-actions">
+      <div class="bj-actions bj-actions-single">
         <button class="bj-action" data-pk-create>
           <span class="bja-ico">➕</span>
           <span class="bja-meta"><b>Créer une table</b><small>Publique ou privée · Texas Hold'em</small></span>
@@ -174,16 +174,6 @@ const games = [
         <span class="bj-empty">Chargement…</span>
       </div>
       <p class="bj-err" data-pk-err hidden></p>
-    </div>
-  </div>
-
-  <!-- Keno modal -->
-  <div class="daily-modal" data-keno-modal hidden>
-    <div class="daily-card keno-card">
-      <button class="daily-close" data-keno-close aria-label="Fermer">✕</button>
-      <div class="daily-fire">🔢</div>
-      <h2 class="daily-title">Keno</h2>
-      <iframe class="keno-frame" data-keno-frame title="Keno"></iframe>
     </div>
   </div>
 
@@ -467,23 +457,6 @@ const games = [
 		}
 	});
 
-	// ── Keno modal ────────────────────────────────────────────────────────────
-	const kenoModal = document.querySelector<HTMLElement>("[data-keno-modal]")!;
-	const kenoFrame = document.querySelector<HTMLIFrameElement>("[data-keno-frame]")!;
-
-	document.querySelector("[data-keno-open]")?.addEventListener("click", (e) =>
-	{
-		e.preventDefault();
-		// iframe chargée à la première ouverture seulement
-		if (!kenoFrame.src) kenoFrame.src = "/games/keno?embed=1";
-		kenoModal.hidden = false;
-	});
-	document.querySelector("[data-keno-close]")?.addEventListener("click", () => (kenoModal.hidden = true));
-	kenoModal.addEventListener("click", (e) =>
-	{
-		if (e.target === kenoModal) kenoModal.hidden = true;
-	});
-
 	// ── Blackjack modal ───────────────────────────────────────────────────────
 	const bjModal   = document.querySelector<HTMLElement>("[data-bj-modal]")!;
 	const bjRoomsEl = document.querySelector<HTMLElement>("[data-bj-rooms]")!;
@@ -698,12 +671,14 @@ const games = [
     font-weight: 800;
   }
   .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    grid-auto-rows: 1fr;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 18px;
   }
   .card {
+    flex: 1 1 220px;
+    max-width: 280px;
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -832,9 +807,13 @@ const games = [
   }
 
   .challenges-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 12px;
+  }
+  .challenges-grid > :global(*) {
+    flex: 1 1 240px;
   }
 
   :global(.chal-card) {
@@ -1015,24 +994,15 @@ const games = [
   /* ── Blackjack modal ── */
   .bj-card { gap: 12px; }
 
-  .keno-card {
-    max-width: 1000px;
-    gap: 10px;
-  }
-  .keno-frame {
-    width: 100%;
-    height: min(72vh, 720px);
-    border: none;
-    border-radius: 12px;
-    background: transparent;
-  }
-
   .bj-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
     width: 100%;
     margin-top: 6px;
+  }
+  .bj-actions-single {
+    grid-template-columns: 1fr;
   }
   .bj-action {
     display: flex;

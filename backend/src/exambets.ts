@@ -140,11 +140,21 @@ export const exambets = new Elysia({ prefix: "/api/exam-bets" })
 			if (limited) return limited;
 
 			const examRows = (await sql`
-				SELECT id, is_final, locked, exam_date FROM exams WHERE id = ${body.exam_id}
-			`) as Array<{ id: number; is_final: boolean; locked: boolean; exam_date: string }>;
+				SELECT id, is_final, locked, exam_date, rank FROM exams WHERE id = ${body.exam_id}
+			`) as Array<{ id: number; is_final: boolean; locked: boolean; exam_date: string; rank: number | null }>;
 			if (!examRows[0]) return err(set, 404, "exam introuvable");
 			if (examRows[0].locked || new Date(examRows[0].exam_date) < new Date())
 				return err(set, 409, "les paris pour cet exam sont fermés");
+
+			// Cursus gating: no exam bets once the common core is done, and
+			// rank-reserved exams only accept players registered at that rank.
+			const cursus = (await sql`
+				SELECT common_core_done, exam_rank FROM users WHERE id=${userId}
+			`) as Array<{ common_core_done: boolean; exam_rank: number | null }>;
+			if (cursus[0]?.common_core_done)
+				return err(set, 403, "tronc commun terminé — plus de paris d'exam pour toi 🎓");
+			if (examRows[0].rank !== null && cursus[0]?.exam_rank !== examRows[0].rank)
+				return err(set, 403, `réservé aux inscrits Exam 0${examRows[0].rank}`);
 
 			const type: ExamType = examRows[0].is_final ? "final" : "standard";
 			const valid = validScores(type);

@@ -1,0 +1,92 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import Nav from "../../../components/Nav.astro";
+import Footer from "../../../components/Footer.astro";
+import { gameRules, getGameRule } from "../../../lib/gameRules";
+
+export function getStaticPaths()
+{
+	return gameRules.map((g) => ({ params: { slug: g.slug } }));
+}
+
+const { slug } = Astro.params;
+const rule = getGameRule(slug!)!;
+const backHref = rule.slug === "blackjack" ? "/table" : rule.slug === "poker" ? "/games/poker" : `/games/${rule.slug}`;
+---
+
+<Layout title={`Kazyno — Règles ${rule.title}`}>
+  <Nav />
+  <main class="wrap">
+    <a class="back" href={backHref}>← Retour au jeu</a>
+    <div class="panel doc">
+      <div class="doc-head">
+        <span class="doc-icon">{rule.icon}</span>
+        <div>
+          <h1>{rule.title}</h1>
+          <p class="lede">{rule.tagline}</p>
+        </div>
+      </div>
+
+      {rule.sections.map((s) => (
+        <>
+          <h2>{s.heading}</h2>
+          <p>{s.body}</p>
+        </>
+      ))}
+
+      {rule.table && (
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>{rule.table.headers.map((h) => <th>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rule.table.rows.map((row) => (
+                <tr>{row.map((cell) => <td>{cell}</td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div class="edge-badge">{rule.edge}</div>
+    </div>
+  </main>
+  <Footer />
+</Layout>
+
+<style>
+  .wrap { max-width: 720px; margin: 0 auto; padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 40px); }
+  .back { color: var(--muted); font-size: 13px; }
+  .back:hover { color: var(--fg); }
+  .doc { margin-top: 18px; padding: 32px clamp(20px, 4vw, 36px); }
+  .doc-head { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+  .doc-icon { font-size: 40px; line-height: 1; }
+  .doc h1 { margin: 0; font-size: clamp(24px, 4vw, 30px); font-weight: 800; letter-spacing: -0.02em; }
+  .doc .lede { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+  .doc h2 { margin: 22px 0 8px; font-size: 16px; font-weight: 800; }
+  .doc p { color: var(--fg); font-size: 14px; line-height: 1.7; margin: 0; }
+
+  .table-wrap { overflow-x: auto; margin: 18px 0 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td {
+    border: 1px solid var(--line);
+    padding: 8px 10px;
+    text-align: center;
+    white-space: nowrap;
+  }
+  th { background: var(--bg-2); color: var(--muted); font-weight: 700; }
+  td { font-variant-numeric: tabular-nums; }
+
+  .edge-badge {
+    display: inline-block;
+    margin-top: 22px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    background: rgba(212, 175, 55, 0.12);
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    border-radius: 20px;
+    padding: 5px 14px;
+  }
+</style>

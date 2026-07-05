@@ -1,0 +1,42 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+import Footer from "../../components/Footer.astro";
+---
+
+<Layout title="Kazyno — Confidentialité">
+  <Nav />
+  <main class="wrap">
+    <a class="back" href="/">← Retour</a>
+    <div class="panel doc">
+      <h1>Confidentialité</h1>
+      <p class="lede">Kazyno est un projet étudiant de l'intra 42 Le Havre. Voici ce qu'on collecte et pourquoi.</p>
+
+      <h2>Données collectées</h2>
+      <p>À la connexion via OAuth 42, on récupère ton login, ton nom d'affichage et ton avatar 42. Aucun mot de passe n'est stocké — l'authentification passe entièrement par l'intra 42.</p>
+      <p>On conserve ensuite : ton solde de points (fictifs), ton historique de parties, tes succès débloqués, tes amis, et les messages/notifications que tu échanges sur la plateforme.</p>
+
+      <h2>Ce qu'on ne fait pas</h2>
+      <p>Aucune donnée n'est vendue ou partagée avec un tiers. Aucun argent réel n'est manipulé — tout se joue en points internes sans valeur monétaire.</p>
+
+      <h2>Suppression de compte</h2>
+      <p>Tu peux supprimer ton compte à tout moment depuis le menu profil. Cette action efface définitivement tes données (points, historique, amis, notifications).</p>
+
+      <h2>Contact</h2>
+      <p>Une question ? Contacte <a href="https://profile.intra.42.fr/users/sbonneau" target="_blank" rel="noopener">@sbonneau</a> sur l'intra.</p>
+    </div>
+  </main>
+  <Footer />
+</Layout>
+
+<style>
+  .wrap { max-width: 720px; margin: 0 auto; padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 40px); }
+  .back { color: var(--muted); font-size: 13px; }
+  .back:hover { color: var(--fg); }
+  .doc { margin-top: 18px; padding: 32px clamp(20px, 4vw, 36px); }
+  .doc h1 { margin: 0 0 6px; font-size: clamp(26px, 4vw, 34px); font-weight: 800; letter-spacing: -0.02em; }
+  .doc .lede { color: var(--muted); margin: 0 0 26px; font-size: 15px; }
+  .doc h2 { margin: 26px 0 10px; font-size: 17px; font-weight: 800; }
+  .doc p { color: var(--fg); font-size: 14px; line-height: 1.7; margin: 0 0 12px; }
+  .doc a { color: var(--accent); }
+</style>

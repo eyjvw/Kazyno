@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { jwt } from "@elysiajs/jwt";
 import { sql } from "./db";
-import { publishToUser, publishBroadcast } from "./realtime";
+import { publishToUser } from "./realtime";
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? "dev-insecure-change-me";
 
@@ -20,9 +20,31 @@ interface NotifOpts
 	link?: string | null;
 }
 
-/** Persist a notification for one user and push it live. */
+// Maps a notification kind to the user-facing preference category that gates
+// it. Kinds not listed here (achievements, challenges…) are always sent.
+const CATEGORY_BY_KIND: Record<string, string> = {
+	admin: "admin",
+	giveaway: "giveaway",
+	exam: "exam",
+	duel: "social",
+	bj_invite: "social",
+	friend_request: "social",
+	friend_accepted: "social",
+};
+
+/** Persist a notification for one user and push it live, unless they opted out of this category. */
 export async function pushNotif(userId: number, o: NotifOpts)
 {
+	const category = CATEGORY_BY_KIND[o.kind];
+	if (category)
+	{
+		const rows = (await sql`
+			SELECT COALESCE((notif_prefs->>${category})::boolean, true) AS allowed
+			FROM users WHERE id = ${userId}
+		`) as Array<{ allowed: boolean }>;
+		if (!rows[0]?.allowed) return;
+	}
+
 	const f = o.from ?? null;
 	const rows = (await sql`
 		INSERT INTO notifications (user_id, kind, message, from_id, from_login, from_name, from_image, link)
@@ -33,29 +55,31 @@ export async function pushNotif(userId: number, o: NotifOpts)
 	publishToUser(userId, { type: "notification", notif: rows[0] });
 }
 
-/** Persist a notification for everyone and push a live signal. */
+/** Persist a notification for every opted-in user and push a live signal to each of them. */
 export async function pushNotifAll(o: NotifOpts)
 {
+	const category = CATEGORY_BY_KIND[o.kind] ?? null;
 	const f = o.from ?? null;
-	await sql`
+	const rows = (await sql`
 		INSERT INTO notifications (user_id, kind, message, from_id, from_login, from_name, from_image, link)
 		SELECT id, ${o.kind}, ${o.message}, ${f?.id ?? null}, ${f?.login ?? null},
 					 ${f?.display_name ?? null}, ${f?.image_url ?? null}, ${o.link ?? null}
 		FROM users
-	`;
-	publishBroadcast({
-		type: "notification",
-		notif: {
-			kind: o.kind,
-			message: o.message,
-			from_login: f?.login ?? null,
-			from_name: f?.display_name ?? null,
-			from_image: f?.image_url ?? null,
-			link: o.link ?? null,
-			read: false,
-			created_at: new Date().toISOString(),
-		},
-	});
+		WHERE CAST(${category} AS text) IS NULL OR COALESCE((notif_prefs->>${category})::boolean, true)
+		RETURNING user_id
+	`) as Array<{ user_id: number }>;
+
+	const notif = {
+		kind: o.kind,
+		message: o.message,
+		from_login: f?.login ?? null,
+		from_name: f?.display_name ?? null,
+		from_image: f?.image_url ?? null,
+		link: o.link ?? null,
+		read: false,
+		created_at: new Date().toISOString(),
+	};
+	for (const r of rows) publishToUser(r.user_id, { type: "notification", notif });
 }
 
 export const notifications = new Elysia({ prefix: "/api/notifications" })

@@ -16,13 +16,25 @@ export interface User
 	image_url: string | null;
 	points: number;
 	created_at: string;
+	locale: string;
+	show_presence: boolean;
+	notif_prefs: NotifPrefs;
+}
+
+export interface NotifPrefs
+{
+	rain: boolean;
+	giveaway: boolean;
+	social: boolean;
+	exam: boolean;
+	admin: boolean;
 }
 
 // Fields safe to return to the client (never the password hash).
 export type PublicUser = Pick<
 	User,
-	"id" | "login" | "email" | "display_name" | "image_url" | "points"
->;
+	"id" | "login" | "email" | "display_name" | "image_url" | "points" | "locale" | "show_presence" | "notif_prefs"
+> & { welcomed: boolean };
 
 // Create schema on boot, then run idempotent migrations so existing volumes
 // (created before password auth) get the new columns/constraints.
@@ -220,6 +232,42 @@ export async function initDb(): Promise<void>
 			server_seed TEXT NOT NULL,
 			client_seed TEXT NOT NULL,
 			nonce       INTEGER NOT NULL DEFAULT 0
+		)
+	`;
+
+	// Admin-run giveaways: players enter for free, one random winner drawn at ends_at.
+	await sql`
+		CREATE TABLE IF NOT EXISTS giveaways (
+			id           SERIAL PRIMARY KEY,
+			title        TEXT NOT NULL,
+			description  TEXT,
+			prize_points INTEGER NOT NULL,
+			ends_at      TIMESTAMPTZ NOT NULL,
+			drawn        BOOLEAN NOT NULL DEFAULT false,
+			winner_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+			created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+		)
+	`;
+	await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS locale TEXT NOT NULL DEFAULT 'fr'`;
+	// 42 cursus tracking, refreshed at every OAuth login from /v2/me.
+	await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS common_core_done BOOLEAN NOT NULL DEFAULT false`;
+	await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS exam_rank INTEGER`;
+	await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS cursus_checked_at TIMESTAMPTZ`;
+	await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS welcomed BOOLEAN NOT NULL DEFAULT false`;
+	// Optional rank an exam is reserved to (2..6 => Exam Rank 02..06).
+	await sql`ALTER TABLE exams ADD COLUMN IF NOT EXISTS rank INTEGER`;
+	await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS show_presence BOOLEAN NOT NULL DEFAULT true`;
+	await sql`
+		ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_prefs JSONB NOT NULL DEFAULT
+			'{"rain":true,"giveaway":true,"social":true,"exam":true,"admin":true}'::jsonb
+	`;
+
+	await sql`
+		CREATE TABLE IF NOT EXISTS giveaway_entries (
+			giveaway_id INTEGER NOT NULL REFERENCES giveaways(id) ON DELETE CASCADE,
+			user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			entered_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+			PRIMARY KEY (giveaway_id, user_id)
 		)
 	`;
 }

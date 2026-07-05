@@ -55,7 +55,10 @@ export const duels = new Elysia({ prefix: "/api/duels" })
 			return { error: "non authentifie" };
 		}
 	})
-	.onBeforeHandle(({ userId, set }) => rl(`duels:${userId}`, BUCKETS.friends, set))
+	.onBeforeHandle(({ userId, set, request }) =>
+		request.method === "GET"
+			? rl(`social-r:${userId}`, BUCKETS.socialRead, set)
+			: rl(`duels-w:${userId}`, BUCKETS.socialWrite, set))
 
 	// My duels: incoming challenges + outgoing pending + recent history.
 	.get("/me", async ({ userId }) =>

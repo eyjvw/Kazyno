@@ -25,7 +25,9 @@ export interface OnlineUser
 // userId -> { open connection count, cached profile }. Multi-tab safe.
 const online = new Map<number, { count: number; user: OnlineUser }>();
 
-/** Mark a new connection for a user; broadcasts when they come online. */
+/** Mark a new connection for a user; broadcasts when they come online.
+ * Users who opted out of presence (show_presence=false) are never tracked,
+ * so isOnline()/onlineList() correctly hide them from everyone. */
 export async function addPresence(userId: number)
 {
 	const existing = online.get(userId);
@@ -35,9 +37,9 @@ export async function addPresence(userId: number)
 		return;
 	}
 	const rows = (await sql`
-		SELECT id, login, display_name, image_url FROM users WHERE id = ${userId}
-	`) as OnlineUser[];
-	if (!rows[0]) return;
+		SELECT id, login, display_name, image_url, show_presence FROM users WHERE id = ${userId}
+	`) as Array<OnlineUser & { show_presence: boolean }>;
+	if (!rows[0] || !rows[0].show_presence) return;
 	online.set(userId, { count: 1, user: rows[0] });
 	server?.publish(
 		"presence",

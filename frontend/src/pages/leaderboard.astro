@@ -4,40 +4,52 @@ import Nav from "../components/Nav.astro";
 import Footer from "../components/Footer.astro";
 ---
 
-<Layout title="PISCASINO — Classement">
+<Layout title="Kazyno — Classement">
   <Nav />
   <main class="wrap">
     <header class="head">
       <h1>Classement</h1>
-      <p>Les joueurs les plus riches de la piscine.</p>
+      <p>Les joueurs les plus riches de Kazyno.</p>
     </header>
 
-    <input
-      class="input search"
-      data-search
-      type="search"
-      placeholder="Rechercher un joueur…"
-      autocomplete="off"
-    />
+    <div class="toolbar">
+      <div class="tabs">
+        <button class="tab is-active" data-tab="global">💰 Général</button>
+        <button class="tab" data-tab="games">🎮 Par jeu</button>
+      </div>
+      <select class="input game-select" data-game-select hidden></select>
+      <input
+        class="input search"
+        data-search
+        type="search"
+        placeholder="Rechercher un joueur…"
+        autocomplete="off"
+      />
+    </div>
 
-    <ol class="list" data-list>
-      <li class="empty">Chargement…</li>
-    </ol>
+    <a class="meline" data-meline href="/profile" hidden></a>
 
-    <nav class="pager" data-pager hidden>
-      <button class="ghost-btn" data-prev>← Préc.</button>
-      <span class="pginfo" data-pginfo></span>
-      <button class="ghost-btn" data-next>Suiv. →</button>
-    </nav>
+    <section data-pane-global>
+      <div class="podium" data-podium hidden>
+        <div class="step s2" data-podium-2></div>
+        <div class="step s1" data-podium-1></div>
+        <div class="step s3" data-podium-3></div>
+      </div>
 
-    <section class="game-lb">
-      <header class="game-head">
-        <h2>Par jeu</h2>
-        <p>Top 10 des joueurs les plus rentables sur chaque jeu.</p>
-      </header>
-      <div class="game-tabs" data-game-tabs></div>
-      <ol class="game-list" data-game-list>
-        <li class="gempty">Sélectionner un jeu.</li>
+      <ol class="list" data-list>
+        <li class="empty">Chargement…</li>
+      </ol>
+
+      <nav class="pager" data-pager hidden>
+        <button class="ghost-btn" data-prev>← Préc.</button>
+        <span class="pginfo" data-pginfo></span>
+        <button class="ghost-btn" data-next>Suiv. →</button>
+      </nav>
+    </section>
+
+    <section data-pane-games hidden>
+      <ol class="list game-list" data-game-list>
+        <li class="empty">Chargement…</li>
       </ol>
     </section>
   </main>
@@ -48,8 +60,10 @@ import Footer from "../components/Footer.astro";
 	import {
 		getLeaderboardPage,
 		getGameLeaderboard,
+		getMyRank,
 		loadMe,
 		fmt,
+		getBalance,
 		onLeaderboard,
 		type LeaderRow,
 		type GameLeaderRow,
@@ -64,6 +78,12 @@ import Footer from "../components/Footer.astro";
 	const pginfo = $("[data-pginfo]");
 	const prev = $<HTMLButtonElement>("[data-prev]");
 	const next = $<HTMLButtonElement>("[data-next]");
+	const podium = $("[data-podium]");
+	const meline = $<HTMLAnchorElement>("[data-meline]");
+	const paneGlobal = $("[data-pane-global]");
+	const paneGames = $("[data-pane-games]");
+	const gameSelect = $<HTMLSelectElement>("[data-game-select]");
+	const gameList = $("[data-game-list]");
 
 	let me: Me | null = null;
 	let offset = 0;
@@ -71,20 +91,57 @@ import Footer from "../components/Footer.astro";
 	let total = 0;
 
 	const initial = (n: string) => n.charAt(0).toUpperCase();
+	const GRADS = ["rainbow", "fire", "ocean", "galaxy", "toxic"];
+
+	function avatarHtml(r: { image_url: string | null; login: string }, size: number, cls = "av")
+	{
+		return r.image_url
+			? `<img class="${cls}" src="${r.image_url}" width="${size}" height="${size}" alt="" />`
+			: `<span class="${cls} fb">${initial(r.login)}</span>`;
+	}
+
+	// ── Pinned "my position" line ─────────────────────────────────────────────
+	async function renderMeline()
+	{
+		if (!me) return;
+		const rank = await getMyRank();
+		if (rank == null) return;
+		meline.innerHTML = `
+			<span class="ml-rank">#${rank}</span>
+			${avatarHtml(me, 28)}
+			<span class="ml-name">Ta position</span>
+			<span class="ml-pts">${fmt(getBalance())} <em>pts</em></span>`;
+		meline.hidden = false;
+	}
+
+	// ── Global ranking ────────────────────────────────────────────────────────
+	function podiumSlot(r: LeaderRow | undefined, rank: number): string
+	{
+		if (!r) return "";
+		const name = r.display_name || r.login;
+		const nc = (r as any).name_color;
+		const color = GRADS.includes(nc) ? ` class="grad-${nc}"` : nc ? ` style="color:${nc}"` : "";
+		return `
+			<a class="pod-user" href="/profile?u=${r.login}">
+				<span class="pod-medal pm${rank}">${rank}</span>
+				${avatarHtml(r, rank === 1 ? 72 : 56, "pod-av" + (rank === 1 ? " big" : ""))}
+				<b${color}>${name}</b>
+				<small>@${r.login}</small>
+				<span class="pod-pts">${fmt(r.points)} pts</span>
+			</a>`;
+	}
 
 	function rowHtml(r: LeaderRow)
 	{
 		const name = r.display_name || r.login;
 		const isMe = me && r.login === me.login;
 		const rankCls = r.rank <= 3 ? `medal m${r.rank}` : "rank";
-		const av = r.image_url
-			? `<img class="av" src="${r.image_url}" width="28" height="28" alt="" />`
-			: `<span class="av fb">${initial(name)}</span>`;
-		const color = (r as any).name_color ? ` style="color:${(r as any).name_color}"` : "";
+		const nc = (r as any).name_color;
+		const color = GRADS.includes(nc) ? ` class="grad-${nc}"` : nc ? ` style="color:${nc}"` : "";
 		const title = (r as any).title ? `<span class="lb-title">${(r as any).title}</span>` : "";
 		return `<li class="row${isMe ? " me" : ""}" data-login="${r.login}">
 			<span class="${rankCls}">${r.rank}</span>
-			${av}
+			${avatarHtml(r, 28)}
 			<a class="name" href="/profile?u=${r.login}"><span${color}>${name}${title}</span><small>@${r.login}</small></a>
 			<span class="pts">${fmt(r.points)} <em>pts</em></span>
 		</li>`;
@@ -92,6 +149,20 @@ import Footer from "../components/Footer.astro";
 
 	function render(rows: LeaderRow[])
 	{
+		const showPodium = !q && offset === 0 && rows.length >= 1;
+		podium.hidden = !showPodium;
+		let listRows = rows;
+		if (showPodium)
+		{
+			([1, 2, 3] as const).forEach((rank) =>
+			{
+				const slot = $(`[data-podium-${rank}]`);
+				slot.innerHTML = podiumSlot(rows[rank - 1], rank);
+				slot.classList.toggle("hidden-step", !rows[rank - 1]);
+			});
+			listRows = rows.slice(3);
+		}
+
 		if (!rows.length)
 		{
 			list.innerHTML = `<li class="empty">Aucun joueur.</li>`;
@@ -106,22 +177,19 @@ import Footer from "../components/Footer.astro";
 			prevTop.set(r.dataset.login!, r.getBoundingClientRect().top);
 		});
 
-		list.innerHTML = rows.map(rowHtml).join("");
+		list.innerHTML = listRows.map(rowHtml).join("");
 
 		const items = list.querySelectorAll<HTMLElement>(".row");
 		items.forEach((r) =>
 		{
 			const old = prevTop.get(r.dataset.login!);
-			if (old == null) return; // new entry, no slide
+			if (old == null) return;
 			const delta = old - r.getBoundingClientRect().top;
 			if (!delta) return;
-			// Invert: jump back to old spot instantly.
 			r.style.transition = "none";
 			r.style.transform = `translateY(${delta}px)`;
 			r.classList.add(delta > 0 ? "moved-up" : "moved-down");
 		});
-
-		// Play: release to new spot on next frame.
 		requestAnimationFrame(() =>
 		{
 			items.forEach((r) =>
@@ -154,7 +222,6 @@ import Footer from "../components/Footer.astro";
 		render(data.leaderboard);
 	}
 
-	// Search resets to page 1
 	let timer: number;
 	search.addEventListener("input", () =>
 	{
@@ -178,87 +245,90 @@ import Footer from "../components/Footer.astro";
 		load();
 	});
 
-	// Live: refetch current page on any bet-driven change.
 	let liveTimer: number;
 	onLeaderboard(() =>
 	{
 		clearTimeout(liveTimer);
-		liveTimer = window.setTimeout(load, 300);
+		liveTimer = window.setTimeout(() =>
+		{
+			load();
+			renderMeline();
+		}, 300);
 	});
 
 	loadMe().then((m) =>
 	{
 		me = m;
 		load();
+		renderMeline();
 	});
 
-	// ── Game leaderboard ──────────────────────────────────────────────────────
+	// ── Per-game tab ──────────────────────────────────────────────────────────
 	const GAMES = [
-		{ id: "coinflip",  label: "Coin Flip", icon: "🪙" },
-		{ id: "dice",      label: "Dés",       icon: "🎲" },
-		{ id: "limbo",     label: "Limbo",     icon: "🎯" },
-		{ id: "plinko",    label: "Plinko",    icon: "⚡" },
-		{ id: "slots",     label: "Slots",     icon: "🎰" },
-		{ id: "roulette",  label: "Roulette",  icon: "🎡" },
-		{ id: "crash",     label: "Crash",     icon: "🚀" },
-		{ id: "mines",     label: "Mines",     icon: "💣" },
-		{ id: "wheel",     label: "Wheel",     icon: "🛞" },
-		{ id: "hilo",      label: "Hi-Lo",     icon: "🃏" },
-		{ id: "tower",     label: "Tower",     icon: "🗼" },
-		{ id: "keno",      label: "Keno",      icon: "🔢" },
+		{ id: "coinflip",  label: "🪙 Coin Flip" },
+		{ id: "dice",      label: "🎲 Dés" },
+		{ id: "limbo",     label: "🎯 Limbo" },
+		{ id: "plinko",    label: "⚡ Plinko" },
+		{ id: "slots",     label: "🎰 Slots" },
+		{ id: "roulette",  label: "🎡 Roulette" },
+		{ id: "crash",     label: "🚀 Crash" },
+		{ id: "mines",     label: "💣 Mines" },
+		{ id: "wheel",     label: "🛞 Wheel" },
+		{ id: "hilo",      label: "🃏 Hi-Lo" },
+		{ id: "tower",     label: "🗼 Tower" },
+		{ id: "keno",      label: "🔢 Keno" },
 	];
 
-	const gameTabs = $("[data-game-tabs]");
-	const gameList = $("[data-game-list]");
-
-	gameTabs.innerHTML = GAMES.map(g =>
-		`<button class="gtab" data-game="${g.id}">${g.icon} ${g.label}</button>`
-	).join("");
+	gameSelect.innerHTML = GAMES.map(g => `<option value="${g.id}">${g.label}</option>`).join("");
 
 	async function loadGame(game: string)
 	{
-		gameTabs.querySelectorAll<HTMLElement>(".gtab").forEach(btn =>
-			btn.classList.toggle("active", btn.dataset.game === game)
-		);
-		gameList.innerHTML = `<li class="gempty">Chargement…</li>`;
+		gameList.innerHTML = `<li class="empty">Chargement…</li>`;
 		const rows = await getGameLeaderboard(game);
 		if (!rows.length)
 		{
-			gameList.innerHTML = `<li class="gempty">Aucune donnée pour ce jeu.</li>`;
+			gameList.innerHTML = `<li class="empty">Aucune donnée pour ce jeu — sois le premier à jouer !</li>`;
 			return;
 		}
 		gameList.innerHTML = rows.map((r: GameLeaderRow) =>
 		{
 			const name = r.display_name || r.login;
+			const isMe = me && r.login === me.login;
 			const rankCls = r.rank <= 3 ? `medal m${r.rank}` : "rank";
-			const av = r.image_url
-				? `<img class="av" src="${r.image_url}" width="28" height="28" alt="" />`
-				: `<span class="av fb">${name.charAt(0).toUpperCase()}</span>`;
 			const profitStr = r.profit >= 0
 				? `<span class="pos">+${fmt(r.profit)}</span>`
 				: `<span class="neg">${fmt(r.profit)}</span>`;
-			return `<li class="grow" data-login="${r.login}">
+			return `<li class="row${isMe ? " me" : ""}" data-login="${r.login}">
 				<span class="${rankCls}">${r.rank}</span>
-				${av}
-				<a class="gname" href="/profile?u=${r.login}">${name}<small>@${r.login}</small></a>
-				<div class="gcol">
-					<span class="gprofit">${profitStr} <em>pts</em></span>
-					<span class="gplayed">${r.games_played} partie${r.games_played > 1 ? "s" : ""}</span>
-				</div>
+				${avatarHtml(r, 28)}
+				<a class="name" href="/profile?u=${r.login}"><span>${name}</span><small>@${r.login} · ${r.games_played} partie${r.games_played > 1 ? "s" : ""}</small></a>
+				<span class="pts">${profitStr} <em>pts</em></span>
 			</li>`;
 		}).join("");
 	}
 
-	gameTabs.addEventListener("click", (e) =>
+	gameSelect.addEventListener("change", () => void loadGame(gameSelect.value));
+
+	// ── Tab switching ─────────────────────────────────────────────────────────
+	document.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((tab) =>
 	{
-		const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-game]");
-		if (btn?.dataset.game) void loadGame(btn.dataset.game);
+		tab.addEventListener("click", () =>
+		{
+			const isGames = tab.dataset.tab === "games";
+			document.querySelectorAll("[data-tab]").forEach((t) =>
+				t.classList.toggle("is-active", t === tab));
+			paneGlobal.hidden = isGames;
+			paneGames.hidden = !isGames;
+			search.hidden = isGames;
+			gameSelect.hidden = !isGames;
+			if (isGames) void loadGame(gameSelect.value);
+		});
 	});
 </script>
 
 <style>
   .wrap {
-    max-width: 720px;
+    max-width: 760px;
     margin: 0 auto;
     padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 40px);
   }
@@ -272,9 +342,182 @@ import Footer from "../components/Footer.astro";
     margin: 8px 0 22px;
     color: var(--muted);
   }
-  .search {
+
+  /* ── Toolbar: tabs + search / game select ── */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 4px;
+    flex: none;
+  }
+  .tab {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  .tab:hover { color: var(--fg); }
+  .tab.is-active {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+  .search { flex: 1; min-width: 180px; }
+  .game-select {
+    flex: 1;
+    min-width: 180px;
+    cursor: pointer;
+  }
+
+  /* ── Pinned my-position line ── */
+  .meline {
+    display: grid;
+    grid-template-columns: 44px 28px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(90deg, rgba(212, 175, 55, 0.1), var(--panel));
+    border: 1px solid rgba(212, 175, 55, 0.4);
+    border-radius: 10px;
+    padding: 9px 14px;
+    margin-bottom: 14px;
+    transition: border-color 0.15s;
+  }
+  .meline:hover { border-color: var(--accent); }
+  .meline[hidden] { display: none !important; }
+  .meline :global(.ml-rank) {
+    font-weight: 800;
+    font-size: 14px;
+    color: var(--accent);
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .meline :global(.ml-name) { font-weight: 700; font-size: 14px; }
+  .meline :global(.ml-pts) {
+    font-weight: 800;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  .meline :global(.ml-pts em) {
+    color: var(--muted);
+    font-style: normal;
+    font-weight: 400;
+    font-size: 11px;
+  }
+  .meline :global(.av) {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--raise);
+  }
+  .meline :global(.av.fb) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--accent-ink);
+    background: var(--accent);
+  }
+
+  /* ── Podium ── */
+  .podium {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 12px;
     margin-bottom: 18px;
   }
+  .step {
+    flex: 0 1 220px;
+    border-radius: 14px 14px 0 0;
+    border: 1px solid var(--line);
+    border-bottom: 3px solid var(--accent);
+    background: var(--panel);
+    padding: 18px 12px 14px;
+  }
+  .step.s1 {
+    padding-top: 26px;
+    padding-bottom: 30px;
+    background: linear-gradient(180deg, rgba(212, 175, 55, 0.1), var(--panel));
+    border-color: rgba(212, 175, 55, 0.35);
+    border-bottom-color: var(--accent);
+  }
+  .step.s2 { border-bottom-color: #cdd6e0; padding-bottom: 20px; }
+  .step.s3 { border-bottom-color: #e08b4a; padding-bottom: 10px; }
+  .step.hidden-step { display: none; }
+  .podium :global(.pod-user) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+  }
+  .podium :global(.pod-medal) {
+    font-size: 11px;
+    font-weight: 800;
+    border-radius: 999px;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #16281d;
+    margin-bottom: 4px;
+  }
+  .podium :global(.pm1) { background: #ffd24a; }
+  .podium :global(.pm2) { background: #cdd6e0; }
+  .podium :global(.pm3) { background: #e08b4a; }
+  .podium :global(.pod-av) {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--raise);
+  }
+  .podium :global(.pod-av.big) { width: 72px; height: 72px; }
+  .podium :global(.pod-av.fb) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 22px;
+    color: var(--accent-ink);
+    background: var(--accent);
+  }
+  .podium :global(.pod-user b) { font-size: 14px; margin-top: 4px; }
+  .podium :global(.pod-user small) { color: var(--muted); font-size: 11px; }
+  .podium :global(.pod-pts) {
+    margin-top: 6px;
+    font-weight: 800;
+    font-size: 14px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  @media (max-width: 640px) {
+    .podium { gap: 6px; }
+    .step { flex-basis: 150px; padding: 12px 8px 10px; }
+    .podium :global(.pod-av) { width: 44px; height: 44px; }
+    .podium :global(.pod-av.big) { width: 56px; height: 56px; }
+  }
+
+  /* ── Rows (shared global + per-game) ── */
   .list {
     list-style: none;
     margin: 0;
@@ -283,7 +526,6 @@ import Footer from "../components/Footer.astro";
     flex-direction: column;
     gap: 6px;
   }
-  /* rows are injected at runtime -> target them globally under .list */
   .list :global(.empty) {
     color: var(--muted);
     text-align: center;
@@ -291,7 +533,7 @@ import Footer from "../components/Footer.astro";
   }
   .list :global(.row) {
     display: grid;
-    grid-template-columns: 36px 28px 1fr auto;
+    grid-template-columns: 44px 28px 1fr auto;
     align-items: center;
     gap: 12px;
     background: var(--panel);
@@ -303,12 +545,8 @@ import Footer from "../components/Footer.astro";
     border-color: var(--accent);
     background: var(--panel-2);
   }
-  .list :global(.row.moved-up) {
-    animation: flashUp 0.9s ease;
-  }
-  .list :global(.row.moved-down) {
-    animation: flashDown 0.9s ease;
-  }
+  .list :global(.row.moved-up)   { animation: flashUp 0.9s ease; }
+  .list :global(.row.moved-down) { animation: flashDown 0.9s ease; }
   .list :global(.rank),
   .list :global(.medal) {
     text-align: center;
@@ -320,17 +558,11 @@ import Footer from "../components/Footer.astro";
   .list :global(.medal) {
     border-radius: 6px;
     padding: 3px 0;
-    color: #06121f;
+    color: #16281d;
   }
-  .list :global(.m1) {
-    background: #ffd24a;
-  }
-  .list :global(.m2) {
-    background: #cdd6e0;
-  }
-  .list :global(.m3) {
-    background: #e08b4a;
-  }
+  .list :global(.m1) { background: #ffd24a; }
+  .list :global(.m2) { background: #cdd6e0; }
+  .list :global(.m3) { background: #e08b4a; }
   .list :global(.av) {
     width: 28px;
     height: 28px;
@@ -344,7 +576,7 @@ import Footer from "../components/Footer.astro";
     justify-content: center;
     font-weight: 700;
     font-size: 12px;
-    color: #fff;
+    color: var(--accent-ink);
     background: var(--accent);
   }
   .list :global(.name) {
@@ -361,9 +593,9 @@ import Footer from "../components/Footer.astro";
     font-size: 11px;
   }
   .list :global(.lb-title) {
-    background: rgba(245, 158, 11, 0.14);
-    color: #f59e0b;
-    border: 1px solid rgba(245, 158, 11, 0.4);
+    background: rgba(212, 175, 55, 0.14);
+    color: var(--accent);
+    border: 1px solid rgba(212, 175, 55, 0.4);
     border-radius: 999px;
     padding: 1px 8px;
     font-size: 10px;
@@ -383,12 +615,15 @@ import Footer from "../components/Footer.astro";
     font-weight: 400;
     font-size: 11px;
   }
+  .list :global(.pos) { color: var(--win); }
+  .list :global(.neg) { color: var(--lose); }
+
   .pager {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 16px;
-    margin-top: 20px;
+    margin-top: 18px;
   }
   .pager .ghost-btn:disabled {
     opacity: 0.4;
@@ -399,141 +634,4 @@ import Footer from "../components/Footer.astro";
     font-size: 13px;
     font-variant-numeric: tabular-nums;
   }
-
-  /* ── Game leaderboard ──────────────────────────────────────────────────── */
-  .game-lb {
-    margin-top: 48px;
-    border-top: 1px solid var(--line);
-    padding-top: 32px;
-  }
-  .game-head h2 {
-    margin: 0;
-    font-size: clamp(20px, 4vw, 28px);
-    font-weight: 800;
-    letter-spacing: -0.02em;
-  }
-  .game-head p {
-    margin: 6px 0 20px;
-    color: var(--muted);
-    font-size: 14px;
-  }
-  .game-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 18px;
-  }
-  .game-tabs :global(.gtab) {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 7px 14px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    color: var(--fg);
-    transition: border-color 0.15s, background 0.15s;
-  }
-  .game-tabs :global(.gtab:hover) {
-    border-color: var(--accent);
-  }
-  .game-tabs :global(.gtab.active) {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #fff;
-  }
-  .game-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .game-list :global(.gempty) {
-    color: var(--muted);
-    text-align: center;
-    padding: 40px 0;
-  }
-  .game-list :global(.grow) {
-    display: grid;
-    grid-template-columns: 36px 28px 1fr auto;
-    align-items: center;
-    gap: 12px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 9px 14px;
-  }
-  .game-list :global(.rank),
-  .game-list :global(.medal) {
-    text-align: center;
-    font-weight: 800;
-    font-size: 13px;
-    font-variant-numeric: tabular-nums;
-    color: var(--muted);
-  }
-  .game-list :global(.medal) {
-    border-radius: 6px;
-    padding: 3px 0;
-    color: #06121f;
-  }
-  .game-list :global(.m1) { background: #ffd24a; }
-  .game-list :global(.m2) { background: #cdd6e0; }
-  .game-list :global(.m3) { background: #e08b4a; }
-  .game-list :global(.av) {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    object-fit: cover;
-    background: var(--raise);
-  }
-  .game-list :global(.av.fb) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 12px;
-    color: #fff;
-    background: var(--accent);
-  }
-  .game-list :global(.gname) {
-    display: flex;
-    flex-direction: column;
-    line-height: 1.2;
-    font-weight: 600;
-    font-size: 14px;
-    overflow: hidden;
-    text-decoration: none;
-    color: var(--fg);
-  }
-  .game-list :global(.gname small) {
-    color: var(--muted);
-    font-weight: 400;
-    font-size: 11px;
-  }
-  .game-list :global(.gcol) {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 2px;
-  }
-  .game-list :global(.gprofit) {
-    font-weight: 800;
-    font-size: 14px;
-    font-variant-numeric: tabular-nums;
-  }
-  .game-list :global(.gprofit em) {
-    color: var(--muted);
-    font-style: normal;
-    font-weight: 400;
-    font-size: 11px;
-  }
-  .game-list :global(.gplayed) {
-    color: var(--muted);
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-  }
-  .game-list :global(.pos) { color: var(--win); }
-  .game-list :global(.neg) { color: #ef4444; }
 </style>

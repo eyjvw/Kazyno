@@ -1,0 +1,44 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+import Footer from "../../components/Footer.astro";
+---
+
+<Layout title="Kazyno — CGU">
+  <Nav />
+  <main class="wrap">
+    <a class="back" href="/">← Retour</a>
+    <div class="panel doc">
+      <h1>Conditions d'utilisation</h1>
+      <p class="lede">Projet étudiant à but pédagogique — sans enjeu réel, à lire quand même.</p>
+
+      <h2>Points fictifs</h2>
+      <p>Tous les points utilisés sur Kazyno sont fictifs et n'ont aucune valeur monétaire réelle. Ils ne peuvent ni être achetés avec de l'argent réel, ni être échangés contre quoi que ce soit en dehors de la plateforme.</p>
+
+      <h2>Réinitialisations</h2>
+      <p>Un reset hebdomadaire remet tout le monde à 1 000 points chaque lundi. L'admin peut aussi ajuster ou réinitialiser des soldes en cas d'abus ou de bug.</p>
+
+      <h2>Accès</h2>
+      <p>L'accès est réservé aux membres de l'intra 42 Le Havre, via authentification OAuth 42. Toute tentative de triche, d'exploitation de faille ou d'abus des systèmes de paris peut entraîner une suspension du compte.</p>
+
+      <h2>Disponibilité</h2>
+      <p>Le service est fourni tel quel, sans garantie de disponibilité continue. C'est un projet personnel, pas un service commercial.</p>
+
+      <h2>Contact</h2>
+      <p>Une question ? Contacte <a href="https://profile.intra.42.fr/users/sbonneau" target="_blank" rel="noopener">@sbonneau</a> sur l'intra.</p>
+    </div>
+  </main>
+  <Footer />
+</Layout>
+
+<style>
+  .wrap { max-width: 720px; margin: 0 auto; padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 40px); }
+  .back { color: var(--muted); font-size: 13px; }
+  .back:hover { color: var(--fg); }
+  .doc { margin-top: 18px; padding: 32px clamp(20px, 4vw, 36px); }
+  .doc h1 { margin: 0 0 6px; font-size: clamp(26px, 4vw, 34px); font-weight: 800; letter-spacing: -0.02em; }
+  .doc .lede { color: var(--muted); margin: 0 0 26px; font-size: 15px; }
+  .doc h2 { margin: 26px 0 10px; font-size: 17px; font-weight: 800; }
+  .doc p { color: var(--fg); font-size: 14px; line-height: 1.7; margin: 0 0 12px; }
+  .doc a { color: var(--accent); }
+</style>
