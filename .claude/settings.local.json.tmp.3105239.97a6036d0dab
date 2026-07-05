@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed -i 's/max-width: 1100px;/max-width: 1400px;/g' layouts/Layout.astro pages/shop.astro pages/giveaways.astro pages/paris.astro pages/profile.astro)",
+      "Bash(sed -i 's/max-width: 760px;/max-width: 1000px;/' pages/leaderboard.astro)",
+      "Bash(sed -i 's/max-width: 720px;/max-width: 1000px;/' pages/friends.astro)",
+      "Bash(sed -i 's/max-width: 900px;/max-width: 1200px;/' pages/admin.astro)",
+      "Bash(sed -i 's/max-width: 1080px;/max-width: 1300px;/' pages/table.astro)",
+      "Bash(bun build *)",
+      "Bash(echo \"backend syntax exit=$?\")",
+      "Bash(bunx astro *)",
+      "WebFetch(domain:api.intra.42.fr)",
+      "Bash(curl *)",
+      "Bash(python3 *)",
+      "Bash(docker exec *)",
+      "Bash(docker compose *)",
+      "Bash(docker volume *)",
+      "Bash(sed -i 's/piscasino/kazyno/g' docker-compose.yml .env.example .env backend/src/weeklyreset.ts)",
+      "Bash(sed -i 's/# Pin the compose project name: the folder was renamed Piscasino -> Kazyno,\\\\n# without this compose would spawn a second project \\(and a fresh empty pgdata\\).//' docker-compose.yml)",
+      "Bash(docker network *)",
+      "Bash(docker rmi *)",
+      "Bash(xargs -r ls -t)",
+      "Bash(sed -i 's|\\\\.exam-cards :global\\(\\\\.score-btn\\\\.is-active\\) { background: var\\(--accent\\); border-color: var\\(--accent\\); color: #fff; }|.exam-cards :global\\(.score-btn.is-active\\) { background: var\\(--accent\\); border-color: var\\(--accent\\); color: var\\(--accent-ink\\); }|' pages/paris.astro)",
+      "Bash(sed -i 's|color: #fff !important; }|color: var\\(--accent-ink\\) !important; }|' pages/paris.astro)",
+      "Bash(grep -v \"^$\")",
+      "Bash(grep *)",
+      "Bash(bunx tsc *)",
+      "Bash(sed -i 's/await pushNotif\\(user.id, { kind: \"admin\", message }\\);/await pushNotif\\(user.id, { kind: \"reward\", message }\\);/' treasurehunt.ts)",
+      "Bash(sed -i '104s/kind: \"admin\",/kind: \"reward\",/;122s/kind: \"admin\",/kind: \"reward\",/' cursussync.ts)",
+      "Bash(sed -i '102s/kind: \"admin\",/kind: \"reward\",/' coalition.ts)",
+      "Bash(sed -i '161s/kind: \"giveaway\",/kind: \"reward\",/' giveaways.ts)",
+      "Bash(awk '/\\\\.nav \\\\{/,/\\\\}/' frontend/src/components/Nav.astro)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'feat: campus gate, treasure hunt, exam sync, coalition rewards, notif prefs fixes *)",
+      "Bash(git push *)",
+      "Bash(make ps *)",
+      "Bash(make backup *)",
+      "Bash(git commit -m 'feat: Makefile deploy VPS, retire quicknav admin *)"
+    ]
+  }
+}

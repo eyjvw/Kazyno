@@ -12,15 +12,6 @@ import Footer from "../components/Footer.astro";
       <p>Joueurs, points, giveaways — et le live log en continu à droite.</p>
     </header>
 
-    <nav class="quicknav" data-quicknav hidden>
-      <a href="#a-notif">🔔 Notif</a>
-      <a href="#a-points">💰 Points</a>
-      <a href="#a-rain">🌧️ Pluie</a>
-      <a href="#a-giveaways">🎁 Giveaways</a>
-      <a href="#a-logs">📡 Logs</a>
-      <a href="#a-danger" class="qn-danger">⚠️ Danger</a>
-    </nav>
-
     <div class="admin-cols">
     <div class="admin-main">
 
@@ -291,7 +282,6 @@ import Footer from "../components/Footer.astro";
 			return;
 		}
 		$("[data-panel]").hidden = false;
-		$("[data-quicknav]").hidden = false;
 		$("[data-danger-section]").hidden = false;
 
 		// ── Giveaway management ─────────────────────────────────────────────────
@@ -700,39 +690,6 @@ import Footer from "../components/Footer.astro";
   .head p {
     margin: 8px 0 20px;
     color: var(--muted);
-  }
-
-  /* ── Quick nav (ancres, sticky en haut) ── */
-  .quicknav {
-    position: sticky;
-    top: 0;
-    z-index: 5;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 10px 0;
-    margin-bottom: 14px;
-    background: var(--bg);
-    box-shadow: 0 8px 16px -12px rgba(0, 0, 0, 0.8);
-  }
-  .quicknav a {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    color: var(--muted);
-    border-radius: 20px;
-    padding: 7px 14px;
-    font-size: 12px;
-    font-weight: 700;
-    white-space: nowrap;
-    transition: color 0.15s, border-color 0.15s;
-  }
-  .quicknav a:hover {
-    color: var(--accent);
-    border-color: var(--accent);
-  }
-  .quicknav .qn-danger:hover {
-    color: var(--lose);
-    border-color: var(--lose);
   }
 
   /* ── 2 colonnes : actions à gauche, live log sticky à droite ── */
