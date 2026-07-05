@@ -21,7 +21,8 @@ interface NotifOpts
 }
 
 // Maps a notification kind to the user-facing preference category that gates
-// it. Kinds not listed here (achievements, challenges…) are always sent.
+// it. Kinds not listed here ("reward" = gains personnels one-shot : piscine,
+// core, coalition, trésor, giveaway gagné) are always sent.
 const CATEGORY_BY_KIND: Record<string, string> = {
 	admin: "admin",
 	giveaway: "giveaway",
@@ -30,6 +31,7 @@ const CATEGORY_BY_KIND: Record<string, string> = {
 	bj_invite: "social",
 	friend_request: "social",
 	friend_accepted: "social",
+	gift: "social",
 };
 
 /** Persist a notification for one user and push it live, unless they opted out of this category. */

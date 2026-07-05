@@ -8,48 +8,110 @@ const FT_SECRET = process.env.FT_SECRET ?? "";
 
 const CHECK_COOLDOWN_MIN = 10; // au plus un appel API 42 par utilisateur / 10 min
 const CORE_REWARD = 2000;
+const PISCINE_REWARD = 1000;
 
 interface FtUserLike
 {
-	cursus_users?: Array<{ cursus_id: number; grade: string | null }>;
-	projects_users?: Array<{
-		project: { name: string };
-		status: string;
-		"validated?": boolean | null;
-	}>;
+	cursus_users?: Array<{ cursus_id: number; grade: string | null; begin_at?: string | null }>;
 }
 
-/** Derive common-core / exam-rank signals from a 42 user payload. */
-export function parseCursus(me: FtUserLike): { coreDone: boolean; examRank: number | null }
+/** Exam payload from GET /v2/users/:id/exams (filter[future]=true). */
+export interface FtExamLike
+{
+	name?: string;
+	begin_at?: string;
+	projects?: Array<{ name?: string; slug?: string }>;
+}
+
+/** Common core done = cursus 21 (42cursus) grade "Transcender" (transcendance
+ * period right after the core) or "Member" (post-transcendance).
+ * Piscine passed = cursus 21 present: the intra only adds the 42cursus to a
+ * profile once the piscine is validated (kickoff) — no dedicated flag in the
+ * API (cursus_users only has grade/level/blackholed_at). Reward reserved to
+ * NEW students: begin_at in the current year, so long-time students don't
+ * farm +1000 retroactively. Rolls over automatically each year. */
+export function parseCursus(me: FtUserLike): { coreDone: boolean; piscineDone: boolean }
 {
 	const cursus21 = me.cursus_users?.find((c) => c.cursus_id === 21);
-	const coreDone = cursus21?.grade?.toLowerCase() === "member";
-
-	let examRank: number | null = null;
-	let highestValidated = 1;
-	for (const pu of me.projects_users ?? [])
-	{
-		const m = pu.project?.name?.match(/^Exam Rank (\d{2})$/);
-		if (!m) continue;
-		const rank = Number(m[1]);
-		if (pu.status === "in_progress" || pu.status === "searching_a_group") examRank = rank;
-		if (pu["validated?"]) highestValidated = Math.max(highestValidated, rank);
-	}
-	if (examRank === null && !coreDone) examRank = Math.min(6, highestValidated + 1);
-	return { coreDone, examRank };
+	const grade = cursus21?.grade?.toLowerCase() ?? "";
+	const beginYear = cursus21?.begin_at ? new Date(cursus21.begin_at).getUTCFullYear() : null;
+	return {
+		coreDone: grade === "member" || grade === "transcender",
+		piscineDone: beginYear !== null && beginYear === new Date().getUTCFullYear(),
+	};
 }
 
-/** Persist cursus signals for a user; awards the one-time +2000 pts. */
-export async function applyCursus(userId: number, me: FtUserLike): Promise<void>
+/** Map a registered 42 exam to a Kazyno rank: 0 = piscine, 2-6 = Exam Rank 0N.
+ * Matches on the exam's canonical project names first, then the exam name
+ * (campuses rename exam sessions, projects keep "Exam Rank 0X" / "C Piscine ... Exam"). */
+export function examToRank(exam: FtExamLike): number | null
 {
-	const { coreDone, examRank } = parseCursus(me);
+	const names = [
+		...(exam.projects ?? []).map((p) => p.name ?? ""),
+		exam.name ?? "",
+	];
+	for (const n of names)
+	{
+		const m = n.match(/exam rank 0?([2-6])/i);
+		if (m) return Number(m[1]);
+	}
+	if (names.some((n) => /piscine/i.test(n) && /exam/i.test(n))) return 0;
+	return null;
+}
 
-	await sql`UPDATE users SET exam_rank = ${examRank} WHERE id = ${userId}`;
+/** Rank of the soonest upcoming exam the user is actually registered to. */
+export function parseRegistration(exams: FtExamLike[]): number | null
+{
+	const sorted = [...exams].sort((a, b) => (a.begin_at ?? "").localeCompare(b.begin_at ?? ""));
+	for (const e of sorted)
+	{
+		const r = examToRank(e);
+		if (r !== null) return r;
+	}
+	return null;
+}
+
+/** Persist cursus signals for a user; awards the one-time +2000 pts.
+ * `registeredExams` = payload of /v2/users/:id/exams?filter[future]=true;
+ * null/undefined means the fetch failed — keep the stored exam_rank as-is. */
+export async function applyCursus(
+	userId: number,
+	me: FtUserLike,
+	registeredExams?: FtExamLike[] | null,
+): Promise<void>
+{
+	const { coreDone, piscineDone } = parseCursus(me);
+
+	if (registeredExams)
+	{
+		const examRank = coreDone ? null : parseRegistration(registeredExams);
+		await sql`UPDATE users SET exam_rank = ${examRank} WHERE id = ${userId}`;
+	}
+
+	if (piscineDone)
+	{
+		// One-time reward, same atomic-claim pattern as the core one below.
+		const paid = (await sql`
+			UPDATE users SET piscine_done = true, points = points + ${PISCINE_REWARD},
+											 piscine_reward_seen = false
+			WHERE id = ${userId} AND piscine_done = false
+			RETURNING points
+		`) as Array<{ points: number }>;
+		if (paid[0])
+		{
+			publishBalance(userId, paid[0].points);
+			await pushNotif(userId, {
+				kind: "reward",
+				message: `🏊 Piscine réussie — bienvenue au 42cursus ! +${PISCINE_REWARD} pts`,
+			});
+		}
+	}
 
 	if (!coreDone) return;
 	// One-time reward, guarded by the WHERE so concurrent syncs can't double-pay.
 	const updated = (await sql`
-		UPDATE users SET common_core_done = true, points = points + ${CORE_REWARD}
+		UPDATE users SET common_core_done = true, points = points + ${CORE_REWARD},
+										 core_reward_seen = false
 		WHERE id = ${userId} AND common_core_done = false
 		RETURNING points
 	`) as Array<{ points: number }>;
@@ -57,7 +119,7 @@ export async function applyCursus(userId: number, me: FtUserLike): Promise<void>
 	{
 		publishBalance(userId, updated[0].points);
 		await pushNotif(userId, {
-			kind: "admin",
+			kind: "reward",
 			message: `🎓 Tronc commun terminé — félicitations ! +${CORE_REWARD} pts`,
 		});
 	}
@@ -67,7 +129,7 @@ export async function applyCursus(userId: number, me: FtUserLike): Promise<void>
 
 let appToken: { token: string; expires: number } | null = null;
 
-async function getAppToken(): Promise<string | null>
+export async function getAppToken(): Promise<string | null>
 {
 	if (appToken && Date.now() < appToken.expires - 60_000) return appToken.token;
 	try
@@ -109,10 +171,15 @@ export async function maybeSyncUser(userId: number): Promise<void>
 
 		const token = await getAppToken();
 		if (!token) return;
-		const res = await fetch(`https://api.intra.42.fr/v2/users/${claimed[0].ft_id}`, {
-			headers: { Authorization: `Bearer ${token}` },
-		});
-		if (res.ok) await applyCursus(userId, (await res.json()) as FtUserLike);
+		const auth = { headers: { Authorization: `Bearer ${token}` } };
+		const ftId = claimed[0].ft_id;
+		const [userRes, examsRes] = await Promise.all([
+			fetch(`https://api.intra.42.fr/v2/users/${ftId}`, auth),
+			fetch(`https://api.intra.42.fr/v2/users/${ftId}/exams?filter%5Bfuture%5D=true&page%5Bsize%5D=30`, auth),
+		]);
+		if (!userRes.ok) return;
+		const regExams = examsRes.ok ? ((await examsRes.json()) as FtExamLike[]) : null;
+		await applyCursus(userId, (await userRes.json()) as FtUserLike, regExams);
 	}
 	catch (e)
 	{

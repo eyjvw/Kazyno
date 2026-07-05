@@ -1,0 +1,132 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Layout title="Kazyno — Campus non éligible">
+  <main class="wrap">
+    <div class="panel card">
+      <span class="big">🎫</span>
+      <h1>Réservé à 42 Le Havre</h1>
+      <p class="lede">
+        Le Kazyno est un casino fictif réservé aux étudiants du campus de
+        <b class="accent">42 Le Havre</b>.
+      </p>
+      <p class="campus" data-campus hidden>
+        Ton campus principal : <b data-campus-name></b>
+      </p>
+      <p class="lede">
+        Ton campus t'intéresse aussi ? Viens m'en parler sur Slack —
+        on peut sûrement s'arranger. 😉
+      </p>
+
+      <a
+        class="btn go"
+        href="https://42born2code.slack.com/team/sbonneau"
+        target="_blank"
+        rel="noopener"
+      >
+        💬 Contacter sbonneau sur Slack
+      </a>
+      <a class="ghost" href="/">← Retour à l'accueil</a>
+    </div>
+  </main>
+  <Footer />
+</Layout>
+
+<script>
+  const campus = new URLSearchParams(location.search).get("campus");
+  if (campus)
+  {
+    const p = document.querySelector<HTMLElement>("[data-campus]")!;
+    p.querySelector("[data-campus-name]")!.textContent = campus;
+    p.hidden = false;
+  }
+</script>
+
+<style>
+  .wrap {
+    position: relative;
+    z-index: 1;
+    flex: 1 0 auto;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(24px, 6vw, 64px) clamp(16px, 4vw, 40px);
+  }
+  .card {
+    width: 100%;
+    max-width: 560px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 14px;
+    padding: clamp(28px, 5vw, 44px);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background:
+      radial-gradient(80% 60% at 50% 0%, rgba(212, 175, 55, 0.08), transparent 70%),
+      var(--panel);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  }
+  .big {
+    font-size: 52px;
+    line-height: 1;
+    filter: drop-shadow(0 6px 18px rgba(212, 175, 55, 0.35));
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(24px, 4.5vw, 32px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  .accent {
+    color: var(--accent);
+  }
+  .lede {
+    margin: 0;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.6;
+    max-width: 420px;
+  }
+  .campus {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--raise, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 14px;
+  }
+  .campus b {
+    color: var(--fg);
+  }
+  .btn {
+    display: inline-block;
+    margin-top: 8px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 800;
+    font-size: 15px;
+    padding: 14px 24px;
+    border-radius: 10px;
+    transition: filter 0.15s, transform 0.08s, box-shadow 0.15s;
+  }
+  .btn:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+    box-shadow: 0 0 24px rgba(212, 175, 55, 0.35);
+  }
+  .ghost {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    transition: color 0.15s;
+  }
+  .ghost:hover {
+    color: var(--accent);
+  }
+</style>

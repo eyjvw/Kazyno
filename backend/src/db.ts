@@ -254,12 +254,28 @@ export async function initDb(): Promise<void>
 	await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS exam_rank INTEGER`;
 	await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS cursus_checked_at TIMESTAMPTZ`;
 	await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS welcomed BOOLEAN NOT NULL DEFAULT false`;
-	// Optional rank an exam is reserved to (2..6 => Exam Rank 02..06).
+	// false = the +2000 common-core popup is pending; true once dismissed.
+	await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS core_reward_seen BOOLEAN NOT NULL DEFAULT true`;
+	// Piscine passed (= user has cursus 21) → one-time +1000, same popup pattern.
+	await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS piscine_done BOOLEAN NOT NULL DEFAULT false`;
+	await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS piscine_reward_seen BOOLEAN NOT NULL DEFAULT true`;
+	// Last day the daily-bonus popup was shown (one popup per day, all devices).
+	await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_popup_day DATE`;
+	// Optional rank an exam is reserved to (0 => exam piscine, 2..6 => Exam Rank 02..06).
+	// users.exam_rank mirrors it: rank of the next exam the user is REGISTERED to on the intra.
 	await sql`ALTER TABLE exams ADD COLUMN IF NOT EXISTS rank INTEGER`;
+	// ID de l'exam sur l'intra — clé d'upsert de la sync auto (examsync.ts).
+	await sql`ALTER TABLE exams ADD COLUMN IF NOT EXISTS ft_id INTEGER UNIQUE`;
 	await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS show_presence BOOLEAN NOT NULL DEFAULT true`;
 	await sql`
 		ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_prefs JSONB NOT NULL DEFAULT
 			'{"rain":true,"giveaway":true,"social":true,"exam":true,"admin":true}'::jsonb
+	`;
+	// Répare les prefs corrompues en array (piège Bun.sql : param string envoyé en
+	// scalar jsonb malgré ::jsonb → objet || scalar = concat array). Fix : ::text::jsonb.
+	await sql`
+		UPDATE users SET notif_prefs = '{"rain":true,"giveaway":true,"social":true,"exam":true,"admin":true}'::jsonb
+		WHERE jsonb_typeof(notif_prefs) <> 'object'
 	`;
 
 	await sql`

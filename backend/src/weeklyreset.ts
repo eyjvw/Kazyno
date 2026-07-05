@@ -1,5 +1,7 @@
 import { sql } from "./db";
 import { publishBroadcast, publishLeaderboard } from "./realtime";
+import { resetJackpot } from "./jackpot";
+import { awardWeeklyCoalitionPoints } from "./coalition";
 
 const RESET_POINTS   = 1000;
 const CHECK_INTERVAL = 60 * 60 * 1000; // vérifie toutes les heures
@@ -55,7 +57,13 @@ async function runIfNewWeek(): Promise<void>
 
 	if (inserted.length === 0) return; // déjà fait cette semaine
 
+	// Podium de la semaine écoulée → points de coalition sur l'intra.
+	// AVANT le reset (sinon plus de classement), et sans bloquer le reset.
+	await awardWeeklyCoalitionPoints(week);
+
 	await sql`UPDATE users SET points = ${RESET_POINTS}`;
+	// Pot commun remis au seed : la course de la semaine repart de zéro pour tous.
+	await resetJackpot();
 
 	console.log(`[weekly-reset] ${week}: tous les joueurs remis à ${RESET_POINTS} pts`);
 
@@ -70,7 +78,7 @@ async function runIfNewWeek(): Promise<void>
 	// Requête API fictive : notifier un service externe du reset (webhook,
 	// archivage du classement de la semaine, etc.). À activer plus tard.
 	//
-	// const res = await fetch("https://api.example.com/piscasino/weekly-reset", {
+	// const res = await fetch("https://api.example.com/kazyno/weekly-reset", {
 	// 	method:  "POST",
 	// 	headers: {
 	// 		"Content-Type":  "application/json",

@@ -11,7 +11,7 @@ export function getStaticPaths()
 
 const { slug } = Astro.params;
 const rule = getGameRule(slug!)!;
-const backHref = rule.slug === "blackjack" ? "/table" : rule.slug === "poker" ? "/games/poker" : `/games/${rule.slug}`;
+const backHref = rule.slug === "blackjack" ? "/table" : rule.slug === "poker" ? "/games/poker" : rule.slug === "jackpot" ? "/app" : `/games/${rule.slug}`;
 ---
 
 <Layout title={`Kazyno — Règles ${rule.title}`}>

@@ -154,7 +154,10 @@ export const exambets = new Elysia({ prefix: "/api/exam-bets" })
 			if (cursus[0]?.common_core_done)
 				return err(set, 403, "tronc commun terminé — plus de paris d'exam pour toi 🎓");
 			if (examRows[0].rank !== null && cursus[0]?.exam_rank !== examRows[0].rank)
-				return err(set, 403, `réservé aux inscrits Exam 0${examRows[0].rank}`);
+			{
+				const label = examRows[0].rank === 0 ? "l'exam Piscine" : `l'Exam 0${examRows[0].rank}`;
+				return err(set, 403, `réservé aux inscrits à ${label}`);
+			}
 
 			const type: ExamType = examRows[0].is_final ? "final" : "standard";
 			const valid = validScores(type);

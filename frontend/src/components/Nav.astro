@@ -670,6 +670,7 @@
   .fr-list :global(.fr-av) {
     width: 30px;
     height: 30px;
+    flex: none; /* sans ça le flex écrase l'avatar (ovale) quand le texte est long */
     border-radius: 50%;
     object-fit: cover;
     background: var(--raise);

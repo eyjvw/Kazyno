@@ -397,7 +397,7 @@ export const social = new Elysia({ prefix: "/api" })
 
 			publishBalance(userId!, sender.points);
 			publishBalance(target.id, recv.points);
-			publishAdminLog({ action: "gift", login: sender.login });
+			publishAdminLog({ action: "gift", login: sender.login, target: target.login, amount: body.amount });
 
 			const msg = `@${sender.login} t'a offert ${body.amount.toLocaleString("fr-FR")} pts 🎁`;
 			await pushNotif(target.id,

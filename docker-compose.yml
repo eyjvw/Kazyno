@@ -1,32 +1,39 @@
+name: kazyno
+
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: piscasino-postgres
+    container_name: kazyno-postgres
     environment:
-      POSTGRES_USER: piscasino
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-piscasino}
-      POSTGRES_DB: piscasino
+      POSTGRES_USER: kazyno
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kazyno}
+      POSTGRES_DB: kazyno
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U piscasino -d piscasino"]
+      test: ["CMD-SHELL", "pg_isready -U kazyno -d kazyno"]
       interval: 5s
       timeout: 3s
       retries: 12
     networks:
-      - piscasino
+      - kazyno
 
   backend:
     build: ./backend
-    container_name: piscasino-backend
+    container_name: kazyno-backend
     environment:
-      DATABASE_URL: postgres://piscasino:${POSTGRES_PASSWORD:-piscasino}@postgres:5432/piscasino
+      DATABASE_URL: postgres://kazyno:${POSTGRES_PASSWORD:-kazyno}@postgres:5432/kazyno
       SESSION_SECRET: ${SESSION_SECRET:-dev-insecure-change-me}
       FT_UID: ${FT_UID:-}
       FT_SECRET: ${FT_SECRET:-}
       FT_REDIRECT_URI: ${FT_REDIRECT_URI:-http://localhost:8080/api/auth/callback}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:8080}
       ADMIN_LOGINS: ${ADMIN_LOGINS:-}
+      ALLOWED_CAMPUS_IDS: ${ALLOWED_CAMPUS_IDS:-62}
+      TRACKER_SECRET: ${TRACKER_SECRET:-}
+      FT_COALITION_UID: ${FT_COALITION_UID:-}
+      FT_COALITION_SECRET: ${FT_COALITION_SECRET:-}
+      TREASURE_SECRET: ${TREASURE_SECRET:-} # TEMPORAIRE — chasse au trésor
     depends_on:
       postgres:
         condition: service_healthy
@@ -36,22 +43,22 @@ services:
       timeout: 3s
       retries: 12
     networks:
-      - piscasino
+      - kazyno
 
   frontend:
     build: ./frontend
-    container_name: piscasino-frontend
+    container_name: kazyno-frontend
     healthcheck:
       test: ["CMD", "bun", "-e", "fetch('http://localhost:4321/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
       timeout: 3s
       retries: 12
     networks:
-      - piscasino
+      - kazyno
 
   gateway:
     build: ./gateway
-    container_name: piscasino-gateway
+    container_name: kazyno-gateway
     environment:
       FRONTEND_URL: http://frontend:4321
       BACKEND_URL: http://backend:3000
@@ -63,11 +70,11 @@ services:
       frontend:
         condition: service_healthy
     networks:
-      - piscasino
+      - kazyno
 
 volumes:
   pgdata:
 
 networks:
-  piscasino:
+  kazyno:
     driver: bridge

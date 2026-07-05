@@ -36,6 +36,7 @@ const games = [
 
       <div class="hero-side">
         <div class="stat-box panel jackpot-box">
+          <a class="jackpot-help" href="/games/rules/jackpot" title="C'est quoi le jackpot ?" aria-label="Explication du jackpot">?</a>
           <span class="lbl">💰 Jackpot progressif</span>
           <b data-jackpot>—</b>
         </div>
@@ -91,6 +92,32 @@ const games = [
       <div class="daily-days" data-daily-days></div>
       <button class="btn daily-claim-btn" data-daily-claim>Réclamer</button>
       <p class="daily-claimed-txt" data-daily-claimed-txt hidden>Reviens demain !</p>
+    </div>
+  </div>
+
+  <!-- Common core completed modal (one-shot, queued after the daily) -->
+  <div class="daily-modal" data-core-modal hidden>
+    <div class="daily-card core-card">
+      <button class="daily-close" data-core-close aria-label="Fermer">✕</button>
+      <div class="daily-fire core-cap">🎓</div>
+      <h2 class="daily-title">Tronc commun terminé !</h2>
+      <p class="core-sub">GG — t'as fini le 42cursus. La maison salue l'exploit.</p>
+      <div class="core-amount">+2 000 <span>pts</span></div>
+      <p class="core-note">Crédités une seule fois. Les paris d'exam sont finis pour toi, mais le casino reste ouvert 🎰</p>
+      <button class="btn daily-claim-btn" data-core-ok>La classe →</button>
+    </div>
+  </div>
+
+  <!-- Piscine passed modal (one-shot, queued after core) -->
+  <div class="daily-modal" data-piscine-modal hidden>
+    <div class="daily-card core-card">
+      <button class="daily-close" data-piscine-close aria-label="Fermer">✕</button>
+      <div class="daily-fire core-cap">🏊</div>
+      <h2 class="daily-title">Piscine réussie !</h2>
+      <p class="core-sub">Bienvenue au 42cursus — t'as survécu au grand bain.</p>
+      <div class="core-amount">+1 000 <span>pts</span></div>
+      <p class="core-note">Crédités une seule fois. Les paris d'exam t'attendent maintenant côté student 🎓</p>
+      <button class="btn daily-claim-btn" data-piscine-ok>Let's go →</button>
     </div>
   </div>
 
@@ -181,7 +208,7 @@ const games = [
 </Layout>
 
 <script>
-	import { loadMe, getMyRank, onBalance, fmt, getDailyStatus, claimDaily, getMyChallenges, onChallengeComplete, bjCreateRoom, bjListRooms, bjJoin, bjJoinByCode, bjStart, pokerCreateRoom, pokerListRooms, pokerJoin, pokerJoinByCode,getJackpot, onJackpot, getFeed, onFeed, type FeedItem } from "../lib/casino";
+	import { loadMe, getMyRank, onBalance, fmt, getDailyStatus, claimDaily, askDailyPopup, ackCoreReward, ackPiscineReward, getMyChallenges, onChallengeComplete, bjCreateRoom, bjListRooms, bjJoin, bjJoinByCode, bjStart, pokerCreateRoom, pokerListRooms, pokerJoin, pokerJoinByCode,getJackpot, onJackpot, getFeed, onFeed, type FeedItem } from "../lib/casino";
 
 	const helloEl = document.querySelector<HTMLElement>("[data-hello]")!;
 	const balEl = document.querySelector<HTMLElement>("[data-hero-balance]")!;
@@ -235,9 +262,14 @@ const games = [
 		// Weekly challenges
 		loadChallenges();
 
-		// Daily reward modal — only if not yet claimed today
+		// Popup queue: daily first (if unclaimed), core-done celebration after.
+		// Each one pops ONCE across all devices: daily via the server-side
+		// popup slot, core acked server-side as soon as it is displayed.
+		corePending = me.core_reward_seen === false;
+		piscinePending = me.piscine_reward_seen === false;
 		const daily = await getDailyStatus();
-		if (daily && !daily.claimed) showDailyModal(daily);
+		if (daily && !daily.claimed && (await askDailyPopup())) showDailyModal(daily);
+		else maybeShowCore();
 	});
 
 	// ── Weekly challenges ─────────────────────────────────────────────────────
@@ -344,12 +376,63 @@ const games = [
 	document.querySelector("[data-daily-close]")?.addEventListener("click", () =>
 	{
 		dailyModal.hidden = true;
+		maybeShowCore();
 	});
 
 	// Close on backdrop click
 	dailyModal.addEventListener("click", (e) =>
 	{
-		if (e.target === dailyModal) dailyModal.hidden = true;
+		if (e.target === dailyModal) { dailyModal.hidden = true; maybeShowCore(); }
+	});
+
+	// ── Common core celebration modal ─────────────────────────────────────────
+	const coreModal = document.querySelector<HTMLElement>("[data-core-modal]")!;
+	let corePending = false;
+
+	function maybeShowCore()
+	{
+		if (!corePending) { maybeShowPiscine(); return; }
+		corePending = false;
+		coreModal.hidden = false;
+		// Acked at display time: pops once, never again, even without a click.
+		ackCoreReward();
+	}
+
+	function closeCore()
+	{
+		coreModal.hidden = true;
+		maybeShowPiscine();
+	}
+
+	document.querySelector("[data-core-close]")?.addEventListener("click", closeCore);
+	document.querySelector("[data-core-ok]")?.addEventListener("click", closeCore);
+	coreModal.addEventListener("click", (e) =>
+	{
+		if (e.target === coreModal) closeCore();
+	});
+
+	// ── Piscine celebration modal (same one-shot pattern) ─────────────────────
+	const piscineModal = document.querySelector<HTMLElement>("[data-piscine-modal]")!;
+	let piscinePending = false;
+
+	function maybeShowPiscine()
+	{
+		if (!piscinePending) return;
+		piscinePending = false;
+		piscineModal.hidden = false;
+		ackPiscineReward();
+	}
+
+	function closePiscine()
+	{
+		piscineModal.hidden = true;
+	}
+
+	document.querySelector("[data-piscine-close]")?.addEventListener("click", closePiscine);
+	document.querySelector("[data-piscine-ok]")?.addEventListener("click", closePiscine);
+	piscineModal.addEventListener("click", (e) =>
+	{
+		if (e.target === piscineModal) closePiscine();
 	});
 
 	// ── Poker modal ───────────────────────────────────────────────────────────
@@ -766,6 +849,27 @@ const games = [
     color: #f59e0b;
     text-shadow: 0 0 18px rgba(245, 158, 11, 0.35);
   }
+  .jackpot-box { position: relative; }
+  .jackpot-help {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .jackpot-help:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
 
   /* ── Live feed ── */
   .feed-section { margin-bottom: 32px; }
@@ -931,6 +1035,47 @@ const games = [
     color: var(--muted);
     font-size: 13px;
     margin: 0;
+  }
+
+  /* ── Common core celebration ── */
+  .core-card {
+    border-color: rgba(212, 175, 55, 0.45);
+    background:
+      radial-gradient(90% 70% at 50% 0%, rgba(212, 175, 55, 0.12), transparent 70%),
+      var(--panel);
+    box-shadow: 0 0 40px rgba(212, 175, 55, 0.18);
+    text-align: center;
+  }
+  .core-cap {
+    font-size: 46px;
+    filter: drop-shadow(0 6px 18px rgba(212, 175, 55, 0.4));
+    animation: core-pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1);
+  }
+  @keyframes core-pop {
+    from { transform: scale(0.3) rotate(-12deg); opacity: 0; }
+    to   { transform: scale(1) rotate(0); opacity: 1; }
+  }
+  .core-sub {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0;
+  }
+  .core-amount {
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: var(--accent);
+    text-shadow: 0 0 24px rgba(212, 175, 55, 0.45);
+    margin: 6px 0 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .core-amount span { font-size: 18px; font-weight: 700; }
+  .core-note {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 0 0 6px;
+    max-width: 340px;
   }
 
   .daily-days {

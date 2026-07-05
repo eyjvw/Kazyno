@@ -21,6 +21,8 @@ export interface Me
 	show_presence: boolean;
 	notif_prefs: NotifPrefs;
 	welcomed: boolean;
+	core_reward_seen: boolean;
+	piscine_reward_seen: boolean;
 }
 
 type BalanceListener = (points: number) => void;
@@ -88,6 +90,18 @@ export async function loadMe(): Promise<Me | null>
 	} catch {
 		return null;
 	}
+}
+
+/** Dismiss the common-core +2000 popup (fire-and-forget). */
+export function ackCoreReward()
+{
+	void fetch("/api/auth/core-seen", { method: "POST" }).catch(() => {});
+}
+
+/** Dismiss the piscine +1000 popup (fire-and-forget). */
+export function ackPiscineReward()
+{
+	void fetch("/api/auth/piscine-seen", { method: "POST" }).catch(() => {});
 }
 
 export async function logout()
@@ -660,33 +674,6 @@ export async function cancelExamBet(betId: number)
 	return data;
 }
 
-// Admin exam management
-export async function adminCreateExam(label: string, exam_date: string, is_final: boolean, rank?: number)
-{
-	const r = await fetch("/api/exams", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ label, exam_date, is_final, rank }),
-	});
-	const data = await r.json().catch(() => ({}));
-	if (!r.ok) throw new Error(data?.error ?? "Erreur");
-	return data;
-}
-export async function adminLockExam(id: number)
-{
-	const r = await fetch(`/api/exams/${id}/lock`, { method: "POST" });
-	const data = await r.json().catch(() => ({}));
-	if (!r.ok) throw new Error(data?.error ?? "Erreur");
-	return data;
-}
-export async function adminDeleteExam(id: number)
-{
-	const r = await fetch(`/api/exams/${id}`, { method: "DELETE" });
-	const data = await r.json().catch(() => ({}));
-	if (!r.ok) throw new Error(data?.error ?? "Erreur");
-	return data;
-}
-
 // Giveaways
 export interface Giveaway
 {
@@ -971,6 +958,14 @@ export async function towerCashout() {
 export async function getDailyStatus() {
 	const r = await fetch("/api/daily/status");
 	return r.ok ? r.json() : null;
+}
+/** Atomic popup slot: true for exactly one call per user per day (all devices). */
+export async function askDailyPopup(): Promise<boolean> {
+	try {
+		const r = await fetch("/api/daily/popup", { method: "POST" });
+		if (!r.ok) return false;
+		return !!(await r.json()).pop;
+	} catch { return false; }
 }
 export async function claimDaily() {
 	const r = await fetch("/api/daily/claim", { method: "POST" });

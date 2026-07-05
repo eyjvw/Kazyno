@@ -113,6 +113,8 @@ import Footer from "../components/Footer.astro";
 					<section class="card title-card" data-title-section hidden>
 						<h2 class="ach-title">${t("profile.title_section")}</h2>
 						<div class="title-picker" data-title-picker></div>
+						<h2 class="ach-title title-sub">${t("profile.color_section")}</h2>
+						<div class="title-picker" data-color-picker></div>
 					</section>
 					<a class="settings-link" href="/settings">${t("profile.settings_link")} →</a>` : ""}
 				</aside>
@@ -142,45 +144,120 @@ import Footer from "../components/Footer.astro";
 		}
 	}
 
-	// ── Title picker (owned cosmetic titles from the shop) ────────────────────
+	// ── Cosmetic pickers (owned titles + name colors from the shop) ───────────
+	const SWATCH_GRADS: Record<string, string> = {
+		rainbow: "linear-gradient(90deg,#ef4444,#f59e0b,#22c55e,#06b6d4,#a855f7)",
+		fire:    "linear-gradient(90deg,#f97316,#ef4444,#fbbf24)",
+		ocean:   "linear-gradient(90deg,#06b6d4,#3b82f6,#22d3ee)",
+		galaxy:  "linear-gradient(90deg,#a855f7,#6366f1,#ec4899)",
+		toxic:   "linear-gradient(90deg,#22c55e,#84cc16,#a3e635)",
+	};
+
+	// Ferme tous les dropdowns au clic extérieur (listener unique, délégué)
+	document.addEventListener("click", (e) =>
+	{
+		if ((e.target as HTMLElement).closest("[data-title-dd]")) return;
+		document.querySelectorAll<HTMLElement>("[data-title-dd]").forEach((dd) =>
+		{
+			dd.querySelector<HTMLElement>(".title-dd-menu")!.hidden = true;
+			dd.querySelector("button")?.setAttribute("aria-expanded", "false");
+		});
+	});
+
+	interface DdOption { key: string; html: string }
+	function buildDropdown(host: HTMLElement, options: DdOption[], activeKey: string, onPick: (key: string | null) => void)
+	{
+		const current = options.find((o) => o.key === activeKey) ?? options[0];
+		host.innerHTML = `
+			<div class="title-dd" data-title-dd>
+				<button class="title-dd-btn" aria-haspopup="listbox" aria-expanded="false">
+					<span class="title-dd-cur">${current.html}</span>
+					<span class="title-dd-chev">▾</span>
+				</button>
+				<ul class="title-dd-menu" role="listbox" hidden>
+					${options.map((o) => `
+						<li role="option" class="title-dd-opt ${o.key === current.key ? "is-active" : ""}" data-dd-key="${o.key}">${o.html}</li>
+					`).join("")}
+				</ul>
+			</div>`;
+
+		const btn  = host.querySelector<HTMLButtonElement>(".title-dd-btn")!;
+		const menu = host.querySelector<HTMLElement>(".title-dd-menu")!;
+		btn.addEventListener("click", () =>
+		{
+			menu.hidden = !menu.hidden;
+			btn.setAttribute("aria-expanded", String(!menu.hidden));
+		});
+		menu.querySelectorAll<HTMLElement>("[data-dd-key]").forEach((opt) =>
+		{
+			opt.addEventListener("click", () =>
+			{
+				menu.hidden = true;
+				onPick(opt.dataset.ddKey || null);
+			});
+		});
+	}
+
 	async function renderTitlePicker()
 	{
-		const section = document.querySelector<HTMLElement>("[data-title-section]");
-		const picker  = document.querySelector<HTMLElement>("[data-title-picker]");
-		if (!section || !picker) return;
+		const section     = document.querySelector<HTMLElement>("[data-title-section]");
+		const titleHost   = document.querySelector<HTMLElement>("[data-title-picker]");
+		const colorHost   = document.querySelector<HTMLElement>("[data-color-picker]");
+		if (!section || !titleHost || !colorHost) return;
 
 		const { items, owned, equipped } = await getShop();
+		section.hidden = false;
+
+		const pick = (kind: "title" | "color") => async (key: string | null) =>
+		{
+			try
+			{
+				await equipItem(key, key ? undefined : kind);
+				await load();
+			}
+			catch (e: any)
+			{
+				toast(e?.message ?? "Erreur");
+				await renderTitlePicker();
+			}
+		};
+
+		// Titres
 		const titles = items.filter((i: any) => i.kind === "title" && owned.includes(i.key));
 		if (!titles.length)
 		{
-			section.hidden = true;
-			return;
+			titleHost.innerHTML = `<p class="title-empty"><a href="/shop">${t("profile.no_title_owned")}</a></p>`;
 		}
-		section.hidden = false;
-
-		const options = [{ key: null, label: t("profile.no_title"), value: null }, ...titles];
-		picker.innerHTML = options.map((o: any) => `
-			<button class="title-opt ${equipped?.title === o.value ? "is-active" : ""}" data-title-key="${o.key ?? ""}">
-				${o.label ?? o.value}
-			</button>
-		`).join("");
-
-		picker.querySelectorAll<HTMLButtonElement>("[data-title-key]").forEach((btn) =>
+		else
 		{
-			btn.addEventListener("click", async () =>
-			{
-				const key = btn.dataset.titleKey || null;
-				try
+			const options = [
+				{ key: "", html: t("profile.no_title") },
+				...titles.map((o: any) => ({ key: o.key, html: o.value })),
+			];
+			const active = titles.find((o: any) => equipped?.title === o.value)?.key ?? "";
+			buildDropdown(titleHost, options, active, pick("title"));
+		}
+
+		// Couleurs de pseudo
+		const colors = items.filter((i: any) => i.kind === "color" && owned.includes(i.key));
+		if (!colors.length)
+		{
+			colorHost.innerHTML = `<p class="title-empty"><a href="/shop">${t("profile.no_color_owned")}</a></p>`;
+		}
+		else
+		{
+			const sw = (v: string) => `<span class="title-dd-sw" style="background:${SWATCH_GRADS[v] ?? v}"></span>`;
+			const options = [
+				{ key: "", html: `<span class="title-dd-sw sw-none"></span>${t("profile.no_color")}` },
+				...colors.map((o: any) =>
 				{
-					await equipItem(key, key ? undefined : "title");
-					await load();
-				}
-				catch (e: any)
-				{
-					toast(e?.message ?? "Erreur");
-				}
-			});
-		});
+					const label = o.label.replace(/^Pseudo /, "");
+					return { key: o.key, html: `${sw(o.value)}${label.charAt(0).toUpperCase()}${label.slice(1)}` };
+				}),
+			];
+			const active = colors.find((o: any) => equipped?.name_color === o.value)?.key ?? "";
+			buildDropdown(colorHost, options, active, pick("color"));
+		}
 	}
 
 	// ── Personal history + profit sparkline ───────────────────────────────────
@@ -320,7 +397,7 @@ import Footer from "../components/Footer.astro";
 
 <style>
   .wrap {
-    max-width: 1100px;
+    max-width: 1400px;
     margin: 0 auto;
     padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 40px);
   }
@@ -624,38 +701,87 @@ import Footer from "../components/Footer.astro";
     padding: 3px 12px;
   }
   .wrap :global(.title-card) { padding: 20px; }
-  .wrap :global(.title-picker) {
+  .wrap :global(.title-sub) { margin-top: 18px; }
+  .wrap :global(.title-dd) { position: relative; }
+  .wrap :global(.title-dd-btn) {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
-    max-height: 220px;
-    overflow-y: auto;
-    padding-right: 4px;
-  }
-  .wrap :global(.title-picker::-webkit-scrollbar) { width: 6px; }
-  .wrap :global(.title-picker::-webkit-scrollbar-thumb) {
-    background: var(--raise);
-    border-radius: 3px;
-  }
-  .wrap :global(.title-opt) {
-    background: var(--raise);
-    border: 1px solid var(--line);
-    color: var(--muted);
-    border-radius: 8px;
-    font-family: inherit;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
     font-size: 13px;
     font-weight: 600;
     padding: 9px 12px;
-    text-align: left;
+    background: var(--raise);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
     cursor: pointer;
-    transition: border-color 0.15s, color 0.15s;
+    font-family: inherit;
+    transition: border-color 0.15s;
   }
-  .wrap :global(.title-opt:hover) { color: var(--fg); border-color: var(--accent); }
-  .wrap :global(.title-opt.is-active) {
+  .wrap :global(.title-dd-btn:hover) { border-color: var(--accent); }
+  .wrap :global(.title-dd-chev) { color: var(--muted); font-size: 11px; flex: none; }
+  .wrap :global(.title-dd-menu) {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 4px;
+    position: absolute;
+    left: 0; right: 0;
+    z-index: 10;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    max-height: 220px;
+    overflow-y: auto;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  }
+  .wrap :global(.title-dd-menu[hidden]) { display: none !important; }
+  .wrap :global(.title-dd-menu::-webkit-scrollbar) { width: 6px; }
+  .wrap :global(.title-dd-menu::-webkit-scrollbar-thumb) {
+    background: var(--raise);
+    border-radius: 3px;
+  }
+  .wrap :global(.title-dd-cur) {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .wrap :global(.title-dd-sw) {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex: none;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+  .wrap :global(.sw-none) {
+    background: transparent;
+    border: 1px dashed var(--muted);
+  }
+  .wrap :global(.title-dd-opt) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 5px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .wrap :global(.title-dd-opt:hover) { background: var(--panel); color: var(--fg); }
+  .wrap :global(.title-dd-opt.is-active) {
     background: var(--accent);
-    border-color: var(--accent);
     color: var(--accent-ink);
   }
+  .wrap :global(.title-empty) { margin: 0; font-size: 12px; }
+  .wrap :global(.title-empty a) { color: var(--muted); transition: color 0.15s; }
+  .wrap :global(.title-empty a:hover) { color: var(--accent); }
   .wrap :global(.settings-link) {
     display: block;
     text-align: center;

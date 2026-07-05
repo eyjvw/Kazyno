@@ -158,7 +158,7 @@ async function drawGiveaway(g: { id: number; title: string; prize_points: number
 		`) as Array<{ points: number }>;
 		publishBalance(winnerId, rows[0].points);
 		await pushNotif(winnerId, {
-			kind: "giveaway",
+			kind: "reward",
 			message: `🎉 Tu as gagné le giveaway "${g.title}" ! +${g.prize_points} pts`,
 			link: "/giveaways",
 		});

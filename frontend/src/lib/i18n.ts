@@ -55,6 +55,10 @@ const dict = {
 	"profile.settings_link":{ fr: "Réglages du compte",  en: "Account settings" },
 	"profile.title_section":{ fr: "Titre affiché",       en: "Displayed title" },
 	"profile.no_title":     { fr: "Aucun titre",         en: "No title" },
+	"profile.no_title_owned":{ fr: "Aucun titre débloqué — fais un tour à la boutique 🛒", en: "No title unlocked yet — check out the shop 🛒" },
+	"profile.color_section":{ fr: "Couleur du pseudo",   en: "Username color" },
+	"profile.no_color":     { fr: "Couleur par défaut",  en: "Default color" },
+	"profile.no_color_owned":{ fr: "Aucune couleur débloquée — fais un tour à la boutique 🛒", en: "No color unlocked yet — check out the shop 🛒" },
 
 	"settings.title":       { fr: "Réglages",            en: "Settings" },
 	"settings.back":        { fr: "← Retour au profil",  en: "← Back to profile" },

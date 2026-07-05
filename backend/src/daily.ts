@@ -46,6 +46,20 @@ export const daily = new Elysia({ prefix: "/api/daily" })
 		};
 	})
 
+	// One popup per day across ALL devices: atomic claim of today's popup slot.
+	// Returns pop=true for exactly one caller per user per day.
+	.post("/popup", async ({ userId }) =>
+	{
+		const today = new Date().toISOString().split("T")[0];
+		const rows = (await sql`
+			UPDATE users SET daily_popup_day = ${today}::date
+			WHERE id = ${userId!}
+				AND (daily_popup_day IS NULL OR daily_popup_day < ${today}::date)
+			RETURNING 1 AS ok
+		`) as unknown[];
+		return { pop: rows.length > 0 };
+	})
+
 	.post("/claim", async ({ userId, set }) =>
 	{
 		const today     = new Date().toISOString().split("T")[0];

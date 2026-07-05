@@ -60,6 +60,14 @@ export async function takeJackpot(login: string): Promise<number>
 	return won;
 }
 
+/** Weekly reset: pot back to the seed, broadcast the new value. */
+export async function resetJackpot(): Promise<void>
+{
+	await sql`UPDATE jackpot SET amount = ${SEED} WHERE id = 1`;
+	cached = SEED;
+	publishBroadcast({ type: "jackpot", amount: SEED });
+}
+
 // Module import runs before initDb(); table may not exist yet on first boot.
 void refresh().catch(() => {});
 

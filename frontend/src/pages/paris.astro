@@ -378,6 +378,7 @@ import Footer from "../components/Footer.astro";
 
 		cardsEl.innerHTML = "";
 		const betByExam = new Map(pendingBets.map((b: any) => [b.exam_id, b]));
+		const rankLabel = (r: number) => (r === 0 ? "l'exam Piscine" : `l'Exam 0${r}`);
 
 		visible.forEach((exam) =>
 		{
@@ -397,7 +398,7 @@ import Footer from "../components/Footer.astro";
 							<span class="ec-date">${date}</span>
 						</div>
 					</div>
-					<div class="ec-locked">Réservé aux inscrits Exam 0${exam.rank} — tu es sur l'Exam 0${ctx!.exam_rank ?? "?"}.</div>`;
+					<div class="ec-locked">Réservé aux inscrits à ${rankLabel(exam.rank)} — ${ctx!.exam_rank == null ? "tu n'es inscrit à aucun exam sur l'intra." : `tu es inscrit à ${rankLabel(ctx!.exam_rank)}.`}</div>`;
 				return;
 			}
 			renderCard(exam, betByExam.get(exam.id) ?? null, card);
@@ -462,7 +463,7 @@ import Footer from "../components/Footer.astro";
 
 <style>
   .wrap {
-    max-width: 1100px;
+    max-width: 1400px;
     margin: 0 auto;
     padding: clamp(20px, 4vw, 40px) clamp(16px, 4vw, 40px);
   }
@@ -654,7 +655,7 @@ import Footer from "../components/Footer.astro";
     text-align: center;
   }
   .exam-cards :global(.score-btn:hover)     { color: var(--fg); border-color: var(--accent); }
-  .exam-cards :global(.score-btn.is-active) { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .exam-cards :global(.score-btn.is-active) { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   .exam-cards :global(.pred-display) {
     font-size: 42px;
     font-weight: 800;
@@ -679,7 +680,7 @@ import Footer from "../components/Footer.astro";
     border: 1px solid var(--accent) !important;
     color: var(--accent) !important;
   }
-  .exam-cards :global(.btn-outline:hover) { background: var(--accent) !important; color: #fff !important; }
+  .exam-cards :global(.btn-outline:hover) { background: var(--accent) !important; color: var(--accent-ink) !important; }
   .exam-cards :global(.btn-danger)        { background: var(--lose) !important; }
   .exam-cards :global(.btn-danger:hover)  { filter: brightness(1.15); }
 
@@ -732,7 +733,7 @@ import Footer from "../components/Footer.astro";
     justify-content: center;
     font-weight: 700;
     font-size: 12px;
-    color: #fff;
+    color: var(--accent-ink);
     background: var(--accent);
   }
   .feed :global(.frow-main) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }

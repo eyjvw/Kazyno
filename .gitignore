@@ -4,3 +4,4 @@ dist/
 .astro/
 *.log
 .DS_Store
+TREASURE_API.txt

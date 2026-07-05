@@ -288,7 +288,7 @@ import Nav from "../components/Nav.astro";
 
 <style>
   .wrap {
-    max-width: 1080px;
+    max-width: 1300px;
     margin: 0 auto;
     padding: 16px clamp(12px, 3vw, 32px) 40px;
   }
@@ -459,6 +459,12 @@ import Nav from "../components/Nav.astro";
   .controls :global(.btn.ghost) {
     background: var(--panel-2);
     border: 1px solid var(--line);
+    color: var(--fg); /* .btn met du texte sombre (accent-ink) prévu pour fond or — illisible ici */
+  }
+  .controls :global(.btn.ghost:hover) {
+    color: var(--accent);
+    border-color: var(--accent);
+    filter: none;
   }
   .controls :global(.wait) {
     color: var(--muted);

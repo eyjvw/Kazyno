@@ -187,6 +187,19 @@ export const gameRules: GameRule[] = [
 		],
 		edge: "Pas d'avantage maison — poker joueur contre joueur",
 	},
+	{
+		slug: "jackpot",
+		icon: "💰",
+		title: "Jackpot progressif",
+		tagline: "Le pot commun du casino — tout le monde le nourrit, un seul le rafle.",
+		sections: [
+			{ heading: "C'est quoi", body: "Une cagnotte unique partagée par tout le casino. Elle démarre à 10 000 pts et grossit en continu : 1% de chaque mise perdue sur les jeux solo part dedans. Le montant affiché dans le lobby est en temps réel." },
+			{ heading: "Comment le gagner", body: "Un seul moyen : aligner trois 7️⃣ à la machine à sous. Tu empoches le gain normal du triple 7 PLUS l'intégralité du pot. Le pot repart aussitôt à 10 000 pts." },
+			{ heading: "Reset hebdomadaire", body: "Chaque lundi 00:00 UTC, comme les points de tout le monde, le pot est remis à 10 000 pts. Une semaine = une course — personne ne profite d'un pot gonflé pendant des semaines." },
+			{ heading: "Fair-play", body: "Le tirage des slots est provably fair (vérifiable depuis ton profil) et le pot est pris de façon atomique côté serveur : impossible de le gagner deux fois." },
+		],
+		edge: "100% du pot redistribué au gagnant",
+	},
 ];
 
 export function getGameRule(slug: string): GameRule | undefined

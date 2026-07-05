@@ -9,12 +9,24 @@ import Footer from "../components/Footer.astro";
   <main class="wrap">
     <header class="head">
       <h1>Panel admin 🛠️</h1>
-      <p>Notifications et gestion des points.</p>
+      <p>Joueurs, points, giveaways — et le live log en continu à droite.</p>
     </header>
 
+    <nav class="quicknav" data-quicknav hidden>
+      <a href="#a-notif">🔔 Notif</a>
+      <a href="#a-points">💰 Points</a>
+      <a href="#a-rain">🌧️ Pluie</a>
+      <a href="#a-giveaways">🎁 Giveaways</a>
+      <a href="#a-logs">📡 Logs</a>
+      <a href="#a-danger" class="qn-danger">⚠️ Danger</a>
+    </nav>
+
+    <div class="admin-cols">
+    <div class="admin-main">
+
     <div class="grid" data-panel hidden>
-      <section class="panel card">
-        <h2>Envoyer une notification</h2>
+      <section class="panel card" id="a-notif">
+        <h2>🔔 Envoyer une notification</h2>
         <label class="lbl">Message</label>
         <textarea class="input" data-msg rows="3" maxlength="280" placeholder="Message aux joueurs…"></textarea>
 
@@ -37,8 +49,8 @@ import Footer from "../components/Footer.astro";
         <p class="msg" data-msg-res></p>
       </section>
 
-      <section class="panel card">
-        <h2>Ajouter / retirer des points</h2>
+      <section class="panel card" id="a-points">
+        <h2>💰 Ajouter / retirer des points</h2>
         <label class="lbl">Joueur</label>
         <div class="picker" data-picker="points">
           <input class="input" data-search placeholder="Rechercher un joueur…" autocomplete="off" />
@@ -60,7 +72,7 @@ import Footer from "../components/Footer.astro";
         <p class="msg" data-pts-res></p>
       </section>
 
-      <section class="panel card">
+      <section class="panel card" id="a-rain">
         <h2>🌧️ Faire pleuvoir des points</h2>
         <label class="lbl">Montant total</label>
         <input class="input" data-rain-amount type="number" value="1000" min="10" />
@@ -70,48 +82,18 @@ import Footer from "../components/Footer.astro";
         <p class="msg" data-rain-res></p>
       </section>
 
-      <section class="panel card danger-card">
-        <h2>Zone dangereuse</h2>
+      <section class="panel card danger-card" id="a-danger" data-danger-section>
+        <h2>⚠️ Zone dangereuse</h2>
         <p class="danger-desc">Remet tous les joueurs à 1 000 pts. Irréversible.</p>
         <button class="btn btn-danger" data-reset-all>Reset tout le monde → 1 000 pts</button>
         <p class="msg" data-reset-res></p>
       </section>
+
     </div>
 
-    <section class="panel card exam-card" data-exam-section hidden>
+    <section class="panel card exam-card" id="a-giveaways" data-giveaway-section hidden>
       <div class="exam-header">
-        <h2>Examens planifiés</h2>
-        <span class="exam-help">Les paris se ferment automatiquement à la date de l'exam.</span>
-      </div>
-
-      <div class="exam-form">
-        <input class="input exam-input" data-exam-label placeholder="Libellé (ex: Exam 01)" maxlength="80" />
-        <input class="input exam-input exam-date" data-exam-date type="date" />
-        <input class="input exam-input exam-time" data-exam-time type="time" value="08:42" />
-        <select class="input exam-input" data-exam-rank>
-          <option value="">Rang : tous</option>
-          <option value="2">Exam 02</option>
-          <option value="3">Exam 03</option>
-          <option value="4">Exam 04</option>
-          <option value="5">Exam 05</option>
-          <option value="6">Exam 06</option>
-        </select>
-        <label class="final-check">
-          <input type="checkbox" data-exam-final />
-          Exam final
-        </label>
-        <button class="btn exam-add-btn" data-exam-add>Ajouter</button>
-      </div>
-      <p class="msg" data-exam-res></p>
-
-      <ul class="exam-list" data-exam-list>
-        <li class="exam-empty">Chargement…</li>
-      </ul>
-    </section>
-
-    <section class="panel card exam-card" data-giveaway-section hidden>
-      <div class="exam-header">
-        <h2>Giveaways</h2>
+        <h2>🎁 Giveaways</h2>
         <span class="exam-help">Un gagnant est tiré au hasard automatiquement à la date de fin.</span>
       </div>
 
@@ -130,7 +112,10 @@ import Footer from "../components/Footer.astro";
       </ul>
     </section>
 
-    <section class="panel log-panel" data-log-panel hidden>
+    </div><!-- /admin-main -->
+
+    <aside class="admin-side">
+    <section class="panel log-panel" id="a-logs" data-log-panel hidden>
       <div class="log-head">
         <span class="log-title">Live log</span>
         <span class="log-dot" data-log-dot></span>
@@ -138,21 +123,30 @@ import Footer from "../components/Footer.astro";
       </div>
 
       <div class="log-filters">
-        <div class="flt-picker">
-          <input class="input flt-input" data-f-login placeholder="Rechercher un login…" autocomplete="off" />
-          <button class="flt-clear-login" data-f-login-clear hidden>✕</button>
-          <ul class="flt-presults" data-f-results hidden></ul>
+        <div class="flt-row">
+          <div class="flt-picker">
+            <input class="input flt-input" data-f-login placeholder="Rechercher un login…" autocomplete="off" />
+            <button class="flt-clear-login" data-f-login-clear hidden>✕</button>
+            <ul class="flt-presults" data-f-results hidden></ul>
+          </div>
+          <select class="input flt-select" data-f-action>
+            <option value="">Toutes actions</option>
+            <option value="bet">Mises</option>
+            <option value="points">Points admin</option>
+            <option value="rain">Pluies</option>
+            <option value="gift">Cadeaux</option>
+            <option value="duel">Duels</option>
+            <option value="treasure">Chasse au trésor</option>
+            <option value="reset-all">Reset général</option>
+          </select>
         </div>
-        <select class="input flt-select" data-f-action>
-          <option value="">Toutes actions</option>
-          <option value="bet">Mises</option>
-          <option value="points">Points admin</option>
-          <option value="reset-all">Reset général</option>
-        </select>
-        <input class="input flt-input flt-date" type="date" data-f-from />
-        <input class="input flt-input flt-date" type="date" data-f-to />
-        <button class="btn flt-btn" data-f-search>Chercher</button>
-        <button class="btn flt-btn flt-reset" data-f-reset>Reset</button>
+        <div class="flt-row">
+          <span class="flt-range-label">Du</span>
+          <input class="input flt-input flt-date" type="date" data-f-from />
+          <span class="flt-range-label">au</span>
+          <input class="input flt-input flt-date" type="date" data-f-to />
+          <button class="flt-reset" data-f-reset hidden title="Effacer les filtres">✕ Filtres</button>
+        </div>
       </div>
 
       <p class="log-count" data-log-count hidden></p>
@@ -163,6 +157,8 @@ import Footer from "../components/Footer.astro";
         <button class="ghost-btn" data-page-next>Suiv. →</button>
       </div>
     </section>
+    </aside><!-- /admin-side -->
+    </div><!-- /admin-cols -->
 
     <p class="denied" data-denied hidden>Accès réservé aux admins.</p>
   </main>
@@ -179,10 +175,6 @@ import Footer from "../components/Footer.astro";
 		adminResetAll,
 		adminStartRain,
 		adminGetLogs,
-		getExams,
-		adminCreateExam,
-		adminLockExam,
-		adminDeleteExam,
 		getGiveaways,
 		adminCreateGiveaway,
 		adminDeleteGiveaway,
@@ -299,100 +291,8 @@ import Footer from "../components/Footer.astro";
 			return;
 		}
 		$("[data-panel]").hidden = false;
-		$("[data-exam-section]").hidden = false;
-
-		// ── Exam management ───────────────────────────────────────────────────
-		const examList = $("[data-exam-list]");
-		const examRes  = $("[data-exam-res]");
-
-		function examTypeLabel(e: any): string
-		{
-			return e.is_final ? "Final" : "Standard";
-		}
-
-		function renderExams(exams: any[])
-		{
-			if (!exams.length)
-			{
-				examList.innerHTML = `<li class="exam-empty">Aucun exam planifié.</li>`;
-				return;
-			}
-			examList.innerHTML = exams.map((e: any) =>
-			{
-				const date = new Date(e.exam_date).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
-				const locked = e.locked;
-				return `<li class="exam-row" data-eid="${e.id}">
-					<div class="exam-info">
-						<span class="exam-label">${e.label}</span>
-						<span class="exam-meta">${date} · ${examTypeLabel(e)} · ${e.bet_count} pari${e.bet_count !== 1 ? "s" : ""}</span>
-					</div>
-					<div class="exam-actions">
-						${!locked ? `<button class="ghost-btn exam-lock-btn" data-lock="${e.id}">🔒 Lock</button>` : `<span class="exam-locked-badge">Verrouillé</span>`}
-						${e.bet_count === 0 ? `<button class="ghost-btn exam-del-btn" data-del="${e.id}">Suppr.</button>` : ""}
-					</div>
-				</li>`;
-			}).join("");
-
-			examList.querySelectorAll<HTMLButtonElement>("[data-lock]").forEach((btn) =>
-			{
-				btn.addEventListener("click", async () =>
-				{
-					if (!confirm(`Verrouiller "${btn.closest("li")?.querySelector(".exam-label")?.textContent}" ? Les paris se ferment.`)) return;
-					try
-					{
-						await adminLockExam(Number(btn.dataset.lock));
-						await refreshExams();
-					} catch (e: any) { alert(e?.message ?? "Erreur"); }
-				});
-			});
-			examList.querySelectorAll<HTMLButtonElement>("[data-del]").forEach((btn) =>
-			{
-				btn.addEventListener("click", async () =>
-				{
-					if (!confirm("Supprimer cet exam ?")) return;
-					try
-					{
-						await adminDeleteExam(Number(btn.dataset.del));
-						await refreshExams();
-					} catch (e: any) { alert(e?.message ?? "Erreur"); }
-				});
-			});
-		}
-
-		async function refreshExams()
-		{
-			renderExams(await getExams());
-		}
-		await refreshExams();
-
-		$("[data-exam-add]").addEventListener("click", async () =>
-		{
-			examRes.textContent = "";
-			examRes.className = "msg";
-			const label    = $<HTMLInputElement>("[data-exam-label]").value.trim();
-			const dateVal  = $<HTMLInputElement>("[data-exam-date]").value;
-			const timeVal  = $<HTMLInputElement>("[data-exam-time]").value || "08:42";
-			const final    = $<HTMLInputElement>("[data-exam-final]").checked;
-			const rankVal  = $<HTMLSelectElement>("[data-exam-rank]").value;
-			if (!label)   { examRes.textContent = "Libellé requis"; examRes.className = "msg err"; return; }
-			if (!dateVal) { examRes.textContent = "Date requise";   examRes.className = "msg err"; return; }
-			try
-			{
-				await adminCreateExam(label, new Date(`${dateVal}T${timeVal}`).toISOString(), final, rankVal ? Number(rankVal) : undefined);
-				examRes.textContent = "Exam ajouté ✓";
-				examRes.className = "msg ok";
-				$<HTMLInputElement>("[data-exam-label]").value = "";
-				$<HTMLInputElement>("[data-exam-date]").value = "";
-				$<HTMLInputElement>("[data-exam-time]").value = "08:42";
-				$<HTMLInputElement>("[data-exam-final]").checked = false;
-				await refreshExams();
-			}
-			catch (e: any)
-			{
-				examRes.textContent = e?.message ?? "Erreur";
-				examRes.className = "msg err";
-			}
-		});
+		$("[data-quicknav]").hidden = false;
+		$("[data-danger-section]").hidden = false;
 
 		// ── Giveaway management ─────────────────────────────────────────────────
 		$("[data-giveaway-section]").hidden = false;
@@ -602,7 +502,8 @@ import Footer from "../components/Footer.astro";
 				const net  = (event.payout ?? 0) - event.bet;
 				const diff = net >= 0 ? `+${net.toLocaleString()}` : `${net.toLocaleString()}`;
 				const cls  = net >= 0 ? "log-win" : "log-lose";
-				text = `${icon} <b>@${event.login}</b> · ${event.game} · mise ${event.bet.toLocaleString()} · <span class="${cls}">${diff} pts</span> · solde ${event.balance.toLocaleString()}`;
+				const solde = event.balance != null ? ` · solde ${event.balance.toLocaleString()}` : "";
+				text = `${icon} <b>@${event.login}</b> · ${event.game} · mise ${event.bet.toLocaleString()} · <span class="${cls}">${diff} pts</span>${solde}`;
 			}
 			else if (event.action === "points")
 			{
@@ -614,9 +515,36 @@ import Footer from "../components/Footer.astro";
 			{
 				text = `⚠️ <span class="log-warn">Reset général — tous remis à 1 000 pts</span>`;
 			}
+			else if (event.action === "gift")
+			{
+				const amt = event.amount != null ? ` · <span class="log-win">${event.amount.toLocaleString()} pts</span>` : "";
+				const to  = event.target ? ` → <b>@${event.target}</b>` : "";
+				text = `🎁 <b>@${event.login}</b>${to}${amt}`;
+			}
+			else if (event.action === "rain")
+			{
+				text = `🌧️ pluie par <b>@${event.login}</b> · ${(event.amount ?? 0).toLocaleString()} pts · ${event.winners ?? "?"} gagnants`;
+			}
+			else if (event.action === "treasure")
+			{
+				const what = event.kind === "rotd"
+					? "💡 devinette du jour"
+					: `🗺️ badge ${event.level ?? "?"}/${event.maxLevel ?? 17}`;
+				text = `${what} · <b>@${event.login}</b> · <span class="log-win">+${(event.amount ?? 0).toLocaleString()} pts</span>`;
+			}
+			else if (event.action === "duel")
+			{
+				text = `⚔️ duel · <b>@${event.winner ?? "?"}</b> <span class="log-win">bat</span> <b>@${event.loser ?? "?"}</b> · mise ${(event.stake ?? 0).toLocaleString()} pts`;
+			}
+			else
+			{
+				// Action inconnue : dump compact plutôt que du JSON brut pleine ligne.
+				const { type: _t, ts: _ts, action, ...rest } = event;
+				text = `❓ ${action ?? "?"} · <small>${JSON.stringify(rest)}</small>`;
+			}
 			const li = document.createElement("li");
 			li.className = "log-entry";
-			li.innerHTML = `<span class="log-ts">${ts}</span>${text || JSON.stringify(event)}`;
+			li.innerHTML = `<span class="log-ts">${ts}</span>${text}`;
 			return li;
 		}
 
@@ -687,6 +615,7 @@ import Footer from "../components/Footer.astro";
 			fResults.hidden = true;
 			fResults.innerHTML = "";
 			fLoginClear.hidden = false;
+			syncResetBtn();
 			await loadHistory(0);
 		});
 		fLoginClear.addEventListener("click", async () =>
@@ -694,6 +623,7 @@ import Footer from "../components/Footer.astro";
 			activeLogin = "";
 			fLoginInput.value = "";
 			fLoginClear.hidden = true;
+			syncResetBtn();
 			await loadHistory(0);
 		});
 		document.addEventListener("click", (e) =>
@@ -708,11 +638,19 @@ import Footer from "../components/Footer.astro";
 			logCount.hidden = true;
 			logPagination.hidden = true;
 		});
-		$("[data-f-search]").addEventListener("click", () => loadHistory(0));
-		$("[data-f-action]").addEventListener("change", () => loadHistory(0));
-		$("[data-f-from]").addEventListener("change", () => loadHistory(0));
-		$("[data-f-to]").addEventListener("change", () => loadHistory(0));
-		$("[data-f-reset]").addEventListener("click", async () =>
+		const fltReset = $<HTMLButtonElement>("[data-f-reset]");
+		function syncResetBtn()
+		{
+			fltReset.hidden = !activeLogin
+				&& !$<HTMLSelectElement>("[data-f-action]").value
+				&& !$<HTMLInputElement>("[data-f-from]").value
+				&& !$<HTMLInputElement>("[data-f-to]").value;
+		}
+		const onFilterChange = () => { syncResetBtn(); loadHistory(0); };
+		$("[data-f-action]").addEventListener("change", onFilterChange);
+		$("[data-f-from]").addEventListener("change", onFilterChange);
+		$("[data-f-to]").addEventListener("change", onFilterChange);
+		fltReset.addEventListener("click", async () =>
 		{
 			activeLogin = "";
 			fLoginInput.value = "";
@@ -720,6 +658,7 @@ import Footer from "../components/Footer.astro";
 			$<HTMLSelectElement>("[data-f-action]").value = "";
 			$<HTMLInputElement>("[data-f-from]").value = "";
 			$<HTMLInputElement>("[data-f-to]").value = "";
+			syncResetBtn();
 			await loadHistory(0);
 		});
 		$("[data-page-prev]").addEventListener("click", () => loadHistory(currentPage - 1));
@@ -748,7 +687,7 @@ import Footer from "../components/Footer.astro";
 
 <style>
   .wrap {
-    max-width: 900px;
+    max-width: 1440px;
     margin: 0 auto;
     padding: clamp(20px, 4vw, 40px) clamp(16px, 4vw, 40px);
   }
@@ -759,8 +698,65 @@ import Footer from "../components/Footer.astro";
     letter-spacing: -0.03em;
   }
   .head p {
-    margin: 8px 0 28px;
+    margin: 8px 0 20px;
     color: var(--muted);
+  }
+
+  /* ── Quick nav (ancres, sticky en haut) ── */
+  .quicknav {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 0;
+    margin-bottom: 14px;
+    background: var(--bg);
+    box-shadow: 0 8px 16px -12px rgba(0, 0, 0, 0.8);
+  }
+  .quicknav a {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 20px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .quicknav a:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .quicknav .qn-danger:hover {
+    color: var(--lose);
+    border-color: var(--lose);
+  }
+
+  /* ── 2 colonnes : actions à gauche, live log sticky à droite ── */
+  .admin-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 440px;
+    gap: 20px;
+    align-items: start;
+  }
+  .admin-main { min-width: 0; }
+  .admin-side {
+    position: sticky;
+    top: 76px;
+    min-width: 0;
+  }
+  .admin-side .log-panel { margin-top: 0; }
+  .admin-side .log-list { max-height: calc(100vh - 340px); }
+  section[id] { scroll-margin-top: 76px; }
+
+  @media (max-width: 1140px) {
+    .admin-cols { grid-template-columns: 1fr; }
+    .admin-side { position: static; }
+    .admin-side .log-panel { margin-top: 18px; }
+    .admin-side .log-list { max-height: 380px; }
   }
   .grid {
     display: grid;
@@ -832,8 +828,8 @@ import Footer from "../components/Footer.astro";
     justify-content: center;
     font-weight: 700;
     font-size: 14px;
-    color: #fff;
-    background: linear-gradient(135deg, var(--accent), #7c3aed);
+    color: var(--accent-ink);
+    background: var(--accent);
   }
   .presults :global(.pinfo) {
     display: flex;
@@ -882,8 +878,8 @@ import Footer from "../components/Footer.astro";
     justify-content: center;
     font-weight: 800;
     font-size: 16px;
-    color: #fff;
-    background: linear-gradient(135deg, var(--accent), #7c3aed);
+    color: var(--accent-ink);
+    background: var(--accent);
   }
   .chip-info {
     display: flex;
@@ -1024,8 +1020,8 @@ import Footer from "../components/Footer.astro";
   /* Danger zone */
   .danger-card {
     border-color: var(--lose);
-    grid-column: 1 / -1;
   }
+  .danger-card .btn-danger { margin-top: auto; }
   .danger-desc {
     margin: 4px 0 0;
     color: var(--muted);
@@ -1085,12 +1081,22 @@ import Footer from "../components/Footer.astro";
   /* Filters */
   .log-filters {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 8px;
     padding: 12px 16px;
     border-bottom: 1px solid var(--line);
     background: var(--bg-2);
+  }
+  .flt-row {
+    display: flex;
+    gap: 8px;
     align-items: center;
+    flex-wrap: wrap;
+  }
+  .flt-range-label {
+    font-size: 12px;
+    color: var(--muted);
+    flex: none;
   }
   .flt-picker {
     position: relative;
@@ -1147,8 +1153,8 @@ import Footer from "../components/Footer.astro";
     justify-content: center;
     font-weight: 700;
     font-size: 12px;
-    color: #fff;
-    background: linear-gradient(135deg, var(--accent), #7c3aed);
+    color: var(--accent-ink);
+    background: var(--accent);
   }
   .flt-presults :global(span) { flex: 1; font-weight: 600; }
   .flt-presults :global(small) { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -1169,18 +1175,23 @@ import Footer from "../components/Footer.astro";
     border: 1px solid var(--line);
     border-radius: 8px;
   }
-  .flt-date { flex: 0 1 130px; min-width: 110px; }
-  .flt-btn {
-    padding: 7px 14px;
-    font-size: 13px;
-    margin-top: 0;
-    white-space: nowrap;
-  }
+  .flt-date { flex: 1 1 110px; min-width: 110px; }
   .flt-reset {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    white-space: nowrap;
     background: var(--raise);
     color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    cursor: pointer;
   }
   .flt-reset:hover { background: var(--panel-2); color: var(--fg); }
+  .flt-reset[hidden] { display: none !important; }
 
   .log-count {
     margin: 0;
