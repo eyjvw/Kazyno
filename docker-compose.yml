@@ -63,7 +63,9 @@ services:
       FRONTEND_URL: http://frontend:4321
       BACKEND_URL: http://backend:3000
     ports:
-      - "8080:8080"
+      # Loopback only : dev = localhost:8080, prod = Caddy (compose.prod) seul
+      # point d'entrée public.
+      - "127.0.0.1:8080:8080"
     depends_on:
       backend:
         condition: service_healthy

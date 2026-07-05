@@ -1,40 +1,53 @@
-# Kazyno — raccourcis docker compose (dev local + VPS)
+# Kazyno — raccourcis docker compose
+# Dev local :  make up / down / logs        (gateway sur localhost:8080)
+# Prod VPS  :  make deploy / prod-up / prod-down   (Caddy devant, ports 80/443)
 
-.PHONY: up down build deploy logs ps psql backup restore
+COMPOSE      = docker compose
+COMPOSE_PROD = docker compose -f docker-compose.yml -f docker-compose.prod.yml
 
-# Build + démarre tout
+.PHONY: up down build deploy prod-up prod-down logs ps psql backup restore
+
+# ── Dev local ────────────────────────────────────────────────────────────
 up:
-	docker compose up -d --build
+	$(COMPOSE) up -d --build
 
 down:
-	docker compose down
+	$(COMPOSE) down
 
 build:
-	docker compose build
+	$(COMPOSE) build
 
-# Déploiement VPS : pull + rebuild + restart + ménage
+# ── Prod (VPS, avec Caddy) ───────────────────────────────────────────────
+prod-up:
+	$(COMPOSE_PROD) up -d --build
+
+prod-down:
+	$(COMPOSE_PROD) down
+
+# Déploiement : pull + rebuild + restart + ménage
 deploy:
 	git pull
-	docker compose up -d --build
+	$(COMPOSE_PROD) up -d --build
 	docker image prune -f
 
+# ── Commun ───────────────────────────────────────────────────────────────
 logs:
-	docker compose logs -f --tail=100
+	$(COMPOSE) logs -f --tail=100
 
 ps:
-	docker compose ps
+	$(COMPOSE) ps
 
 # Console SQL directe
 psql:
-	docker compose exec postgres psql -U kazyno -d kazyno
+	$(COMPOSE) exec postgres psql -U kazyno -d kazyno
 
 # Dump gzippé horodaté dans ./backups/
 backup:
 	@mkdir -p backups
-	docker compose exec -T postgres pg_dump -U kazyno kazyno | gzip > backups/kazyno-$$(date +%Y%m%d-%H%M).sql.gz
+	$(COMPOSE) exec -T postgres pg_dump -U kazyno kazyno | gzip > backups/kazyno-$$(date +%Y%m%d-%H%M).sql.gz
 	@command ls -lh backups/ | tail -3
 
 # make restore FILE=backups/kazyno-XXXX.sql.gz  (ATTENTION : écrase la DB)
 restore:
 	@test -n "$(FILE)" || (echo "usage: make restore FILE=backups/xxx.sql.gz" && exit 1)
-	gunzip -c $(FILE) | docker compose exec -T postgres psql -U kazyno -d kazyno
+	gunzip -c $(FILE) | $(COMPOSE) exec -T postgres psql -U kazyno -d kazyno

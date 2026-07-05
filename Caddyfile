@@ -1,0 +1,7 @@
+# SITE_ADDRESS via env (docker-compose.prod.yml) :
+#   vide / ":80"            → HTTP sur toutes les requêtes (IP nue, pas de TLS possible)
+#   "kazyno.42lehavre.fr"   → TLS Let's Encrypt automatique
+{$SITE_ADDRESS::80} {
+	encode gzip
+	reverse_proxy gateway:8080
+}

@@ -1,0 +1,27 @@
+# Override prod : Caddy devant le gateway.
+# Usage : docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# (ou juste `make deploy` / `make prod-up`)
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: kazyno-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      # IP ou domaine du site. Avec un domaine → TLS Let's Encrypt auto.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    depends_on:
+      - gateway
+    restart: unless-stopped
+    networks:
+      - kazyno
+
+volumes:
+  caddy_data:
+  caddy_config:
