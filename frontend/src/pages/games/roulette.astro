@@ -1,15 +1,16 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import Nav from "../../components/Nav.astro";
+import GameRules from "../../components/GameRules.astro";
 ---
 
 <Layout title="Kazyno — Roulette">
   <Nav />
   <header class="game-header">
+    <a class="gh-back" href="/app">← Retour</a>
     <span class="gh-icon">🎡</span>
     <h1>Roulette</h1>
     <span class="gh-sub">· Rouge ou noir, pair ou impair, la roue décide</span>
-    <a class="gh-rules" href="/games/rules/roulette" title="Règles">? Règles</a>
   </header>
   <div class="shell">
     <aside class="panel betpanel">
@@ -76,6 +77,7 @@ import Nav from "../../components/Nav.astro";
       </div>
     </main>
   </div>
+  <GameRules slug="roulette" />
 </Layout>
 
 <script>

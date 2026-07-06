@@ -1,15 +1,16 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import Nav from "../../components/Nav.astro";
+import GameRules from "../../components/GameRules.astro";
 ---
 
 <Layout title="Kazyno — Crash">
   <Nav />
   <header class="game-header">
+    <a class="gh-back" href="/app">← Retour</a>
     <span class="gh-icon">🚀</span>
     <h1>Crash</h1>
     <span class="gh-sub">· Encaisse avant que le multiplicateur s'effondre</span>
-    <a class="gh-rules" href="/games/rules/crash" title="Règles">? Règles</a>
   </header>
   <div class="shell">
     <aside class="panel betpanel">
@@ -42,6 +43,7 @@ import Nav from "../../components/Nav.astro";
       </div>
     </main>
   </div>
+  <GameRules slug="crash" />
 </Layout>
 
 <script>

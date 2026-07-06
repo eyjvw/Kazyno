@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
+import GameRules from "../components/GameRules.astro";
 ---
 
 <Layout title="Kazyno — Table">
@@ -10,7 +11,6 @@ import Nav from "../components/Nav.astro";
       <a class="back" href="/app" data-quit>← Quitter</a>
       <span class="rname" data-rname>Table</span>
       <span class="code">Code <b data-code>—</b></span>
-      <a class="gh-rules" href="/games/rules/blackjack" title="Règles">? Règles</a>
     </div>
 
     <div class="scene" data-scene>
@@ -21,6 +21,7 @@ import Nav from "../components/Nav.astro";
       <span class="wait">Connexion à la table…</span>
     </div>
   </main>
+  <GameRules slug="blackjack" />
 </Layout>
 
 <script>

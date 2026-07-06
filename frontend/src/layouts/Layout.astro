@@ -286,6 +286,24 @@ const { title = "Kazyno" } = Astro.props;
     align-items: center;
     gap: 12px;
   }
+  .gh-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 20px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .gh-back:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
   .game-header .gh-icon {
     font-size: 28px;
     line-height: 1;

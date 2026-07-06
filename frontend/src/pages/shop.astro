@@ -26,9 +26,12 @@ import Footer from "../components/Footer.astro";
 </Layout>
 
 <script>
-	import { getShop, buyItem, equipItem, fmt, toast, getBalance } from "../lib/casino";
+	import { getShop, buyItem, equipItem, fmt, toast, getBalance, loadMe } from "../lib/casino";
 
 	const GRADS = ["rainbow", "fire", "ocean", "galaxy", "toxic"];
+	let myLogin = "pseudo";
+	const escapeHtml = (s: string) =>
+		s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 	const titlesEl = document.querySelector<HTMLElement>("[data-titles]")!;
 	const colorsEl = document.querySelector<HTMLElement>("[data-colors]")!;
 
@@ -39,6 +42,7 @@ import Footer from "../components/Footer.astro";
 		label: string;
 		value: string;
 		price: number;
+		exclusive?: boolean;
 	}
 
 	let owned: string[] = [];
@@ -49,27 +53,44 @@ import Footer from "../components/Footer.astro";
 	{
 		titlesEl.innerHTML = "";
 		colorsEl.innerHTML = "";
+		const buyable = items.filter((i) => !i.exclusive);
+		const ownedBuyable = buyable.filter((i) => owned.includes(i.key)).length;
 		for (const item of items)
 		{
 			const has = owned.includes(item.key);
 			const isEquipped = item.kind === "title"
 				? equipped.title === item.value
 				: equipped.name_color === item.value;
+			const lockedExclusive = !!item.exclusive && !has;
 			const card = document.createElement("div");
-			card.className = "shop-card" + (isEquipped ? " equipped" : "");
+			card.className = "shop-card"
+				+ (isEquipped ? " equipped" : "")
+				+ (item.exclusive ? " exclusive" : "")
+				+ (lockedExclusive ? " locked" : "");
 			card.innerHTML = `
 				<div class="shop-preview">${
 					item.kind === "title"
-						? `<span class="title-badge">${item.value}</span>`
+						? `<span class="title-badge">${lockedExclusive ? "???" : item.value}</span>`
 						: GRADS.includes(item.value)
-							? `<span class="color-preview grad-${item.value}">sbonneau</span>`
-							: `<span class="color-preview" style="color:${item.value}">sbonneau</span>`
+							? `<span class="color-preview grad-${item.value}">${escapeHtml(myLogin)}</span>`
+							: `<span class="color-preview" style="color:${item.value}">${escapeHtml(myLogin)}</span>`
 				}</div>
 				<b class="shop-label">${item.label}</b>
-				<span class="shop-price">${has ? (isEquipped ? "Équipé ✓" : "Possédé") : `${fmt(item.price)} pts`}</span>
-				<button class="btn shop-btn" data-key="${item.key}">
-					${isEquipped ? "Retirer" : has ? "Équiper" : "Acheter"}
-				</button>`;
+				<span class="shop-price">${
+					has ? (isEquipped ? "Équipé ✓" : "Possédé")
+					: item.exclusive ? `👑 Collection complète — ${ownedBuyable}/${buyable.length}`
+					: `${fmt(item.price)} pts`
+				}</span>
+				${lockedExclusive
+					? `<button class="btn shop-btn shop-locked" disabled>🔒 Possède toute la boutique</button>`
+					: `<button class="btn shop-btn" data-key="${item.key}">
+							${isEquipped ? "Retirer" : has ? "Équiper" : "Acheter"}
+						</button>`}`;
+			if (lockedExclusive)
+			{
+				(item.kind === "title" ? titlesEl : colorsEl).appendChild(card);
+				continue;
+			}
 			const btn = card.querySelector<HTMLButtonElement>(".shop-btn")!;
 			btn.addEventListener("click", async () =>
 			{
@@ -106,6 +127,8 @@ import Footer from "../components/Footer.astro";
 			(item.kind === "title" ? titlesEl : colorsEl).appendChild(card);
 		}
 	}
+
+	loadMe().then((me) => { if (me?.login) myLogin = me.login; render(); });
 
 	getShop().then((d) =>
 	{
@@ -190,4 +213,20 @@ import Footer from "../components/Footer.astro";
     font-variant-numeric: tabular-nums;
   }
   :global(.shop-btn) { width: 100%; font-size: 13px; padding: 9px; }
+
+  /* Item exclusif (récompense de collection) */
+  :global(.shop-card.exclusive) {
+    border-color: rgba(212, 175, 55, 0.5);
+    background: linear-gradient(160deg, rgba(212, 175, 55, 0.07), var(--panel) 55%);
+  }
+  :global(.shop-card.exclusive .shop-price) { color: var(--accent); font-weight: 700; }
+  :global(.shop-card.locked .title-badge) { filter: grayscale(1); opacity: 0.6; }
+  /* Variante de fond → couleur redéfinie obligatoire (jamais accent-ink sur fond sombre) */
+  :global(.shop-locked) {
+    background: var(--raise);
+    color: var(--muted);
+    cursor: default;
+    box-shadow: none;
+  }
+  :global(.shop-locked:hover) { background: var(--raise); box-shadow: none; }
 </style>

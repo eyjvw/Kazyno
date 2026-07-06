@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { jwt } from "@elysiajs/jwt";
 import { sql } from "./db";
 import { publishBalance, publishLeaderboard } from "./realtime";
+import { pushNotif } from "./notifications";
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? "dev-insecure-change-me";
 
@@ -15,6 +16,7 @@ export interface ShopItem
 	label: string;
 	value: string; // title text or hex color
 	price: number;
+	exclusive?: boolean; // pas achetable — débloqué auto (collection complète)
 }
 
 export const ITEMS: ShopItem[] = [
@@ -39,9 +41,33 @@ export const ITEMS: ShopItem[] = [
 	{ key: "color_ocean",     kind: "color", label: "Pseudo océan",           value: "ocean",        price: 20_000 },
 	{ key: "color_galaxy",    kind: "color", label: "Pseudo galaxie",         value: "galaxy",       price: 20_000 },
 	{ key: "color_toxic",     kind: "color", label: "Pseudo toxique",         value: "toxic",        price: 20_000 },
+	// Récompense de collection : auto-débloqué quand on possède TOUT le catalogue.
+	{ key: "title_collector", kind: "title", label: "Titre « Collectionneur »", value: "Collectionneur 👑", price: 0, exclusive: true },
 ];
 
 const byKey = new Map(ITEMS.map((i) => [i.key, i]));
+const BUYABLE_KEYS = ITEMS.filter((i) => !i.exclusive).map((i) => i.key);
+const COLLECTOR_KEY = "title_collector";
+
+/** Grants the collector title once the user owns the full catalog (idempotent). */
+async function maybeGrantCollector(userId: number, ownedKeys: string[]): Promise<boolean>
+{
+	if (!BUYABLE_KEYS.every((k) => ownedKeys.includes(k))) return false;
+	const granted = (await sql`
+		INSERT INTO user_items (user_id, item_key) VALUES (${userId}, ${COLLECTOR_KEY})
+		ON CONFLICT DO NOTHING
+		RETURNING 1 AS ok
+	`) as unknown[];
+	if (granted.length)
+	{
+		await pushNotif(userId, {
+			kind: "reward",
+			message: "👑 Collection complète ! Titre exclusif « Collectionneur » débloqué",
+			link: "/profile",
+		});
+	}
+	return granted.length > 0;
+}
 
 export const shop = new Elysia({ prefix: "/api/shop" })
 	.use(jwt({ name: "jwt", secret: SESSION_SECRET }))
@@ -65,12 +91,18 @@ export const shop = new Elysia({ prefix: "/api/shop" })
 		const owned = (await sql`
 			SELECT item_key FROM user_items WHERE user_id = ${userId!}
 		`) as Array<{ item_key: string }>;
+		const ownedKeys = owned.map((o) => o.item_key);
+		// Rattrapage : collection déjà complète mais titre pas encore accordé.
+		if (!ownedKeys.includes(COLLECTOR_KEY) && await maybeGrantCollector(userId!, ownedKeys))
+		{
+			ownedKeys.push(COLLECTOR_KEY);
+		}
 		const [me] = (await sql`
 			SELECT title, name_color, points FROM users WHERE id = ${userId!}
 		`) as Array<{ title: string | null; name_color: string | null; points: number }>;
 		return {
 			items: ITEMS,
-			owned: owned.map((o) => o.item_key),
+			owned: ownedKeys,
 			equipped: { title: me.title, name_color: me.name_color },
 			balance: me.points,
 		};
@@ -85,6 +117,11 @@ export const shop = new Elysia({ prefix: "/api/shop" })
 			{
 				set.status = 404;
 				return { error: "objet inconnu" };
+			}
+			if (item.exclusive)
+			{
+				set.status = 403;
+				return { error: "objet exclusif — se débloque, ne s'achète pas" };
 			}
 			const already = (await sql`
 				SELECT 1 FROM user_items WHERE user_id = ${userId!} AND item_key = ${item.key}
@@ -110,6 +147,13 @@ export const shop = new Elysia({ prefix: "/api/shop" })
 			`;
 			publishBalance(userId!, rows[0].points);
 			void publishLeaderboard();
+
+			// Collection complète après cet achat → titre Collectionneur.
+			const ownedNow = (await sql`
+				SELECT item_key FROM user_items WHERE user_id = ${userId!}
+			`) as Array<{ item_key: string }>;
+			void maybeGrantCollector(userId!, ownedNow.map((o) => o.item_key));
+
 			return { ok: true, balance: rows[0].points };
 		},
 		{ body: t.Object({ key: t.String() }) },

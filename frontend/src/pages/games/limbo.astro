@@ -1,15 +1,16 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import Nav from "../../components/Nav.astro";
+import GameRules from "../../components/GameRules.astro";
 ---
 
 <Layout title="Kazyno — Limbo">
   <Nav />
   <header class="game-header">
+    <a class="gh-back" href="/app">← Retour</a>
     <span class="gh-icon">🎯</span>
     <h1>Limbo</h1>
     <span class="gh-sub">· Plus ton multiplicateur cible est élevé, plus c'est risqué</span>
-    <a class="gh-rules" href="/games/rules/limbo" title="Règles">? Règles</a>
   </header>
   <div class="shell">
     <aside class="panel betpanel">
@@ -44,6 +45,7 @@ import Nav from "../../components/Nav.astro";
       <div class="hist-bar" data-hist></div>
     </main>
   </div>
+  <GameRules slug="limbo" />
 </Layout>
 
 <script>
@@ -132,4 +134,13 @@ import Nav from "../../components/Nav.astro";
     color: var(--muted);
     font-size: 13px;
   }
+  /* Historique sur une seule ligne, scroll horizontal au lieu de wrap multi-lignes */
+  .stage .hist-bar {
+    flex-wrap: nowrap;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .stage .hist-bar::-webkit-scrollbar { display: none; }
+  .stage :global(.hchip) { flex: none; }
 </style>

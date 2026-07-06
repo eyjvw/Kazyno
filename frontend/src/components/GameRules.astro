@@ -1,0 +1,138 @@
+---
+import { getGameRule } from "../lib/gameRules";
+
+interface Props { slug: string; }
+const { slug } = Astro.props;
+const rule = getGameRule(slug);
+---
+
+{rule && (
+  <div class="gr-wrap">
+  <details class="game-rules">
+    <summary class="gr-summary">
+      <span class="gr-chevron">▸</span>
+      <span class="gr-title">Règles — {rule.title}</span>
+      <span class="gr-edge">{rule.edge}</span>
+    </summary>
+    <div class="gr-body">
+      {rule.sections.map((s) => (
+        <div class="gr-sec">
+          <h3>{s.heading}</h3>
+          <p>{s.body}</p>
+        </div>
+      ))}
+
+      {rule.table && (
+        <div class="gr-table-wrap">
+          <table>
+            <thead>
+              <tr>{rule.table.headers.map((h) => <th>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rule.table.rows.map((row) => (
+                <tr>{row.map((cell) => <td>{cell}</td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  </details>
+  </div>
+)}
+
+<style>
+  /* Aligne la box règles sur les panneaux du jeu : même largeur max et même
+     padding horizontal que .shell (Layout) — sinon la box déborde plus large. */
+  .gr-wrap {
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 clamp(16px, 4vw, 40px) clamp(16px, 3vw, 32px);
+  }
+
+  .game-rules {
+    width: 100%;
+    margin: 0;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .gr-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .gr-summary::-webkit-details-marker { display: none; }
+  .gr-summary:hover { background: rgba(212, 175, 55, 0.05); }
+
+  .gr-chevron {
+    color: var(--accent);
+    font-size: 12px;
+    transition: transform 0.18s ease;
+    flex: none;
+  }
+  .game-rules[open] .gr-chevron { transform: rotate(90deg); }
+
+  .gr-title { flex: 1; }
+
+  .gr-edge {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent-ink);
+    background: var(--accent);
+    padding: 3px 9px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  .gr-body {
+    padding: 4px 18px 18px;
+    border-top: 1px solid var(--line);
+  }
+
+  .gr-sec { margin-top: 14px; }
+  .gr-sec h3 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    margin: 0 0 4px;
+  }
+  .gr-sec p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+
+  .gr-table-wrap { margin-top: 14px; overflow-x: auto; }
+  .gr-table-wrap table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .gr-table-wrap th,
+  .gr-table-wrap td {
+    padding: 7px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .gr-table-wrap th {
+    color: var(--accent);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .gr-table-wrap td { color: var(--muted); }
+</style>

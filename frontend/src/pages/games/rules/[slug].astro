@@ -6,7 +6,11 @@ import { gameRules, getGameRule } from "../../../lib/gameRules";
 
 export function getStaticPaths()
 {
-	return gameRules.map((g) => ({ params: { slug: g.slug } }));
+	// Les règles des jeux sont désormais inline (composant GameRules) sur chaque
+	// page de jeu. Seul le jackpot garde sa page dédiée (lien "?" du lobby).
+	return gameRules
+		.filter((g) => g.slug === "jackpot")
+		.map((g) => ({ params: { slug: g.slug } }));
 }
 
 const { slug } = Astro.params;

@@ -1,15 +1,16 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import Nav from "../../components/Nav.astro";
+import GameRules from "../../components/GameRules.astro";
 ---
 
 <Layout title="Kazyno — Mines">
   <Nav />
   <header class="game-header">
+    <a class="gh-back" href="/app">← Retour</a>
     <span class="gh-icon">💣</span>
     <h1>Mines</h1>
     <span class="gh-sub">· Révèle des cases sans tomber sur une mine</span>
-    <a class="gh-rules" href="/games/rules/mines" title="Règles">? Règles</a>
   </header>
   <div class="shell">
     <aside class="panel betpanel">
@@ -54,6 +55,7 @@ import Nav from "../../components/Nav.astro";
       <div class="grid" data-grid></div>
     </main>
   </div>
+  <GameRules slug="mines" />
 </Layout>
 
 <script>
@@ -88,6 +90,9 @@ import Nav from "../../components/Nav.astro";
 		btn.addEventListener("click", () =>
 		{
 			if (active) return;
+			// Clear finished-game board so stale tiles don't re-render
+			revealed = new Set();
+			mines    = new Set();
 			document.querySelectorAll("[data-m]").forEach(b => b.classList.remove("active"));
 			btn.classList.add("active");
 			minesN = Number(btn.dataset.m);
@@ -239,9 +244,10 @@ import Nav from "../../components/Nav.astro";
 			revealed = new Set();
 			mines    = new Set();
 
-			playBtn.hidden  = true;
-			cashBtn.hidden  = true;
-			multBox.hidden  = false;
+			playBtn.hidden   = true;
+			cashBtn.hidden   = true;
+			cashBtn.disabled = false;
+			multBox.hidden   = false;
 			curMult.textContent = "1.00×";
 			statMines.textContent = String(minesN);
 			statSafe.textContent  = String(GRID - minesN);

@@ -1,15 +1,16 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import Nav from "../../components/Nav.astro";
+import GameRules from "../../components/GameRules.astro";
 ---
 
 <Layout title="Kazyno — Dice">
   <Nav />
   <header class="game-header">
+    <a class="gh-back" href="/app">← Retour</a>
     <span class="gh-icon">🎲</span>
     <h1>Dés</h1>
     <span class="gh-sub">· Prédit si le résultat sera au-dessus ou en dessous</span>
-    <a class="gh-rules" href="/games/rules/dice" title="Règles">? Règles</a>
   </header>
   <div class="shell">
     <aside class="panel betpanel">
@@ -57,6 +58,7 @@ import Nav from "../../components/Nav.astro";
       <div class="hist-bar" data-hist></div>
     </main>
   </div>
+  <GameRules slug="dice" />
 </Layout>
 
 <script>

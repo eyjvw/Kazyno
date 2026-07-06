@@ -1,15 +1,16 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import Nav from "../../components/Nav.astro";
+import GameRules from "../../components/GameRules.astro";
 ---
 
 <Layout title="Kazyno — Coinflip">
   <Nav />
   <header class="game-header">
+    <a class="gh-back" href="/app">← Retour</a>
     <span class="gh-icon">🪙</span>
     <h1>Coin Flip</h1>
     <span class="gh-sub">· Pile ou face, 1.98× de gain</span>
-    <a class="gh-rules" href="/games/rules/coinflip" title="Règles">? Règles</a>
   </header>
   <div class="shell">
     <aside class="panel betpanel">
@@ -51,6 +52,7 @@ import Nav from "../../components/Nav.astro";
       <div class="hist-bar" data-hist></div>
     </main>
   </div>
+  <GameRules slug="coinflip" />
 </Layout>
 
 <script>

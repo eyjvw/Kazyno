@@ -1,6 +1,7 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import Nav from "../../components/Nav.astro";
+import GameRules from "../../components/GameRules.astro";
 
 const MULT = [5.6, 2.1, 1.1, 1, 0.5, 1, 1.1, 2.1, 5.6];
 const ROWS = 8;
@@ -9,10 +10,10 @@ const ROWS = 8;
 <Layout title="Kazyno — Plinko">
   <Nav />
   <header class="game-header">
+    <a class="gh-back" href="/app">← Retour</a>
     <span class="gh-icon">⚡</span>
     <h1>Plinko</h1>
     <span class="gh-sub">· Lâche la balle et regarde où elle atterrit</span>
-    <a class="gh-rules" href="/games/rules/plinko" title="Règles">? Règles</a>
   </header>
   <div class="shell">
     <aside class="panel betpanel">
@@ -60,6 +61,7 @@ const ROWS = 8;
       </div>
     </main>
   </div>
+  <GameRules slug="plinko" />
 </Layout>
 
 <script>
@@ -335,29 +337,27 @@ const ROWS = 8;
 		playBtn.disabled = true;
 		try
 		{
-			const rs = await Promise.all(
-				Array.from({ length: ballCount }, () =>
-					bet("plinko", { bet: betAmt }).catch((e: unknown) =>
-					({
-						_err: e instanceof BetError ? e.message : "Erreur réseau",
-					}))
-				)
-			);
-			for (const r of rs)
+			// Séquentiel : les mises se règlent dans l'ordre, donc le solde
+			// affiché (setBalance dans bet()) reste cohérent. En parallèle les
+			// réponses arrivent dans le désordre → dernier setBalance = solde faux.
+			for (let i = 0; i < ballCount; i++)
 			{
-				if ("_err" in r) { addError(r._err); continue; }
-				balls.push(makeBall(
-					(r as any).path,
-					(r as any).bucket,
-					{
-						win:    (r as any).win,
-						mult:   (r as any).multiplier,
-						payout: (r as any).payout,
+				try
+				{
+					const r = await bet("plinko", { bet: betAmt }) as any;
+					balls.push(makeBall(r.path, r.bucket, {
+						win:    r.win,
+						mult:   r.multiplier,
+						payout: r.payout,
 						bet:    betAmt,
-					}
-				));
+					}));
+					startLoop();
+				}
+				catch (e: unknown)
+				{
+					addError(e instanceof BetError ? e.message : "Erreur réseau");
+				}
 			}
-			startLoop();
 		}
 		finally
 		{

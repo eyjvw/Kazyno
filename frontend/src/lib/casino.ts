@@ -256,7 +256,11 @@ export function connectRealtime()
 				break;
 		}
 	};
-	sock.onopen = () => resubscribeRooms();
+	sock.onopen = () =>
+	{
+		resubscribeRooms();
+		if (crashSubbed) wsSend({ type: "crash:sub" });
+	};
 	sock.onclose = () =>
 	{
 		ws = null;
@@ -855,8 +859,9 @@ export async function getStats(): Promise<{ players: number; total_points: numbe
 type CrashListener = (msg: any) => void;
 const crashListeners = new Set<CrashListener>();
 export function onCrash(fn: CrashListener) { crashListeners.add(fn); return () => crashListeners.delete(fn); }
-export function subscribeCrash() { wsSend({ type: "crash:sub" }); }
-export function unsubscribeCrash() { wsSend({ type: "crash:unsub" }); }
+let crashSubbed = false;
+export function subscribeCrash() { crashSubbed = true; wsSend({ type: "crash:sub" }); }
+export function unsubscribeCrash() { crashSubbed = false; wsSend({ type: "crash:unsub" }); }
 export async function crashBet(amount: number) {
 	const r = await fetch("/api/crash/bet", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount }) });
 	const d = await r.json().catch(() => ({}));

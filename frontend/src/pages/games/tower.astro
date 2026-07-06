@@ -1,15 +1,16 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import Nav from "../../components/Nav.astro";
+import GameRules from "../../components/GameRules.astro";
 ---
 
 <Layout title="Kazyno — Tower">
   <Nav />
   <header class="game-header">
+    <a class="gh-back" href="/app">← Retour</a>
     <span class="gh-icon">🗼</span>
     <h1>Tower</h1>
     <span class="gh-sub">· Grimpe 8 étages, 1 piège par étage · jusqu'à ~25×</span>
-    <a class="gh-rules" href="/games/rules/tower" title="Règles">? Règles</a>
   </header>
   <div class="shell">
     <aside class="panel betpanel">
@@ -43,6 +44,7 @@ import Nav from "../../components/Nav.astro";
       <div class="tower" data-tower></div>
     </main>
   </div>
+  <GameRules slug="tower" />
 </Layout>
 
 <script>
