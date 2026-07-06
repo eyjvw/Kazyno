@@ -294,13 +294,21 @@ import GameRules from "../../components/GameRules.astro";
 	{
 		if (msg.phase === "waiting")
 		{
+			// Le serveur rediffuse un message "waiting" (même roundId) à CHAQUE
+			// pari placé par n'importe quel joueur. Ne réinitialiser l'état du
+			// pari QUE sur une nouvelle manche — sinon le pari d'un joueur est
+			// effacé quand un autre parie, et il ne peut plus cashout.
+			const newRound = msg.roundId !== currentRoundId;
 			cancelAnimationFrame(animFrame);
 			phase         = "waiting";
 			waitStart     = msg.waitStart ?? Date.now();
 			waitMs        = msg.waitMs ?? 10_000;
 			currentRoundId = msg.roundId;
-			myBetActive   = false;
-			cashedOutAt   = null;
+			if (newRound)
+			{
+				myBetActive = false;
+				cashedOutAt = null;
+			}
 			history       = msg.history ?? history;
 
 			multEl.textContent = "1.00×";
