@@ -110,7 +110,12 @@ export const auth = new Elysia({ prefix: "/api/auth" })
 					redirect_uri: FT_REDIRECT_URI,
 				}),
 			});
-			if (!tokenRes.ok) return redirect(`${FRONTEND_ORIGIN}/?error=token_exchange`);
+			if (!tokenRes.ok)
+			{
+				const errBody = await tokenRes.text().catch(() => "");
+				console.error(`[oauth] token_exchange failed status=${tokenRes.status} body=${errBody} redirect_uri=${FT_REDIRECT_URI}`);
+				return redirect(`${FRONTEND_ORIGIN}/?error=token_exchange`);
+			}
 			const token = (await tokenRes.json()) as { access_token?: string };
 			if (!token.access_token) return redirect(`${FRONTEND_ORIGIN}/?error=no_token`);
 
