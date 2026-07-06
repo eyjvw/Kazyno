@@ -85,11 +85,27 @@ export const auth = new Elysia({ prefix: "/api/auth" })
 	// ── 42 OAuth: step 2, callback ───────────────────────────────────────────
 	.get(
 		"/callback",
-		async ({ headers, set, query, jwt, redirect, cookie: { session, oauth_state } }) =>
+		async ({ headers, set, query, jwt, redirect, cookie: { session, oauth_state, oauth_retry } }) =>
 		{
 			const ip = headers["x-real-ip"] ?? "unknown";
 			const limited = rl(`auth:${ip}`, BUCKETS.auth, set);
 			if (limited) return limited;
+
+			// A single-use authorization code can be consumed before the user's
+			// browser reaches us (link-preview bots, browser prefetch, antivirus
+			// proxies) or simply expire. Instead of dumping the user on an error
+			// page, restart the OAuth flow once — a fresh code recovers silently.
+			// The oauth_retry cookie survives the round-trip to 42 and blocks loops.
+			const restartOrFail = (reason: string) =>
+			{
+				if (oauth_retry.value === "1")
+				{
+					oauth_retry.remove();
+					return redirect(`${FRONTEND_ORIGIN}/?error=${reason}`);
+				}
+				oauth_retry.set({ value: "1", httpOnly: true, path: "/", maxAge: 600, sameSite: "lax" });
+				return redirect(`${FRONTEND_ORIGIN}/api/auth/42`);
+			};
 			const code = query.code as string | undefined;
 			const state = query.state as string | undefined;
 			if (!code) return redirect(`${FRONTEND_ORIGIN}/?error=missing_code`);
@@ -114,10 +130,10 @@ export const auth = new Elysia({ prefix: "/api/auth" })
 			{
 				const errBody = await tokenRes.text().catch(() => "");
 				console.error(`[oauth] token_exchange failed status=${tokenRes.status} body=${errBody} redirect_uri=${FT_REDIRECT_URI}`);
-				return redirect(`${FRONTEND_ORIGIN}/?error=token_exchange`);
+				return restartOrFail("token_exchange");
 			}
 			const token = (await tokenRes.json()) as { access_token?: string };
-			if (!token.access_token) return redirect(`${FRONTEND_ORIGIN}/?error=no_token`);
+			if (!token.access_token) return restartOrFail("no_token");
 
 			const meRes = await fetch(FT_ME, {
 				headers: { Authorization: `Bearer ${token.access_token}` },
@@ -182,6 +198,7 @@ export const auth = new Elysia({ prefix: "/api/auth" })
 			// TEMPORAIRE — gains chasse au trésor stockés avant le 1er login.
 			void redeemPendingTreasure(userId, me.login);
 
+			oauth_retry.remove();
 			issueSession(session, await jwt.sign({ sub: String(userId) }));
 			// First visit: onboarding page instead of the lobby.
 			return redirect(`${FRONTEND_ORIGIN}${rows[0].welcomed ? "/app" : "/welcome"}`);
