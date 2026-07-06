@@ -2,7 +2,13 @@ const fmt = (n: number) => n.toLocaleString("fr-FR");
 
 export class GameSession
 {
+	// Only the last 30 rounds are kept for the recent-chips strip, but the
+	// session stats (parties / victoires / profit) count every game played —
+	// sinon le compteur "Parties" gèle à 30.
 	private results: { win: boolean; bet: number; payout: number }[] = [];
+	private totalGames  = 0;
+	private totalWins   = 0;
+	private totalProfit = 0;
 	private histEl: HTMLElement | null;
 	private statsEl: HTMLElement | null;
 
@@ -17,6 +23,9 @@ export class GameSession
 	{
 		this.results.unshift({ win, bet, payout });
 		if (this.results.length > 30) this.results.pop();
+		this.totalGames++;
+		if (win) this.totalWins++;
+		this.totalProfit += win ? payout - bet : -bet;
 		this.render();
 	}
 
@@ -36,9 +45,9 @@ export class GameSession
 
 		if (statsEl)
 		{
-			const n      = results.length;
-			const wins   = results.filter(r => r.win).length;
-			const profit = results.reduce((s, r) => s + (r.win ? r.payout - r.bet : -r.bet), 0);
+			const n      = this.totalGames;
+			const wins   = this.totalWins;
+			const profit = this.totalProfit;
 			const wr     = n ? Math.round(wins / n * 100) : 0;
 			statsEl.innerHTML = `
 				<div class="ss"><span>Parties</span><b>${n}</b></div>
