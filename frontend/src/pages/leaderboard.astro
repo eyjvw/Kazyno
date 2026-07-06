@@ -48,6 +48,12 @@ import Footer from "../components/Footer.astro";
     </section>
 
     <section data-pane-games hidden>
+      <div class="podium" data-game-podium hidden>
+        <div class="step s2" data-game-podium-2></div>
+        <div class="step s1" data-game-podium-1></div>
+        <div class="step s3" data-game-podium-3></div>
+      </div>
+
       <ol class="list game-list" data-game-list>
         <li class="empty">Chargement…</li>
       </ol>
@@ -84,6 +90,7 @@ import Footer from "../components/Footer.astro";
 	const paneGames = $("[data-pane-games]");
 	const gameSelect = $<HTMLSelectElement>("[data-game-select]");
 	const gameList = $("[data-game-list]");
+	const gamePodium = $("[data-game-podium]");
 
 	let me: Me | null = null;
 	let offset = 0;
@@ -281,8 +288,52 @@ import Footer from "../components/Footer.astro";
 
 	gameSelect.innerHTML = GAMES.map(g => `<option value="${g.id}">${g.label}</option>`).join("");
 
+	function gameSub(r: GameLeaderRow)
+	{
+		return `@${r.login} · ${r.games_played} partie${r.games_played > 1 ? "s" : ""}`;
+	}
+
+	function gameProfit(r: GameLeaderRow)
+	{
+		return r.profit >= 0
+			? `<span class="pos">+${fmt(r.profit)}</span>`
+			: `<span class="neg">${fmt(r.profit)}</span>`;
+	}
+
+	function gamePodiumSlot(r: GameLeaderRow | undefined, rank: number): string
+	{
+		if (!r) return "";
+		const name = r.display_name || r.login;
+		const nc = (r as any).name_color;
+		const color = GRADS.includes(nc) ? ` class="grad-${nc}"` : nc ? ` style="color:${nc}"` : "";
+		return `
+			<a class="pod-user" href="/profile?u=${r.login}">
+				<span class="pod-medal pm${rank}">${rank}</span>
+				${avatarHtml(r, rank === 1 ? 72 : 56, "pod-av" + (rank === 1 ? " big" : ""))}
+				<b${color}>${name}</b>
+				<small>${gameSub(r)}</small>
+				<span class="pod-pts">${gameProfit(r)} pts</span>
+			</a>`;
+	}
+
+	function gameRowHtml(r: GameLeaderRow)
+	{
+		const name = r.display_name || r.login;
+		const isMe = me && r.login === me.login;
+		const rankCls = r.rank <= 3 ? `medal m${r.rank}` : "rank";
+		const nc = (r as any).name_color;
+		const color = GRADS.includes(nc) ? ` class="grad-${nc}"` : nc ? ` style="color:${nc}"` : "";
+		return `<li class="row${isMe ? " me" : ""}" data-login="${r.login}">
+			<span class="${rankCls}">${r.rank}</span>
+			${avatarHtml(r, 28)}
+			<a class="name" href="/profile?u=${r.login}"><span${color}>${name}</span><small>${gameSub(r)}</small></a>
+			<span class="pts">${gameProfit(r)} <em>pts</em></span>
+		</li>`;
+	}
+
 	async function loadGame(game: string)
 	{
+		gamePodium.hidden = true;
 		gameList.innerHTML = `<li class="empty">Chargement…</li>`;
 		const rows = await getGameLeaderboard(game);
 		if (!rows.length)
@@ -290,21 +341,16 @@ import Footer from "../components/Footer.astro";
 			gameList.innerHTML = `<li class="empty">Aucune donnée pour ce jeu — sois le premier à jouer !</li>`;
 			return;
 		}
-		gameList.innerHTML = rows.map((r: GameLeaderRow) =>
+
+		// Same clean layout as the global tab: top 3 on the podium, rest below.
+		gamePodium.hidden = false;
+		([1, 2, 3] as const).forEach((rank) =>
 		{
-			const name = r.display_name || r.login;
-			const isMe = me && r.login === me.login;
-			const rankCls = r.rank <= 3 ? `medal m${r.rank}` : "rank";
-			const profitStr = r.profit >= 0
-				? `<span class="pos">+${fmt(r.profit)}</span>`
-				: `<span class="neg">${fmt(r.profit)}</span>`;
-			return `<li class="row${isMe ? " me" : ""}" data-login="${r.login}">
-				<span class="${rankCls}">${r.rank}</span>
-				${avatarHtml(r, 28)}
-				<a class="name" href="/profile?u=${r.login}"><span>${name}</span><small>@${r.login} · ${r.games_played} partie${r.games_played > 1 ? "s" : ""}</small></a>
-				<span class="pts">${profitStr} <em>pts</em></span>
-			</li>`;
-		}).join("");
+			const slot = $(`[data-game-podium-${rank}]`);
+			slot.innerHTML = gamePodiumSlot(rows[rank - 1], rank);
+			slot.classList.toggle("hidden-step", !rows[rank - 1]);
+		});
+		gameList.innerHTML = rows.slice(3).map(gameRowHtml).join("");
 	}
 
 	gameSelect.addEventListener("change", () => void loadGame(gameSelect.value));
