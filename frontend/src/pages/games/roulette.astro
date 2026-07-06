@@ -170,9 +170,10 @@ import GameRules from "../../components/GameRules.astro";
 	function spinTo(targetIdx: number, durationMs: number, onDone: () => void)
 	{
 		const segAngle   = (targetIdx / 37) * Math.PI * 2;
-		// We want segAngle to point to top (which is -π/2 before rotation)
-		// targetAngle makes segment land under pointer
-		const targetAngle = -segAngle - Math.PI / 2 + SEG / 2;
+		// Case targetIdx dessinée entre segAngle-π/2 et segAngle+SEG-π/2 → centre
+		// à segAngle + SEG/2 - π/2. Pour l'amener sous le pointeur (haut = -π/2),
+		// il faut rotation = -segAngle - SEG/2.
+		const targetAngle = -segAngle - SEG / 2;
 		const spins = 5 * Math.PI * 2;
 		const start = wheelAngle;
 		const delta = spins + ((targetAngle - (start % (Math.PI * 2)) + Math.PI * 4) % (Math.PI * 2));
