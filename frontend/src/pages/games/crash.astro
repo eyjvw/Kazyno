@@ -412,7 +412,7 @@ import GameRules from "../../components/GameRules.astro";
 	window.addEventListener("resize", () => { resizeCanvas(); drawGraph(); });
 	resizeCanvas();
 
-	loadMe().then(async () =>
+	loadMe().then(async (me) =>
 	{
 		connectRealtime();
 		subscribeCrash();
@@ -421,6 +421,17 @@ import GameRules from "../../components/GameRules.astro";
 		const state = await fetch("/api/crash/state").then(r => r.json()).catch(() => null);
 		if (state)
 		{
+			// Restore my own bet from the running/waiting round so the cashout
+			// button survives a refresh (state.bets is the current round).
+			const mine = me
+				? (state.bets ?? []).find((b: { login: string }) => b.login === me.login)
+				: null;
+			if (mine)
+			{
+				myBetActive = true;
+				myBetAmount = mine.amount;
+				cashedOutAt = mine.cashedOut;
+			}
 			history   = state.history ?? [];
 			waitStart = state.waitStart ?? Date.now();
 			waitMs    = state.waitMs ?? 10_000;
