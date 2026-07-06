@@ -128,6 +128,22 @@ export const social = new Elysia({ prefix: "/api" })
 		return { rank: rows[0]?.rank ?? null };
 	})
 
+	// Current user's rank + profit for a single game (null if never played).
+	.get("/leaderboard/game/:game/me", async ({ userId, params }) =>
+	{
+		const rows = (await sql`
+			SELECT rank, profit, games_played FROM (
+				SELECT user_id,
+					(total_payout - total_wagered)::bigint AS profit,
+					games_played,
+					ROW_NUMBER() OVER (ORDER BY (total_payout - total_wagered) DESC) AS rank
+				FROM game_stats WHERE game = ${params.game}
+			) t WHERE user_id = ${userId}
+		`) as Array<{ rank: number; profit: number; games_played: number }>;
+		const r = rows[0];
+		return { rank: r?.rank ?? null, profit: r?.profit ?? null, games_played: r?.games_played ?? null };
+	})
+
 	// Search players by login / display name, annotated with relation status.
 	.get("/users/search", async ({ userId, query }) =>
 	{

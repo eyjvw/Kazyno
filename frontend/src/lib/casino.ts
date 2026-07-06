@@ -844,6 +844,18 @@ export async function getMyRank(): Promise<number | null>
 	}
 }
 
+export async function getMyGameRank(game: string): Promise<{ rank: number | null; profit: number | null; games_played: number | null }>
+{
+	try
+	{
+		const res = await fetch(`/api/leaderboard/game/${game}/me`);
+		if (!res.ok) return { rank: null, profit: null, games_played: null };
+		return await res.json();
+	} catch {
+		return { rank: null, profit: null, games_played: null };
+	}
+}
+
 export async function getStats(): Promise<{ players: number; total_points: number }> {
 	try
 	{

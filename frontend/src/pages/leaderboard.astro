@@ -67,6 +67,7 @@ import Footer from "../components/Footer.astro";
 		getLeaderboardPage,
 		getGameLeaderboard,
 		getMyRank,
+		getMyGameRank,
 		loadMe,
 		fmt,
 		getBalance,
@@ -96,6 +97,7 @@ import Footer from "../components/Footer.astro";
 	let offset = 0;
 	let q = "";
 	let total = 0;
+	let activeTab: "global" | "games" = "global";
 
 	const initial = (n: string) => n.charAt(0).toUpperCase();
 	const GRADS = ["rainbow", "fire", "ocean", "galaxy", "toxic"];
@@ -110,9 +112,27 @@ import Footer from "../components/Footer.astro";
 	// ── Pinned "my position" line ─────────────────────────────────────────────
 	async function renderMeline()
 	{
-		if (!me) return;
+		if (!me) { meline.hidden = true; return; }
+
+		if (activeTab === "games")
+		{
+			const g = await getMyGameRank(gameSelect.value);
+			if (g.rank == null) { meline.hidden = true; return; }
+			const profit = g.profit ?? 0;
+			const profitStr = profit >= 0
+				? `<span class="pos">+${fmt(profit)}</span>`
+				: `<span class="neg">${fmt(profit)}</span>`;
+			meline.innerHTML = `
+				<span class="ml-rank">#${g.rank}</span>
+				${avatarHtml(me, 28)}
+				<span class="ml-name">Ta position</span>
+				<span class="ml-pts">${profitStr} <em>pts</em></span>`;
+			meline.hidden = false;
+			return;
+		}
+
 		const rank = await getMyRank();
-		if (rank == null) return;
+		if (rank == null) { meline.hidden = true; return; }
 		meline.innerHTML = `
 			<span class="ml-rank">#${rank}</span>
 			${avatarHtml(me, 28)}
@@ -353,7 +373,11 @@ import Footer from "../components/Footer.astro";
 		gameList.innerHTML = rows.slice(3).map(gameRowHtml).join("");
 	}
 
-	gameSelect.addEventListener("change", () => void loadGame(gameSelect.value));
+	gameSelect.addEventListener("change", () =>
+	{
+		void loadGame(gameSelect.value);
+		void renderMeline();
+	});
 
 	// ── Tab switching ─────────────────────────────────────────────────────────
 	document.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((tab) =>
@@ -361,6 +385,7 @@ import Footer from "../components/Footer.astro";
 		tab.addEventListener("click", () =>
 		{
 			const isGames = tab.dataset.tab === "games";
+			activeTab = isGames ? "games" : "global";
 			document.querySelectorAll("[data-tab]").forEach((t) =>
 				t.classList.toggle("is-active", t === tab));
 			paneGlobal.hidden = isGames;
@@ -368,6 +393,7 @@ import Footer from "../components/Footer.astro";
 			search.hidden = isGames;
 			gameSelect.hidden = !isGames;
 			if (isGames) void loadGame(gameSelect.value);
+			void renderMeline();
 		});
 	});
 </script>
