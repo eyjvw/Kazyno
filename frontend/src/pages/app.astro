@@ -59,12 +59,6 @@ const games = [
       </div>
     </section>
 
-    <!-- Weekly challenges widget -->
-    <section class="challenges-section" data-challenges-section hidden>
-      <h2 class="section-title">Défis de la semaine</h2>
-      <div class="challenges-grid" data-challenges-grid></div>
-    </section>
-
     <h2 class="section-title">Jeux</h2>
     <section class="grid">
       {
@@ -208,7 +202,7 @@ const games = [
 </Layout>
 
 <script>
-	import { loadMe, getMyRank, onBalance, fmt, getDailyStatus, claimDaily, askDailyPopup, ackCoreReward, ackPiscineReward, getMyChallenges, onChallengeComplete, bjCreateRoom, bjListRooms, bjJoin, bjJoinByCode, bjStart, pokerCreateRoom, pokerListRooms, pokerJoin, pokerJoinByCode,getJackpot, onJackpot, getFeed, onFeed, type FeedItem } from "../lib/casino";
+	import { loadMe, getMyRank, onBalance, fmt, getDailyStatus, claimDaily, askDailyPopup, ackCoreReward, ackPiscineReward, bjCreateRoom, bjListRooms, bjJoin, bjJoinByCode, bjStart, pokerCreateRoom, pokerListRooms, pokerJoin, pokerJoinByCode,getJackpot, onJackpot, getFeed, onFeed, type FeedItem } from "../lib/casino";
 
 	const helloEl = document.querySelector<HTMLElement>("[data-hello]")!;
 	const balEl = document.querySelector<HTMLElement>("[data-hero-balance]")!;
@@ -259,9 +253,6 @@ const games = [
 		const rank = await getMyRank();
 		rankEl.textContent = rank ? `#${rank}` : "—";
 
-		// Weekly challenges
-		loadChallenges();
-
 		// Popup queue: daily first (if unclaimed), core-done celebration after.
 		// Each one pops ONCE across all devices: daily via the server-side
 		// popup slot, core acked server-side as soon as it is displayed.
@@ -272,30 +263,6 @@ const games = [
 		else maybeShowCore();
 	});
 
-	// ── Weekly challenges ─────────────────────────────────────────────────────
-	const challengesSection = document.querySelector<HTMLElement>("[data-challenges-section]")!;
-	const challengesGrid    = document.querySelector<HTMLElement>("[data-challenges-grid]")!;
-
-	async function loadChallenges()
-	{
-		const list = await getMyChallenges();
-		if (!list.length) return;
-		challengesSection.hidden = false;
-		challengesGrid.innerHTML = list.map((c: any) => `
-			<div class="chal-card ${c.completed ? "done" : ""}">
-				<span class="chal-ico">${c.icon}</span>
-				<div class="chal-meta">
-					<b>${c.desc}</b>
-					<div class="chal-bar-wrap">
-						<div class="chal-bar" style="width:${Math.min(100, Math.round(c.progress / c.target * 100))}%"></div>
-					</div>
-					<small>${c.progress}/${c.target} · +${fmt(c.reward)} pts</small>
-				</div>
-				${c.completed ? '<span class="chal-done">✓</span>' : ""}
-			</div>`).join("");
-	}
-
-	onChallengeComplete(() => loadChallenges());
 
 	// ── Daily modal ───────────────────────────────────────────────────────────
 	const dailyModal    = document.querySelector<HTMLElement>("[data-daily-modal]")!;
@@ -903,63 +870,6 @@ const games = [
     font-weight: 800;
     border-radius: 5px;
     padding: 1px 6px;
-  }
-
-  /* ── Weekly challenges ── */
-  .challenges-section {
-    margin-bottom: 8px;
-  }
-
-  .challenges-grid {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 12px;
-  }
-  .challenges-grid > :global(*) {
-    flex: 1 1 240px;
-  }
-
-  :global(.chal-card) {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 16px;
-    transition: border-color 0.15s;
-  }
-  :global(.chal-card.done) {
-    border-color: #22c55e;
-    background: rgba(34,197,94,0.06);
-  }
-  :global(.chal-ico) { font-size: 26px; flex: none; }
-  :global(.chal-meta) {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-  }
-  :global(.chal-meta b) { font-size: 13px; line-height: 1.3; }
-  :global(.chal-meta small) { color: var(--muted); font-size: 11px; }
-  :global(.chal-bar-wrap) {
-    height: 4px;
-    background: var(--raise);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-  :global(.chal-bar) {
-    height: 100%;
-    background: var(--accent);
-    border-radius: 2px;
-    transition: width 0.4s ease;
-  }
-  :global(.chal-card.done .chal-bar) { background: #22c55e; }
-  :global(.chal-done) {
-    font-size: 18px;
-    color: #22c55e;
-    font-weight: 800;
   }
 
   /* ── HOT badge ── */
