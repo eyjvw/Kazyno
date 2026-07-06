@@ -1013,6 +1013,27 @@ export async function roulettePlay(bet_type: RouletteBetType, bet: number, numbe
 	return d as { result: number; win: boolean; multiplier: number; payout: number; balance: number };
 }
 
+export interface RouletteBetInput { bet_type: RouletteBetType; stake: number; number?: number }
+export interface RouletteBetResult extends RouletteBetInput { mult: number; payout: number; win: boolean }
+
+export async function rouletteMultiPlay(bets: RouletteBetInput[])
+{
+	const r = await fetch("/api/games/roulette/multi",
+	{
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ bets }),
+	});
+	const d = await r.json().catch(() => ({}));
+	if (!r.ok) throw new BetError(d?.error ?? "Erreur");
+	setBalance(d.balance);
+	return d as {
+		result: number; nonce: number;
+		totalStake: number; totalPayout: number; balance: number;
+		bets: RouletteBetResult[];
+	};
+}
+
 // ── Achievements ─────────────────────────────────────────────────────────────
 type AchievementListener = (a: any) => void;
 const achievementListeners = new Set<AchievementListener>();

@@ -39,6 +39,39 @@ async function settle(userId: number, bet: number, payout: number, game?: string
 
 const betField = t.Integer({ minimum: 1, maximum: MAX_BET });
 
+const ROULETTE_REDS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+
+// Multiplicateur (mise incluse, edge appliqué) d'un pari roulette pour un tirage.
+function rouletteMult(betType: string, number: number | undefined, result: number): number
+{
+	const R = ROULETTE_REDS;
+	switch (betType)
+	{
+		case "number": return number === result ? 36 * EDGE : 0; // 35:1 + mise
+		case "red":    return R.has(result) ? 2 * EDGE : 0;
+		case "black":  return !R.has(result) && result !== 0 ? 2 * EDGE : 0;
+		case "even":   return result !== 0 && result % 2 === 0 ? 2 * EDGE : 0;
+		case "odd":    return result % 2 === 1 ? 2 * EDGE : 0;
+		case "low":    return result >= 1 && result <= 18 ? 2 * EDGE : 0;
+		case "high":   return result >= 19 && result <= 36 ? 2 * EDGE : 0;
+		case "dozen1": return result >= 1 && result <= 12 ? 3 * EDGE : 0;
+		case "dozen2": return result >= 13 && result <= 24 ? 3 * EDGE : 0;
+		case "dozen3": return result >= 25 && result <= 36 ? 3 * EDGE : 0;
+		case "col1":   return result !== 0 && result % 3 === 1 ? 3 * EDGE : 0;
+		case "col2":   return result !== 0 && result % 3 === 2 ? 3 * EDGE : 0;
+		case "col3":   return result !== 0 && result % 3 === 0 ? 3 * EDGE : 0;
+		default:       return 0;
+	}
+}
+
+const rouletteBetTypeSchema = t.Union([
+	t.Literal("number"), t.Literal("red"),   t.Literal("black"),
+	t.Literal("even"),   t.Literal("odd"),   t.Literal("low"),
+	t.Literal("high"),   t.Literal("dozen1"), t.Literal("dozen2"),
+	t.Literal("dozen3"), t.Literal("col1"),  t.Literal("col2"),
+	t.Literal("col3"),
+]);
+
 // ── Wheel ── 50 segments, layout partagé avec le front (index = segment) ──────
 // 0×24, 1.5×16, 2×7, 3×2, 5.5×1 → RTP 49.5/50 = 99 %
 const WHEEL_ODD = [1.5,2,1.5,2,1.5,3,1.5,2,1.5,1.5,2,1.5,5.5,1.5,2,1.5,1.5,2,1.5,3,1.5,2,1.5,1.5,1.5];
@@ -285,34 +318,15 @@ export const games = new Elysia({ prefix: "/api/games" })
 		"/roulette",
 		async ({ body, userId, set }) =>
 		{
-			const REDS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
 			const { values, nonce } = await fairRoll(userId!);
-				const result = Math.floor(values[0] * 37); // 0-36
+			const result = Math.floor(values[0] * 37); // 0-36
 			const { bet_type, number, bet } = body;
 			if (bet_type === "number" && number === undefined)
 			{
 				set.status = 422;
 				return { error: "numéro requis" };
 			}
-			let mult = 0;
-
-			switch (bet_type)
-			{
-				// Plein paye 35:1 + mise = retour total 36x
-				case "number":  if (number === result) mult = 36 * EDGE; break;
-				case "red":     if (REDS.has(result)) mult = 2 * EDGE; break;
-				case "black":   if (!REDS.has(result) && result !== 0) mult = 2 * EDGE; break;
-				case "even":    if (result !== 0 && result % 2 === 0) mult = 2 * EDGE; break;
-				case "odd":     if (result % 2 === 1) mult = 2 * EDGE; break;
-				case "low":     if (result >= 1 && result <= 18) mult = 2 * EDGE; break;
-				case "high":    if (result >= 19 && result <= 36) mult = 2 * EDGE; break;
-				case "dozen1":  if (result >= 1  && result <= 12) mult = 3 * EDGE; break;
-				case "dozen2":  if (result >= 13 && result <= 24) mult = 3 * EDGE; break;
-				case "dozen3":  if (result >= 25 && result <= 36) mult = 3 * EDGE; break;
-				case "col1":    if (result !== 0 && result % 3 === 1) mult = 3 * EDGE; break;
-				case "col2":    if (result !== 0 && result % 3 === 2) mult = 3 * EDGE; break;
-				case "col3":    if (result !== 0 && result % 3 === 0) mult = 3 * EDGE; break;
-			}
+			const mult = rouletteMult(bet_type, number, result);
 
 			const win    = mult > 0;
 			const payout = win ? Math.floor(bet * mult) : 0;
@@ -329,16 +343,61 @@ export const games = new Elysia({ prefix: "/api/games" })
 		{
 			body: t.Object({
 				bet:      betField,
-				bet_type: t.Union([
-					t.Literal("number"), t.Literal("red"),   t.Literal("black"),
-					t.Literal("even"),   t.Literal("odd"),   t.Literal("low"),
-					t.Literal("high"),   t.Literal("dozen1"), t.Literal("dozen2"),
-					t.Literal("dozen3"), t.Literal("col1"),  t.Literal("col2"),
-					t.Literal("col3"),
-				]),
+				bet_type: rouletteBetTypeSchema,
 				number: t.Optional(t.Integer({ minimum: 0, maximum: 36 })),
 			}),
 		},
+	)
+
+	// ── Roulette multi-paris ── plusieurs jetons, 1 seul tirage ───────────────
+	.post(
+		"/roulette/multi",
+		async ({ body, userId, set }) =>
+		{
+			const { values, nonce } = await fairRoll(userId!);
+			const result = Math.floor(values[0] * 37); // 0-36
+
+			let totalStake = 0;
+			let totalPayout = 0;
+			const bets: Array<{ bet_type: string; number?: number; stake: number; mult: number; payout: number; win: boolean }> = [];
+			for (const b of body.bets)
+			{
+				if (b.bet_type === "number" && b.number === undefined)
+				{
+					set.status = 422;
+					return { error: "numéro requis pour un pari plein" };
+				}
+				const mult   = rouletteMult(b.bet_type, b.number, result);
+				const payout = mult > 0 ? Math.floor(b.stake * mult) : 0;
+				totalStake  += b.stake;
+				totalPayout += payout;
+				bets.push({ bet_type: b.bet_type, number: b.number, stake: b.stake, mult, payout, win: payout > 0 });
+			}
+
+			// Débit + crédit atomique sur le total (un seul settle = un seul roll).
+			const balance = await settle(userId!, totalStake, totalPayout, "roulette");
+			const win = totalPayout > 0;
+
+			void checkAchievements(userId!, { win, payout: totalPayout, bet: totalStake, mult: win ? totalPayout / totalStake : 0, game: "roulette" });
+			void updateChallengeProgress(userId!, "play_5_games");
+			if (win) void updateChallengeProgress(userId!, "win_5_games");
+			if (win && totalPayout >= 500) void updateChallengeProgress(userId!, "big_win_500");
+			if (totalPayout - totalStake >= 1000) void updateChallengeProgress(userId!, "win_1000_pts");
+
+			return { result, nonce, totalStake, totalPayout, balance, bets };
+		},
+		{
+			body: t.Object({
+				bets: t.Array(
+					t.Object({
+						bet_type: rouletteBetTypeSchema,
+						number:   t.Optional(t.Integer({ minimum: 0, maximum: 36 })),
+						stake:    betField,
+					}),
+					{ minItems: 1, maxItems: 15 },
+				),
+			}),
+		}
 	)
 
 	// ── Keno ── 40 numéros, 10 tirés, choisis 1-10 ────────────────────────────

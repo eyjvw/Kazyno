@@ -27,7 +27,7 @@ import GameRules from "../../components/GameRules.astro";
       <div class="field">
         <label>Type de pari</label>
         <div class="bet-types">
-          <button class="bt active" data-bt="red"   data-odds="2×">Rouge</button>
+          <button class="bt" data-bt="red"   data-odds="2×">Rouge</button>
           <button class="bt"        data-bt="black"  data-odds="2×">Noir</button>
           <button class="bt green"  data-bt="number" data-num="0" data-odds="35×">0</button>
         </div>
@@ -50,16 +50,23 @@ import GameRules from "../../components/GameRules.astro";
       </div>
 
       <div class="field">
-        <label>Numéro direct <small>(optionnel — 35×)</small></label>
+        <label>Numéros pleins <small>(35×)</small></label>
         <div class="num-grid" data-num-grid></div>
       </div>
 
-      <div class="odds-row">
-        <span class="odds-lbl">Cote</span>
-        <span class="odds-val" data-odds-val>2×</span>
+      <div class="field">
+        <label>Paris placés</label>
+        <div class="placed" data-placed></div>
+        <div class="total-row">
+          <span>Total misé</span>
+          <span class="total-val" data-total>0</span>
+        </div>
       </div>
 
-      <button class="btn spin-btn" data-spin>Tourner</button>
+      <div class="spin-actions">
+        <button class="btn spin-btn" data-spin disabled>Tourner</button>
+        <button class="ghost-btn" data-clear>Effacer</button>
+      </div>
       <p class="result" data-result></p>
 
       <div class="history" data-history></div>
@@ -81,7 +88,7 @@ import GameRules from "../../components/GameRules.astro";
 </Layout>
 
 <script>
-	import { loadMe, setupAmount, fmt, getBalance, roulettePlay, type RouletteBetType } from "../../lib/casino";
+	import { loadMe, setupAmount, fmt, getBalance, rouletteMultiPlay, type RouletteBetType } from "../../lib/casino";
 	import { GameSession } from "../../lib/session";
 
 	// ── Wheel constants ──────────────────────────────────────────────────────
@@ -193,12 +200,14 @@ import GameRules from "../../components/GameRules.astro";
 		requestAnimationFrame(frame);
 	}
 
-	// ── Bet type state ────────────────────────────────────────────────────────
+	// ── Bets state ────────────────────────────────────────────────────────────
 	const betInput  = document.querySelector<HTMLInputElement>("[data-bet]")!;
 	const spinBtn   = document.querySelector<HTMLButtonElement>("[data-spin]")!;
+	const clearBtn  = document.querySelector<HTMLButtonElement>("[data-clear]")!;
 	const resultEl  = document.querySelector<HTMLElement>("[data-result]")!;
-	const oddsVal   = document.querySelector<HTMLElement>("[data-odds-val]")!;
 	const historyEl = document.querySelector<HTMLElement>("[data-history]")!;
+	const placedEl  = document.querySelector<HTMLElement>("[data-placed]")!;
+	const totalEl   = document.querySelector<HTMLElement>("[data-total]")!;
 	const resultBig = document.querySelector<HTMLElement>("[data-result-big]")!;
 	const rbNum     = document.querySelector<HTMLElement>("[data-rb-num]")!;
 	const rbColor   = document.querySelector<HTMLElement>("[data-rb-color]")!;
@@ -206,30 +215,81 @@ import GameRules from "../../components/GameRules.astro";
 
 	setupAmount(betInput);
 
-	let betType: RouletteBetType = "red";
-	let directNumber: number | undefined = undefined;
+	type Bet = { bet_type: RouletteBetType; number?: number; stake: number };
+	const bets = new Map<string, Bet>();
 
-	// Bet type buttons
+	const LABELS: Record<string, string> = {
+		red: "Rouge", black: "Noir", even: "Pair", odd: "Impair",
+		low: "1–18", high: "19–36", dozen1: "1–12", dozen2: "13–24",
+		dozen3: "25–36", col1: "Col. 1", col2: "Col. 2", col3: "Col. 3",
+	};
+	const keyFor = (bt: RouletteBetType, num?: number) => bt === "number" ? `number:${num}` : bt;
+	const betLabel = (b: Bet) => b.bet_type === "number" ? `Plein ${b.number}` : LABELS[b.bet_type];
+	const chipAmount = () => Math.max(1, Math.floor(Number(betInput.value) || 0));
+	const totalStaked = () => { let s = 0; bets.forEach(b => s += b.stake); return s; };
+
+	function addBet(bt: RouletteBetType, num?: number)
+	{
+		if (spinning) return;
+		const k = keyFor(bt, num);
+		const cur = bets.get(k);
+		if (cur) cur.stake += chipAmount();
+		else bets.set(k, { bet_type: bt, number: num, stake: chipAmount() });
+		render();
+	}
+
+	function chipBadge(btn: HTMLElement, b: Bet | undefined)
+	{
+		btn.classList.toggle("has-chip", !!b);
+		let badge = btn.querySelector<HTMLElement>(".chip-badge");
+		if (b)
+		{
+			if (!badge) { badge = document.createElement("span"); badge.className = "chip-badge"; btn.appendChild(badge); }
+			badge.textContent = fmt(b.stake);
+		}
+		else if (badge) badge.remove();
+	}
+
+	function render()
+	{
+		document.querySelectorAll<HTMLElement>("[data-bt]").forEach(btn =>
+		{
+			const bt  = btn.dataset.bt as RouletteBetType;
+			const num = btn.dataset.num !== undefined ? Number(btn.dataset.num) : undefined;
+			chipBadge(btn, bets.get(keyFor(bt, num)));
+		});
+		document.querySelectorAll<HTMLElement>("[data-num-btn]").forEach(btn =>
+			chipBadge(btn, bets.get(`number:${btn.dataset.numBtn}`)));
+
+		const entries = [...bets.entries()];
+		placedEl.innerHTML = entries.length
+			? entries.map(([k, b]) =>
+				`<div class="pbet"><span>${betLabel(b)}</span><b>${fmt(b.stake)}</b><button class="pbet-x" data-remove="${k}" aria-label="Retirer">✕</button></div>`).join("")
+			: `<div class="pempty">Clique un pari pour poser un jeton.</div>`;
+
+		totalEl.textContent = fmt(totalStaked());
+		spinBtn.disabled = spinning || bets.size === 0;
+	}
+
+	placedEl.addEventListener("click", (e) =>
+	{
+		if (spinning) return;
+		const k = (e.target as HTMLElement).dataset.remove;
+		if (k) { bets.delete(k); render(); }
+	});
+
+	// Bet type buttons → add a chip.
 	document.querySelectorAll<HTMLElement>("[data-bt]").forEach(btn =>
 	{
 		btn.addEventListener("click", () =>
 		{
-			document.querySelectorAll("[data-bt]").forEach(b => b.classList.remove("active"));
-			btn.classList.add("active");
-			betType       = btn.dataset.bt as RouletteBetType;
-			directNumber  = undefined;
-			oddsVal.textContent = btn.dataset.odds ?? "2×";
-
-			if (betType === "number" && btn.dataset.num !== undefined)
-				directNumber = Number(btn.dataset.num);
-
-			// Clear num grid selection unless it's a number bet from grid
-			if (betType !== "number")
-				document.querySelectorAll("[data-num-btn]").forEach(b => b.classList.remove("active"));
+			const bt  = btn.dataset.bt as RouletteBetType;
+			const num = btn.dataset.num !== undefined ? Number(btn.dataset.num) : undefined;
+			addBet(bt, num);
 		});
 	});
 
-	// Number grid
+	// Number grid → add a plein chip.
 	const numGrid = document.querySelector<HTMLElement>("[data-num-grid]")!;
 	for (let n = 0; n <= 36; n++)
 	{
@@ -237,17 +297,16 @@ import GameRules from "../../components/GameRules.astro";
 		b.className = `nb ${REDS.has(n) ? "r" : n === 0 ? "g" : "k"}`;
 		b.textContent = String(n);
 		b.dataset.numBtn = String(n);
-		b.addEventListener("click", () =>
-		{
-			document.querySelectorAll("[data-bt]").forEach(b => b.classList.remove("active"));
-			document.querySelectorAll("[data-num-btn]").forEach(b => b.classList.remove("active"));
-			b.classList.add("active");
-			betType      = "number";
-			directNumber = n;
-			oddsVal.textContent = "35×";
-		});
+		b.addEventListener("click", () => addBet("number", n));
 		numGrid.appendChild(b);
 	}
+
+	clearBtn.addEventListener("click", () =>
+	{
+		if (spinning) return;
+		bets.clear();
+		render();
+	});
 
 	// ── History ───────────────────────────────────────────────────────────────
 	const hist: number[] = [];
@@ -265,58 +324,58 @@ import GameRules from "../../components/GameRules.astro";
 	// ── Spin ─────────────────────────────────────────────────────────────────
 	spinBtn.addEventListener("click", async () =>
 	{
-		if (spinning) return;
-		const amount = Math.max(1, Math.floor(Number(betInput.value)));
+		if (spinning || bets.size === 0) return;
 		spinning = true;
 		spinBtn.disabled = true;
+		clearBtn.disabled = true;
 		resultEl.textContent = "";
 		resultEl.className = "result";
 		resultBig.hidden = true;
 
+		const payload = [...bets.values()].map(b =>
+			b.number !== undefined
+				? { bet_type: b.bet_type, stake: b.stake, number: b.number }
+				: { bet_type: b.bet_type, stake: b.stake });
+
 		try
 		{
-			const r = await roulettePlay(betType, amount, directNumber);
-			const { result, win, multiplier, payout } = r;
-
-			// Find result index in wheel
-			const idx = WHEEL_NUMS.indexOf(result);
+			const r = await rouletteMultiPlay(payload);
+			const idx = WHEEL_NUMS.indexOf(r.result);
 
 			spinTo(idx, 4200, () =>
 			{
 				spinning = false;
-				spinBtn.disabled = false;
+				clearBtn.disabled = false;
 
-				// Big result display
+				const result = r.result;
 				const col = result === 0 ? "vert" : REDS.has(result) ? "rouge" : "noir";
 				rbNum.textContent = String(result);
 				rbNum.className   = result === 0 ? "rn green" : REDS.has(result) ? "rn red" : "rn black";
 				rbColor.textContent = col;
 				resultBig.hidden = false;
 
-				if (win)
-				{
-					resultEl.textContent = `+${fmt(payout)} pts (${multiplier.toFixed(2)}×)`;
-					resultEl.className   = "result win";
-				}
-				else
-				{
-					resultEl.textContent = `−${fmt(amount)} pts`;
-					resultEl.className   = "result lose";
-				}
+				const net = r.totalPayout - r.totalStake;
+				resultEl.textContent = net >= 0
+					? `+${fmt(net)} pts net · ${fmt(r.totalPayout)} gagné`
+					: `${fmt(net)} pts`;
+				resultEl.className = net >= 0 ? "result win" : "result lose";
 
 				pushHist(result);
-				session.record(win, amount, payout);
+				session.record(r.totalPayout > 0, r.totalStake, r.totalPayout);
+				render(); // bets kept → re-enable spin for a quick re-bet
 			});
 		}
 		catch (e: any)
 		{
 			spinning = false;
-			spinBtn.disabled = false;
+			clearBtn.disabled = false;
 			resultEl.textContent = e.message ?? "Erreur";
 			resultEl.className   = "result lose";
+			render();
 		}
 	});
 
+	render();
 	loadMe();
 </script>
 
@@ -382,6 +441,7 @@ import GameRules from "../../components/GameRules.astro";
   }
 
   .bt {
+    position: relative;
     flex: 1;
     padding: 8px 4px;
     border-radius: 7px;
@@ -420,6 +480,7 @@ import GameRules from "../../components/GameRules.astro";
   }
 
   :global(.nb) {
+    position: relative;
     aspect-ratio: 1;
     border-radius: 5px;
     border: 1px solid transparent;
@@ -477,4 +538,37 @@ import GameRules from "../../components/GameRules.astro";
   :global(.hc.red)   { background: #dc2626; }
   :global(.hc.black) { background: #1e1e2e; border: 1px solid #4b5563; }
   :global(.hc.green) { background: #16a34a; }
+
+  /* Multi-bet: chip badges + placed list */
+  .bt.has-chip { border-color: var(--accent); }
+  :global(.nb.has-chip) { border-color: var(--accent); transform: scale(1.08); }
+  :global(.chip-badge) {
+    position: absolute; top: -7px; right: -7px;
+    background: var(--accent); color: var(--accent-ink);
+    font-size: 10px; font-weight: 800; line-height: 1;
+    padding: 2px 5px; border-radius: 10px; min-width: 8px;
+    text-align: center; pointer-events: none;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  }
+  .placed { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+  :global(.pbet) {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--raise); border-radius: 8px; padding: 6px 10px; font-size: 13px;
+  }
+  :global(.pbet span) { flex: 1; color: var(--fg); }
+  :global(.pbet b) { color: var(--accent); font-variant-numeric: tabular-nums; }
+  :global(.pbet-x) {
+    background: none; border: none; color: var(--muted);
+    cursor: pointer; font-size: 12px; padding: 0 2px; font-family: inherit;
+  }
+  :global(.pbet-x:hover) { color: #ef4444; }
+  :global(.pempty) { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 0; }
+  .total-row {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line);
+    font-weight: 700; font-size: 14px;
+  }
+  .total-val { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .spin-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .spin-actions .spin-btn { flex: 1; margin-top: 0; width: auto; }
 </style>

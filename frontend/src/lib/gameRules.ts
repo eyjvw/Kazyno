@@ -97,6 +97,7 @@ export const gameRules: GameRule[] = [
 		tagline: "Roulette européenne, simple zéro.",
 		sections: [
 			{ heading: "Comment jouer", body: "Roue européenne 0–36. Mise sur un numéro plein, une couleur, pair/impair, haut/bas, une douzaine ou une colonne." },
+			{ heading: "Plusieurs paris", body: "Tu peux poser plusieurs jetons à la fois : clique un pari pour ajouter la mise courante dessus, cumulables. Tous les paris sont réglés sur le MÊME tirage. Le résultat affiché est ton gain net (gains − total misé)." },
 		],
 		table: {
 			headers: ["Mise", "Numéro plein", "Rouge/Noir · Pair/Impair · Manque/Passe", "Douzaine · Colonne"],
