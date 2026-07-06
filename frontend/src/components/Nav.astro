@@ -11,7 +11,14 @@
 
 <nav class="nav">
   <a class="brand" href="/app">Kazyno</a>
-  <div class="links">
+  <button class="burger" data-burger aria-label="Menu" aria-expanded="false">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </button>
+  <div class="links" data-links>
     <a href="/app" data-link="/app" data-i18n="nav.games">Jeux</a>
     <a href="/leaderboard" data-link="/leaderboard" data-i18n="nav.leaderboard">Classement</a>
     <a href="/paris" data-link="/paris" data-i18n="nav.bets">Paris</a>
@@ -422,6 +429,30 @@
 			.querySelectorAll<HTMLButtonElement>("[aria-expanded]")
 			.forEach((b) => b.setAttribute("aria-expanded", "false"));
 	}
+	// ── Mobile burger : ouvre/ferme le drawer des liens ───────────────────────
+	const burgerBtn = $<HTMLButtonElement>("[data-burger]");
+	const linksEl   = $("[data-links]");
+	burgerBtn?.addEventListener("click", (e) =>
+	{
+		e.stopPropagation();
+		const open = linksEl?.classList.toggle("open") ?? false;
+		burgerBtn.setAttribute("aria-expanded", open ? "true" : "false");
+	});
+	// Fermer au clic sur un lien ou en dehors
+	linksEl?.addEventListener("click", () =>
+	{
+		linksEl.classList.remove("open");
+		burgerBtn?.setAttribute("aria-expanded", "false");
+	});
+	document.addEventListener("click", (e) =>
+	{
+		if (linksEl && burgerBtn && !linksEl.contains(e.target as Node) && !burgerBtn.contains(e.target as Node))
+		{
+			linksEl.classList.remove("open");
+			burgerBtn.setAttribute("aria-expanded", "false");
+		}
+	});
+
 	wirePopover("[data-notif-pop]", "[data-notif-toggle]", "[data-notif-menu]");
 	wirePopover("[data-chal-pop]", "[data-chal-toggle]", "[data-chal-menu]");
 	wirePopover("[data-friends-pop]", "[data-friends-toggle]", "[data-friends-menu]");
@@ -505,6 +536,17 @@
   .links {
     display: flex;
     gap: 4px;
+  }
+  .burger {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--fg);
+    border-radius: 8px;
+    padding: 7px;
+    cursor: pointer;
   }
   .links a {
     color: var(--muted);
@@ -886,8 +928,47 @@
     background: rgba(237, 65, 99, 0.12);
   }
 
+  /* ── Mobile : liens en drawer sous la barre, ouvert par le burger ── */
+  @media (max-width: 780px) {
+    .burger {
+      display: inline-flex;
+      order: -1; /* burger tout à gauche, avant la marque */
+    }
+    .links {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      flex-direction: column;
+      gap: 2px;
+      background: var(--bg-2);
+      border-bottom: 1px solid var(--line);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+      padding: 8px clamp(16px, 4vw, 40px) 14px;
+      display: none;
+      z-index: 30;
+    }
+    .links.open {
+      display: flex;
+    }
+    .links a {
+      padding: 12px 12px;
+      font-size: 15px;
+    }
+  }
+
   @media (max-width: 560px) {
     .acct-name {
+      display: none;
+    }
+    .pill {
+      padding: 8px 10px;
+    }
+  }
+
+  @media (max-width: 400px) {
+    /* trop serré : masque les amis (accessibles via /friends dans le drawer) */
+    [data-friends-pop] {
       display: none;
     }
   }
