@@ -653,21 +653,23 @@ const games = [
   .hero {
     display: grid;
     grid-template-columns: 1.5fr 1fr;
-    gap: 18px;
-    margin-bottom: 40px;
+    gap: 32px;
+    margin-bottom: 80px;
     animation: fadeUp var(--duration-long) var(--easing-smooth) both;
   }
   .hero-main {
-    padding: 28px;
+    padding: 48px;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 24px;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(212, 175, 55, 0.02));
+    border: 1px solid rgba(212, 175, 55, 0.2);
   }
   .hello {
     margin: 0;
-    font-size: clamp(22px, 4vw, 30px);
+    font-size: clamp(28px, 5vw, 42px);
     font-weight: 800;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
     animation: fadeUp var(--duration-medium) var(--easing-smooth) 0.1s both;
   }
   .balance {
@@ -683,9 +685,10 @@ const games = [
     letter-spacing: 0.06em;
   }
   .big {
-    font-size: clamp(34px, 6vw, 52px);
-    font-weight: 800;
+    font-size: clamp(48px, 8vw, 72px);
+    font-weight: 900;
     font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
   }
   .big b {
     color: var(--primary);
@@ -698,15 +701,16 @@ const games = [
   .hero-side {
     display: grid;
     grid-template-rows: repeat(3, 1fr);
-    gap: 16px;
+    gap: 24px;
   }
   .stat-box {
-    padding: 16px 18px;
+    padding: 28px 24px;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 4px;
+    gap: 8px;
     animation: fadeUp var(--duration-medium) var(--easing-smooth) both;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   }
   .stat-box:nth-child(1) { animation-delay: 0.05s; }
   .stat-box:nth-child(2) { animation-delay: 0.1s; }
@@ -736,12 +740,14 @@ const games = [
   }
   .game-card {
     flex: 1 1 220px;
-    max-width: 280px;
+    max-width: 300px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    padding: 22px;
+    gap: 16px;
+    padding: 28px;
     animation: fadeUp var(--duration-medium) var(--easing-smooth) both;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(10px);
   }
   .game-card:nth-child(1) { animation-delay: 0.18s; }
   .game-card:nth-child(2) { animation-delay: 0.24s; }
@@ -749,10 +755,11 @@ const games = [
   .game-card:nth-child(4) { animation-delay: 0.36s; }
   .game-card:nth-child(5) { animation-delay: 0.42s; }
   .emoji {
-    font-size: 40px;
+    font-size: 52px;
     line-height: 1;
-    transition: transform var(--duration-medium) cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform var(--duration-medium) cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease;
     will-change: transform;
+    filter: drop-shadow(0 4px 12px rgba(212, 175, 55, 0.2));
   }
   .game-card:hover .emoji {
     transform: translateY(-6px) scale(1.06);
