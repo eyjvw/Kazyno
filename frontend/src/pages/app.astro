@@ -26,33 +26,28 @@ const games = [
 <Layout title="Kazyno — Lobby">
   <Nav />
   <main class="lobby">
-    <section class="hero">
-      <Card class="hero-main">
-        <p class="hello" data-hello>Salut 👋</p>
-        <div class="balance">
-          <span class="lbl">Ton solde</span>
-          <span class="big"><b data-hero-balance>—</b> pts</span>
+    <!-- Hero massif avec gradient -->
+    <section class="hero-banner">
+      <div class="hero-content">
+        <h1 class="hero-title" data-hello>Bienvenue au Kazyno</h1>
+        <p class="hero-subtitle">Casino des étudiants 42 Le Havre</p>
+        <div class="hero-stats">
+          <div class="hero-stat">
+            <span class="hs-label">Ton solde</span>
+            <span class="hs-value" data-hero-balance>—</span>
+          </div>
+          <div class="hero-stat">
+            <span class="hs-label">Ton rang</span>
+            <span class="hs-value" data-rank>—</span>
+          </div>
+          <div class="hero-stat">
+            <span class="hs-label">Jackpot</span>
+            <span class="hs-value" data-jackpot>—</span>
+          </div>
         </div>
-        <Button variant="primary" class="play-cta">Jouer maintenant →</Button>
-      </Card>
-
-      <div class="hero-side">
-        <Card class="stat-box jackpot-box" hoverable={false}>
-          <a class="jackpot-help" href="/games/rules/jackpot" title="C'est quoi le jackpot ?" aria-label="Explication du jackpot">?</a>
-          <span class="lbl">💰 Jackpot progressif</span>
-          <b data-jackpot>—</b>
-        </Card>
-        <Card class="stat-box" hoverable={false}>
-          <span class="lbl">Ton rang</span>
-          <b data-rank>—</b>
-        </Card>
-        <Card class="stat-box link" hoverable={true}>
-          <a href="/leaderboard" style="text-decoration: none; display: contents;">
-            <span class="lbl">Classement</span>
-            <b>Voir le top →</b>
-          </a>
-        </Card>
+        <Button variant="primary" class="hero-cta">Jouer maintenant</Button>
       </div>
+      <div class="hero-glow"></div>
     </section>
 
     <!-- Live win feed -->
@@ -646,16 +641,100 @@ const games = [
     position: relative;
     z-index: 1;
     width: 100%;
-    margin: 0 auto;
-    padding: clamp(20px, 4vw, 40px) clamp(20px, 5vw, 64px);
   }
 
-  .hero {
-    display: grid;
-    grid-template-columns: 1.5fr 1fr;
-    gap: 32px;
-    margin-bottom: 80px;
+  .hero-banner {
+    position: relative;
+    width: 100%;
+    min-height: 60vh;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.15) 0%, rgba(212, 175, 55, 0.05) 50%, transparent 100%),
+                linear-gradient(to bottom, #1a1a24 0%, #0f0f15 100%);
+    border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .hero-glow {
+    position: absolute;
+    top: -50%;
+    right: -10%;
+    width: 800px;
+    height: 800px;
+    background: radial-gradient(circle, rgba(212, 175, 55, 0.15) 0%, transparent 70%);
+    border-radius: 50%;
+    filter: blur(60px);
+    pointer-events: none;
+  }
+
+  .hero-content {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    max-width: 900px;
+    padding: clamp(40px, 8vw, 100px) clamp(20px, 5vw, 64px);
     animation: fadeUp var(--duration-long) var(--easing-smooth) both;
+  }
+
+  .hero-title {
+    margin: 0 0 12px;
+    font-size: clamp(48px, 8vw, 80px);
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+
+  .hero-subtitle {
+    margin: 0 0 48px;
+    font-size: clamp(16px, 2.5vw, 24px);
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+
+  .hero-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin: 0 0 48px;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .hero-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 20px;
+    background: rgba(212, 175, 55, 0.08);
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    border-radius: 12px;
+  }
+
+  .hs-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+
+  .hs-value {
+    font-size: 24px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .hero-cta {
+    font-size: 18px;
+    padding: 18px 48px;
+    animation: fadeUp var(--duration-medium) var(--easing-smooth) 0.3s both;
+  }
+
+  /* Old hero styles (deprecated) */
+  .hero {
+    display: none;
   }
   .hero-main {
     padding: 48px;
