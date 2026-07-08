@@ -25,41 +25,51 @@ const games = [
 
 <Layout title="Kazyno — Lobby">
   <Nav />
-  <main class="lobby">
-    <!-- Hero massif avec gradient -->
-    <section class="hero-banner">
-      <div class="hero-content">
-        <h1 class="hero-title" data-hello></h1>
-        <p class="hero-subtitle">Casino des étudiants 42 Le Havre</p>
-        <div class="hero-stats">
-          <div class="hero-stat">
-            <span class="hs-label">Ton solde</span>
-            <span class="hs-value" data-hero-balance>—</span>
-          </div>
-          <div class="hero-stat">
-            <span class="hs-label">Ton rang</span>
-            <span class="hs-value" data-rank>—</span>
-          </div>
-          <div class="hero-stat">
-            <span class="hs-label">Jackpot</span>
-            <span class="hs-value" data-jackpot>—</span>
-          </div>
+  <div class="casino-layout">
+    <aside class="sidebar">
+      <div class="sidebar-logo">💎 Kazyno</div>
+      <nav class="sidebar-nav">
+        <a href="/jeux" class="nav-item active">
+          <span class="ni-icon">🎮</span>
+          <span>Jeux</span>
+        </a>
+        <a href="/paris" class="nav-item">
+          <span class="ni-icon">🎓</span>
+          <span>Paris</span>
+        </a>
+        <a href="/leaderboard" class="nav-item">
+          <span class="ni-icon">🏆</span>
+          <span>Classement</span>
+        </a>
+        <a href="/shop" class="nav-item">
+          <span class="ni-icon">🛍️</span>
+          <span>Boutique</span>
+        </a>
+      </nav>
+      <div class="sidebar-user">
+        <div class="user-balance">
+          <span class="balance-label">Solde</span>
+          <span class="balance-value" data-hero-balance>—</span>
         </div>
-        <Button variant="primary" class="hero-cta">Jouer maintenant</Button>
       </div>
-      <div class="hero-glow"></div>
-    </section>
+    </aside>
 
-    <!-- Live win feed -->
-    <section class="feed-section">
-      <h2 class="section-title">🔥 Gros gains en direct</h2>
-      <div class="feed-strip" data-feed>
-        <span class="feed-empty" data-feed-empty>Aucun gros gain récent — à toi de jouer !</span>
-      </div>
-    </section>
+    <main class="lobby">
+      <!-- Promo cards -->
+      <section class="promos">
+        <Card class="promo-card promo-1" hoverable={false}>
+          <h3 class="promo-title">Daily Spin</h3>
+          <p class="promo-amount">💰 50 000 pts</p>
+          <p class="promo-desc">Spin gratuitement chaque jour</p>
+        </Card>
+        <Card class="promo-card promo-2" hoverable={false}>
+          <h3 class="promo-title">Get a Share of<br/>the 50k Fund</h3>
+          <p class="promo-desc">Pariez et gagnez des bonus</p>
+        </Card>
+      </section>
 
-    <h2 class="section-title">Jeux</h2>
-    <section class="grid">
+      <!-- Games grid -->
+      <section class="games-grid">
       {
         games.map((g) => (
           <Card class="game-card" hoverable={true}>
