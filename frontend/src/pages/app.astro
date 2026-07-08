@@ -29,7 +29,7 @@ const games = [
     <!-- Hero massif avec gradient -->
     <section class="hero-banner">
       <div class="hero-content">
-        <h1 class="hero-title" data-hello>Bienvenue au Kazyno</h1>
+        <h1 class="hero-title" data-hello></h1>
         <p class="hero-subtitle">Casino des étudiants 42 Le Havre</p>
         <div class="hero-stats">
           <div class="hero-stat">
@@ -732,17 +732,37 @@ const games = [
     animation: fadeUp var(--duration-medium) var(--easing-smooth) 0.3s both;
   }
 
+  /* Sections spacing */
+  .feed-section {
+    padding: clamp(48px, 6vw, 80px) clamp(32px, 5vw, 80px);
+    margin: 0 auto;
+    max-width: 1400px;
+    width: 100%;
+  }
+
+  .section-title {
+    font-size: clamp(28px, 4.5vw, 42px);
+    margin-bottom: 48px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+  }
+
+  .grid {
+    padding: clamp(32px, 5vw, 80px) clamp(32px, 5vw, 80px);
+    margin: 0 auto;
+    max-width: 1400px;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 32px;
+  }
+
   /* Old hero styles (deprecated) */
   .hero {
     display: none;
   }
   .hero-main {
-    padding: 48px;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-    background: linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(212, 175, 55, 0.02));
-    border: 1px solid rgba(212, 175, 55, 0.2);
+    display: none;
   }
   .hello {
     margin: 0;
