@@ -1,0 +1,249 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+import GameShell from "../components/GameShell.astro";
+import Button from "../components/Button.astro";
+import Input from "../components/Input.astro";
+---
+
+<Layout title="Kazyno — Mines">
+  <Nav />
+  <main class="app-main">
+    <GameShell title="Mines" subtitle="Évite les bombes" emoji="💣">
+      <div slot="betpanel" class="betpanel">
+        <div class="field">
+          <label>Mise</label>
+          <Input type="number" placeholder="100" data-bet-input />
+        </div>
+
+        <div class="field">
+          <label>Mines (1-24)</label>
+          <Input type="number" placeholder="3" data-mines-input min="1" max="24" />
+        </div>
+
+        <Button variant="primary" class="bet-btn" data-play-btn>Jouer</Button>
+        <Button variant="ghost" class="bet-btn" data-cashout-btn disabled>Encaisser</Button>
+
+        <div class="sess-stats">
+          <div class="ss">
+            <span>Révélés</span>
+            <b data-revealed>0</b>
+          </div>
+          <div class="ss">
+            <span>Coefficient</span>
+            <b data-coeff>0.00×</b>
+          </div>
+        </div>
+      </div>
+
+      <div slot="stage" class="stage-mines">
+        <div class="grid-25" data-grid></div>
+        <p class="result" data-result hidden></p>
+      </div>
+    </GameShell>
+  </main>
+
+  <Footer />
+</Layout>
+
+<script>
+  import { playMines, fmt, cashoutMines } from "../lib/casino";
+
+  const betInput = document.querySelector<HTMLInputElement>("[data-bet-input]")!;
+  const minesInput = document.querySelector<HTMLInputElement>("[data-mines-input]")!;
+  const playBtn = document.querySelector<HTMLButtonElement>("[data-play-btn]")!;
+  const cashoutBtn = document.querySelector<HTMLButtonElement>("[data-cashout-btn]")!;
+  const resultEl = document.querySelector<HTMLElement>("[data-result]")!;
+  const gridEl = document.querySelector<HTMLElement>("[data-grid]")!;
+  const revealedEl = document.querySelector<HTMLElement>("[data-revealed]")!;
+  const coeffEl = document.querySelector<HTMLElement>("[data-coeff]")!;
+
+  playBtn.addEventListener("click", async () => {
+    const bet = parseInt(betInput.value);
+    const mines = parseInt(minesInput.value) || 3;
+    if (!bet) return;
+
+    playBtn.disabled = true;
+    resultEl.hidden = true;
+    gridEl.innerHTML = "";
+
+    try {
+      const game = await playMines(bet, mines);
+
+      for (let i = 0; i < 25; i++) {
+        const cell = document.createElement("button");
+        cell.className = "cell";
+        cell.textContent = "?";
+        cell.dataset.index = i.toString();
+
+        cell.addEventListener("click", async () => {
+          if (cell.classList.contains("revealed")) return;
+
+          cell.classList.add("revealing");
+          cell.textContent = game.board[i]?.is_mine ? "💣" : "💎";
+
+          setTimeout(() => {
+            cell.classList.remove("revealing");
+            cell.classList.add("revealed");
+
+            if (game.board[i]?.is_mine) {
+              resultEl.textContent = `Boom! Perdu ${fmt(bet)} pts`;
+              resultEl.className = "result lose";
+              resultEl.hidden = false;
+              playBtn.disabled = false;
+              cashoutBtn.disabled = true;
+            } else {
+              revealedEl.textContent = (parseInt(revealedEl.textContent || "0") + 1).toString();
+              const newCoeff = game.multiplier || 1;
+              coeffEl.textContent = `${newCoeff.toFixed(2)}×`;
+            }
+          }, 200);
+        });
+
+        gridEl.appendChild(cell);
+      }
+
+      cashoutBtn.disabled = false;
+
+      cashoutBtn.addEventListener(
+        "click",
+        async () => {
+          const payout = bet * (game.multiplier || 1);
+          resultEl.textContent = `Encaissé ${fmt(payout)} pts!`;
+          resultEl.className = "result win";
+          resultEl.hidden = false;
+          playBtn.disabled = false;
+          cashoutBtn.disabled = true;
+          gridEl.querySelectorAll(".cell").forEach((c) => ((c as HTMLButtonElement).disabled = true));
+        },
+        { once: true }
+      );
+    } catch (e: any) {
+      resultEl.textContent = e?.message ?? "Erreur";
+      resultEl.className = "result lose";
+      resultEl.hidden = false;
+      playBtn.disabled = false;
+    }
+  });
+</script>
+
+<style>
+  .app-main {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+  }
+
+  .betpanel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .field label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 700;
+  }
+
+  .bet-btn {
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+  }
+
+  .sess-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+
+  .ss {
+    background: var(--surface-2);
+    border-radius: 7px;
+    padding: 7px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .ss span {
+    color: var(--text-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .ss b {
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stage-mines {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+  }
+
+  .grid-25 {
+    display: grid;
+    grid-template-columns: repeat(5, 60px);
+    gap: 8px;
+  }
+
+  .cell {
+    width: 60px;
+    height: 60px;
+    background: var(--raise);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 24px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform var(--duration-short), background var(--duration-short);
+  }
+
+  .cell:hover:not(.revealed) {
+    background: var(--panel-2);
+    transform: translateY(-2px);
+  }
+
+  .cell.revealing {
+    animation: popIn var(--duration-short) var(--easing-smooth);
+  }
+
+  .cell.revealed {
+    cursor: default;
+    opacity: 0.7;
+  }
+
+  .result {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    animation: popIn var(--duration-medium) var(--easing-smooth);
+  }
+
+  .result.win {
+    color: var(--success);
+  }
+
+  .result.lose {
+    color: var(--danger);
+  }
+</style>

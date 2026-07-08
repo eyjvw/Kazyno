@@ -1,0 +1,258 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+import GameShell from "../components/GameShell.astro";
+import Button from "../components/Button.astro";
+import Input from "../components/Input.astro";
+---
+
+<Layout title="Kazyno — Dice">
+  <Nav />
+  <main class="app-main">
+    <GameShell title="Dice" subtitle="Roll under / over" emoji="🎲">
+      <div slot="betpanel" class="betpanel">
+        <div class="field">
+          <label>Mise</label>
+          <Input type="number" placeholder="100" data-bet-input />
+        </div>
+
+        <div class="field">
+          <label>Nombre cible</label>
+          <Input type="number" placeholder="50" data-target-input min="1" max="99" />
+        </div>
+
+        <div class="seg" data-dice-mode>
+          <button class="is-active" data-mode="under">📉 Under</button>
+          <button data-mode="over">📈 Over</button>
+        </div>
+
+        <Button variant="primary" class="bet-btn" data-play-btn>Lancer</Button>
+
+        <div class="sess-stats" data-sess-stats>
+          <div class="ss">
+            <span>Sessions</span>
+            <b data-session-count>0</b>
+          </div>
+          <div class="ss">
+            <span>Won</span>
+            <b class="spos" data-session-wins>0</b>
+          </div>
+          <div class="ss">
+            <span>Lost</span>
+            <b class="sneg" data-session-losses>0</b>
+          </div>
+        </div>
+      </div>
+
+      <div slot="stage" class="stage-dice">
+        <div class="dice-display" data-dice-display>
+          <div class="dice-value" data-dice-value>—</div>
+        </div>
+        <p class="result" data-result hidden></p>
+      </div>
+    </GameShell>
+  </main>
+
+  <Footer />
+</Layout>
+
+<script>
+  import { fmt, onBalance, loadGame, playDice, onGameUpdate } from "../lib/casino";
+
+  const betInput = document.querySelector<HTMLInputElement>("[data-bet-input]")!;
+  const targetInput = document.querySelector<HTMLInputElement>("[data-target-input]")!;
+  const playBtn = document.querySelector<HTMLButtonElement>("[data-play-btn]")!;
+  const resultEl = document.querySelector<HTMLElement>("[data-result]")!;
+  const diceDisplay = document.querySelector<HTMLElement>("[data-dice-display]")!;
+  const diceValue = document.querySelector<HTMLElement>("[data-dice-value]")!;
+
+  let mode: "under" | "over" = "under";
+  const modes = document.querySelectorAll("[data-mode]");
+
+  modes.forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      mode = (e.currentTarget as HTMLElement).dataset.mode as "under" | "over";
+      modes.forEach((x) => x.classList.toggle("is-active", x === e.currentTarget));
+    });
+  });
+
+  playBtn.addEventListener("click", async () => {
+    const bet = parseInt(betInput.value);
+    const target = parseInt(targetInput.value);
+    if (!bet || !target) return;
+
+    playBtn.disabled = true;
+    diceValue.textContent = "...";
+    diceDisplay.classList.add("rolling");
+
+    try {
+      const result = await playDice(bet, target, mode);
+
+      setTimeout(() => {
+        diceDisplay.classList.remove("rolling");
+        diceValue.textContent = result.roll;
+        resultEl.textContent = result.win
+          ? `Gagné! +${fmt(result.payout)} pts`
+          : `Perdu -${fmt(bet)} pts`;
+        resultEl.className = `result ${result.win ? "win" : "lose"}`;
+        resultEl.hidden = false;
+      }, 800);
+    } catch (e: any) {
+      diceDisplay.classList.remove("rolling");
+      resultEl.textContent = e?.message ?? "Erreur";
+      resultEl.className = "result lose";
+      resultEl.hidden = false;
+    } finally {
+      playBtn.disabled = false;
+    }
+  });
+
+  loadGame("dice").then((game) => {
+    if (game) {
+      betInput.value = game.default_bet || "100";
+    }
+  });
+</script>
+
+<style>
+  .app-main {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+  }
+
+  .betpanel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .field label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 700;
+  }
+
+  .seg {
+    display: grid;
+    grid-auto-flow: column;
+    gap: 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 4px;
+  }
+
+  .seg button {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 9px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background var(--duration-short), color var(--duration-short);
+  }
+
+  .seg button.is-active {
+    background: var(--raise);
+    color: var(--text);
+  }
+
+  .bet-btn {
+    width: 100%;
+    padding: 16px;
+    font-size: 16px;
+  }
+
+  .sess-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+
+  .ss {
+    background: var(--surface-2);
+    border-radius: 7px;
+    padding: 7px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .ss span {
+    color: var(--text-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .ss b {
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .spos { color: var(--success); }
+  .sneg { color: var(--danger); }
+
+  .stage-dice {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+  }
+
+  .dice-display {
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.1), rgba(212, 175, 55, 0.05));
+    border: 2px solid var(--primary);
+    border-radius: 12px;
+    box-shadow: 0 0 30px var(--primary-glow);
+  }
+
+  .dice-display.rolling .dice-value {
+    animation: spin 0.2s linear infinite;
+  }
+
+  .dice-value {
+    font-size: 48px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .result {
+    margin: 0;
+    min-height: 20px;
+    font-size: 16px;
+    text-align: center;
+    font-weight: 700;
+    animation: popIn var(--duration-medium) var(--easing-smooth);
+  }
+
+  .result.win {
+    color: var(--success);
+  }
+
+  .result.lose {
+    color: var(--danger);
+  }
+</style>
