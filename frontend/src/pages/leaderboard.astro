@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 import Footer from "../components/Footer.astro";
+import Card from "../components/Card.astro";
 ---
 
 <Layout title="Kazyno — Classement">
@@ -36,9 +37,11 @@ import Footer from "../components/Footer.astro";
         <div class="step s3" data-podium-3></div>
       </div>
 
-      <ol class="list" data-list>
-        <li class="empty">Chargement…</li>
-      </ol>
+      <Card class="leaderboard-card" hoverable={false}>
+        <ol class="list" data-list>
+          <li class="empty">Chargement…</li>
+        </ol>
+      </Card>
 
       <nav class="pager" data-pager hidden>
         <button class="ghost-btn" data-prev>← Préc.</button>
@@ -54,9 +57,11 @@ import Footer from "../components/Footer.astro";
         <div class="step s3" data-game-podium-3></div>
       </div>
 
-      <ol class="list game-list" data-game-list>
-        <li class="empty">Chargement…</li>
-      </ol>
+      <Card class="leaderboard-card" hoverable={false}>
+        <ol class="list game-list" data-game-list>
+          <li class="empty">Chargement…</li>
+        </ol>
+      </Card>
     </section>
   </main>
   <Footer />
@@ -612,10 +617,14 @@ import Footer from "../components/Footer.astro";
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 9px 14px;
+    animation: fadeUp var(--duration-medium) var(--easing-smooth) both;
   }
+  .list :global(.row:nth-child(1)) { animation-delay: 0.05s; }
+  .list :global(.row:nth-child(2)) { animation-delay: 0.1s; }
+  .list :global(.row:nth-child(3)) { animation-delay: 0.15s; }
   .list :global(.row.me) {
-    border-color: var(--accent);
-    background: var(--panel-2);
+    border-color: var(--primary);
+    background: rgba(212, 175, 55, 0.1);
   }
   .list :global(.row.moved-up)   { animation: flashUp 0.9s ease; }
   .list :global(.row.moved-down) { animation: flashDown 0.9s ease; }
@@ -630,11 +639,11 @@ import Footer from "../components/Footer.astro";
   .list :global(.medal) {
     border-radius: 6px;
     padding: 3px 0;
-    color: #16281d;
+    color: var(--accent-ink);
   }
-  .list :global(.m1) { background: #ffd24a; }
-  .list :global(.m2) { background: #cdd6e0; }
-  .list :global(.m3) { background: #e08b4a; }
+  .list :global(.m1) { background: var(--primary); }
+  .list :global(.m2) { background: #c0d3dd; }
+  .list :global(.m3) { background: #dba26a; }
   .list :global(.av) {
     width: 28px;
     height: 28px;
@@ -666,7 +675,7 @@ import Footer from "../components/Footer.astro";
   }
   .list :global(.lb-title) {
     background: rgba(212, 175, 55, 0.14);
-    color: var(--accent);
+    color: var(--primary);
     border: 1px solid rgba(212, 175, 55, 0.4);
     border-radius: 999px;
     padding: 1px 8px;
@@ -687,8 +696,12 @@ import Footer from "../components/Footer.astro";
     font-weight: 400;
     font-size: 11px;
   }
-  .list :global(.pos) { color: var(--win); }
-  .list :global(.neg) { color: var(--lose); }
+  .list :global(.pos) { color: var(--success); }
+  .list :global(.neg) { color: var(--danger); }
+
+  .leaderboard-card {
+    padding: 0;
+  }
 
   .pager {
     display: flex;
