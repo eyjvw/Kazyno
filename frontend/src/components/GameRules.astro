@@ -7,83 +7,114 @@ const rule = getGameRule(slug);
 ---
 
 {rule && (
-  <div class="gr-wrap">
-  <details class="game-rules">
-    <summary class="gr-summary">
-      <span class="gr-chevron">▸</span>
-      <span class="gr-title">Règles — {rule.title}</span>
-      <span class="gr-edge">{rule.edge}</span>
-    </summary>
-    <div class="gr-body">
-      {rule.sections.map((s) => (
-        <div class="gr-sec">
-          <h3>{s.heading}</h3>
-          <p>{s.body}</p>
-        </div>
-      ))}
+  <Fragment>
+    <button class="gh-rules gr-open" data-gr-open title={`Règles — ${rule.title}`}>? Règles</button>
 
-      {rule.table && (
-        <div class="gr-table-wrap">
-          <table>
-            <thead>
-              <tr>{rule.table.headers.map((h) => <th>{h}</th>)}</tr>
-            </thead>
-            <tbody>
-              {rule.table.rows.map((row) => (
-                <tr>{row.map((cell) => <td>{cell}</td>)}</tr>
-              ))}
-            </tbody>
-          </table>
+    <div class="gr-overlay" data-gr-overlay hidden>
+      <div class="gr-modal" role="dialog" aria-modal="true" aria-label={`Règles — ${rule.title}`}>
+        <div class="gr-head">
+          <span class="gr-title">Règles — {rule.title}</span>
+          <span class="gr-edge">{rule.edge}</span>
+          <button class="gr-close" data-gr-close aria-label="Fermer">✕</button>
         </div>
-      )}
+        <div class="gr-body">
+          {rule.sections.map((s) => (
+            <div class="gr-sec">
+              <h3>{s.heading}</h3>
+              <p>{s.body}</p>
+            </div>
+          ))}
+
+          {rule.table && (
+            <div class="gr-table-wrap">
+              <table>
+                <thead>
+                  <tr>{rule.table.headers.map((h) => <th>{h}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {rule.table.rows.map((row) => (
+                    <tr>{row.map((cell) => <td>{cell}</td>)}</tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
-  </details>
-  </div>
+  </Fragment>
 )}
 
+<script>
+	// Le composant est posé en bas de page ; le bouton est remonté à droite du
+	// header du jeu (même place que l'ancien lien "? Règles").
+	const btn     = document.querySelector<HTMLButtonElement>("[data-gr-open]");
+	const overlay = document.querySelector<HTMLElement>("[data-gr-overlay]");
+	if (btn && overlay)
+	{
+		document.querySelector(".game-header")?.appendChild(btn);
+
+		const close = () =>
+		{
+			overlay.hidden = true;
+			document.body.style.overflow = "";
+		};
+		btn.addEventListener("click", () =>
+		{
+			overlay.hidden = false;
+			document.body.style.overflow = "hidden";
+		});
+		overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+		overlay.querySelector("[data-gr-close]")?.addEventListener("click", close);
+		document.addEventListener("keydown", (e) =>
+		{
+			if (e.key === "Escape" && !overlay.hidden) close();
+		});
+	}
+</script>
+
 <style>
-  /* Aligne la box règles sur les panneaux du jeu : même largeur max et même
-     padding horizontal que .shell (Layout) — sinon la box déborde plus large. */
-  .gr-wrap {
-    width: 100%;
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 0 clamp(16px, 4vw, 40px) clamp(16px, 3vw, 32px);
+  .gr-open {
+    cursor: pointer;
+    font-family: inherit;
   }
 
-  .game-rules {
+  .gr-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(12px, 4vw, 40px);
+  }
+
+  .gr-modal {
     width: 100%;
-    margin: 0;
+    max-width: 580px;
+    max-height: 82vh;
+    display: flex;
+    flex-direction: column;
     background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: 12px;
-    overflow: hidden;
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
   }
 
-  .gr-summary {
+  .gr-head {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 14px 18px;
-    cursor: pointer;
-    list-style: none;
-    user-select: none;
-    font-weight: 700;
-    font-size: 14px;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--line);
   }
-  .gr-summary::-webkit-details-marker { display: none; }
-  .gr-summary:hover { background: rgba(212, 175, 55, 0.05); }
-
-  .gr-chevron {
-    color: var(--accent);
-    font-size: 12px;
-    transition: transform 0.18s ease;
-    flex: none;
+  .gr-title {
+    flex: 1;
+    font-weight: 800;
+    font-size: 15px;
   }
-  .game-rules[open] .gr-chevron { transform: rotate(90deg); }
-
-  .gr-title { flex: 1; }
-
   .gr-edge {
     font-size: 11px;
     font-weight: 700;
@@ -93,10 +124,31 @@ const rule = getGameRule(slug);
     border-radius: 20px;
     white-space: nowrap;
   }
+  .gr-close {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--raise);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  .gr-close:hover {
+    color: var(--fg);
+    border-color: var(--accent);
+  }
 
   .gr-body {
     padding: 4px 18px 18px;
-    border-top: 1px solid var(--line);
+    overflow-y: auto;
   }
 
   .gr-sec { margin-top: 14px; }
