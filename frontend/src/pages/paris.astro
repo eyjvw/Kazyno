@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 import Footer from "../components/Footer.astro";
+import TabNav from "../components/TabNav.astro";
 ---
 
 <Layout title="Kazyno — Paris">
@@ -12,10 +13,14 @@ import Footer from "../components/Footer.astro";
       <p>Prédis ta note d'exam ou parie sur les vrais matchs de foot — tout en points, rien en euros.</p>
     </header>
 
-    <div class="tabs" role="tablist">
-      <button class="tab is-active" data-tab="exam" role="tab">🎓 Exams</button>
-      <button class="tab" data-tab="foot" role="tab">⚽ Foot</button>
-    </div>
+    <TabNav
+      tabs={[
+        { id: "exam", label: "🎓 Exams" },
+        { id: "foot", label: "⚽ Foot" }
+      ]}
+      active="exam"
+      class="paris-tabs"
+    />
 
     <!-- ═══ Onglet Exams ═══ -->
     <div data-panel="exam">
@@ -110,12 +115,12 @@ import Footer from "../components/Footer.astro";
 	// ── Tabs ────────────────────────────────────────────────────────────────
 	function showTab(name: string)
 	{
-		$$("[data-tab]").forEach((b) => b.classList.toggle("is-active", b.dataset.tab === name));
+		$$("[data-tab-button]").forEach((b) => b.classList.toggle("active", b.dataset.tabId === name));
 		$$("[data-panel]").forEach((p) => { (p as HTMLElement).hidden = p.dataset.panel !== name; });
 		history.replaceState(null, "", name === "foot" ? "#foot" : "#");
 	}
-	$$("[data-tab]").forEach((b) =>
-		b.addEventListener("click", () => showTab((b as HTMLButtonElement).dataset.tab!)));
+	$$("[data-tab-button]").forEach((b) =>
+		b.addEventListener("click", () => showTab((b as HTMLButtonElement).dataset.tabId!)));
 	if (location.hash === "#foot") showTab("foot");
 
 	// ═══════════════════════ Paris d'exam ═══════════════════════
@@ -1185,6 +1190,14 @@ import Footer from "../components/Footer.astro";
   .feed :global(.frow-right) { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
   .feed :global(.fr)  { font-weight: 800; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .feed :global(.fmult)    { font-size: 11px; color: var(--muted); }
-  .feed :global(.fr.win)   { color: var(--win);  }
-  .feed :global(.fr.lose)  { color: var(--lose); }
+  .feed :global(.fr.win)   { color: var(--success);  }
+  .feed :global(.fr.lose)  { color: var(--danger); }
+
+  .paris-tabs {
+    margin-bottom: 32px;
+  }
+
+  [data-panel] {
+    animation: fadeUp var(--duration-medium) var(--easing-smooth);
+  }
 </style>
