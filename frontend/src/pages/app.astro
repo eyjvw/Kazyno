@@ -2,6 +2,8 @@
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 import Footer from "../components/Footer.astro";
+import Button from "../components/Button.astro";
+import Card from "../components/Card.astro";
 
 const games = [
 	{ href: "#poker",         name: "Poker",          tag: "Texas Hold'em · multijoueur",   emoji: "♠️", hot: true },
@@ -25,29 +27,31 @@ const games = [
   <Nav />
   <main class="lobby">
     <section class="hero">
-      <div class="hero-main panel">
+      <Card class="hero-main">
         <p class="hello" data-hello>Salut 👋</p>
         <div class="balance">
           <span class="lbl">Ton solde</span>
           <span class="big"><b data-hero-balance>—</b> pts</span>
         </div>
-        <a class="btn play-cta" href="/games/dice">Jouer maintenant →</a>
-      </div>
+        <Button variant="primary" class="play-cta">Jouer maintenant →</Button>
+      </Card>
 
       <div class="hero-side">
-        <div class="stat-box panel jackpot-box">
+        <Card class="stat-box jackpot-box" hoverable={false}>
           <a class="jackpot-help" href="/games/rules/jackpot" title="C'est quoi le jackpot ?" aria-label="Explication du jackpot">?</a>
           <span class="lbl">💰 Jackpot progressif</span>
           <b data-jackpot>—</b>
-        </div>
-        <div class="stat-box panel">
+        </Card>
+        <Card class="stat-box" hoverable={false}>
           <span class="lbl">Ton rang</span>
           <b data-rank>—</b>
-        </div>
-        <a class="stat-box panel link" href="/leaderboard">
-          <span class="lbl">Classement</span>
-          <b>Voir le top →</b>
-        </a>
+        </Card>
+        <Card class="stat-box link" hoverable={true}>
+          <a href="/leaderboard" style="text-decoration: none; display: contents;">
+            <span class="lbl">Classement</span>
+            <b>Voir le top →</b>
+          </a>
+        </Card>
       </div>
     </section>
 
@@ -63,14 +67,16 @@ const games = [
     <section class="grid">
       {
         games.map((g) => (
-          <a class="card" href={g.href} data-bj={g.href === "#blackjack" ? "" : undefined} data-pk-open={g.href === "#poker" ? "" : undefined}>
-            <span class="emoji">{g.emoji}</span>
-            <span class="meta">
-              <b>{g.name}{(g as any).hot ? <span class="hot-badge">NEW</span> : ""}</b>
-              <small>{g.tag}</small>
-            </span>
-            <span class="go">Jouer →</span>
-          </a>
+          <Card class="game-card" hoverable={true}>
+            <a href={g.href} data-bj={g.href === "#blackjack" ? "" : undefined} data-pk-open={g.href === "#poker" ? "" : undefined} style="display: contents; text-decoration: none;">
+              <span class="emoji">{g.emoji}</span>
+              <span class="meta">
+                <b>{g.name}{(g as any).hot ? <span class="hot-badge">NEW</span> : ""}</b>
+                <small>{g.tag}</small>
+              </span>
+              <span class="go">Jouer →</span>
+            </a>
+          </Card>
         ))
       }
     </section>
@@ -649,29 +655,29 @@ const games = [
     grid-template-columns: 1.5fr 1fr;
     gap: 18px;
     margin-bottom: 40px;
+    animation: fadeUp var(--duration-long) var(--easing-smooth) both;
   }
   .hero-main {
     padding: 28px;
     display: flex;
     flex-direction: column;
     gap: 18px;
-    background: linear-gradient(135deg, rgba(47, 69, 83, 0.72), rgba(26, 44, 56, 0.72));
-    backdrop-filter: blur(18px) saturate(1.2);
-    -webkit-backdrop-filter: blur(18px) saturate(1.2);
   }
   .hello {
     margin: 0;
     font-size: clamp(22px, 4vw, 30px);
     font-weight: 800;
     letter-spacing: -0.02em;
+    animation: fadeUp var(--duration-medium) var(--easing-smooth) 0.1s both;
   }
   .balance {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    animation: fadeUp var(--duration-medium) var(--easing-smooth) 0.2s both;
   }
   .lbl {
-    color: var(--muted);
+    color: var(--text-muted);
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -682,10 +688,11 @@ const games = [
     font-variant-numeric: tabular-nums;
   }
   .big b {
-    color: var(--accent);
+    color: var(--primary);
   }
   .play-cta {
     align-self: flex-start;
+    animation: fadeUp var(--duration-medium) var(--easing-smooth) 0.3s both;
   }
 
   .hero-side {
@@ -699,20 +706,21 @@ const games = [
     flex-direction: column;
     justify-content: center;
     gap: 4px;
-    background: rgba(26, 44, 56, 0.72);
-    backdrop-filter: blur(18px) saturate(1.2);
-    -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    animation: fadeUp var(--duration-medium) var(--easing-smooth) both;
   }
+  .stat-box:nth-child(1) { animation-delay: 0.05s; }
+  .stat-box:nth-child(2) { animation-delay: 0.1s; }
+  .stat-box:nth-child(3) { animation-delay: 0.15s; }
   .stat-box b {
     font-size: 22px;
     font-variant-numeric: tabular-nums;
   }
   .stat-box.link b {
-    color: var(--accent);
+    color: var(--primary);
     font-size: 15px;
   }
   .stat-box.link:hover {
-    border-color: var(--accent);
+    border-color: var(--primary);
   }
 
   .section-title {
@@ -726,35 +734,28 @@ const games = [
     justify-content: center;
     gap: 18px;
   }
-  .card {
+  .game-card {
     flex: 1 1 220px;
     max-width: 280px;
     display: flex;
     flex-direction: column;
     gap: 14px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 14px;
     padding: 22px;
-    transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.15s,
-      background 0.15s, box-shadow 0.2s;
+    animation: fadeUp var(--duration-medium) var(--easing-smooth) both;
   }
-  .card:hover {
-    transform: translateY(-4px);
-    border-color: var(--accent);
-    background: var(--panel-2);
-    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(59, 130, 246, 0.2);
-  }
-  .emoji {
-    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-    will-change: transform;
-  }
-  .card:hover .emoji {
-    transform: translateY(-6px) scale(1.06);
-  }
+  .game-card:nth-child(1) { animation-delay: 0.18s; }
+  .game-card:nth-child(2) { animation-delay: 0.24s; }
+  .game-card:nth-child(3) { animation-delay: 0.3s; }
+  .game-card:nth-child(4) { animation-delay: 0.36s; }
+  .game-card:nth-child(5) { animation-delay: 0.42s; }
   .emoji {
     font-size: 40px;
     line-height: 1;
+    transition: transform var(--duration-medium) cubic-bezier(0.34, 1.56, 0.64, 1);
+    will-change: transform;
+  }
+  .game-card:hover .emoji {
+    transform: translateY(-6px) scale(1.06);
   }
   .meta {
     display: flex;
@@ -828,14 +829,15 @@ const games = [
     justify-content: center;
     border: 1px solid var(--line);
     border-radius: 50%;
-    color: var(--muted);
+    color: var(--text-muted);
     font-size: 11px;
     font-weight: 700;
-    transition: color 0.15s, border-color 0.15s;
+    transition: color var(--duration-short), border-color var(--duration-short);
+    text-decoration: none;
   }
   .jackpot-help:hover {
-    color: var(--accent);
-    border-color: var(--accent);
+    color: var(--primary);
+    border-color: var(--primary);
   }
 
   /* ── Live feed ── */
