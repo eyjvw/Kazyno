@@ -7,6 +7,8 @@ import { social } from "./social";
 import { blackjack } from "./blackjack";
 import { exambets } from "./exambets";
 import { exams } from "./exams";
+import { foot } from "./foot";
+import { initFootSync } from "./footsync";
 import { tracker } from "./tracker";
 import { treasure } from "./treasurehunt"; // TEMPORAIRE — chasse au trésor
 import { admin } from "./admin";
@@ -42,6 +44,7 @@ const app = new Elysia()
 	.use(blackjack)
 	.use(exambets)
 	.use(exams)
+	.use(foot)
 	.use(tracker)
 	.use(treasure) // TEMPORAIRE — chasse au trésor
 	.use(admin)
@@ -68,6 +71,7 @@ if (app.server) setServer(app.server);
 
 await initWeeklyReset();
 initExamSync();
+initFootSync();
 await initGiveaways();
 
 console.log(`backend up on http://${app.server?.hostname}:${app.server?.port}`);

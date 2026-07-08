@@ -278,6 +278,52 @@ export async function initDb(): Promise<void>
 		WHERE jsonb_typeof(notif_prefs) <> 'object'
 	`;
 
+	// Paris foot : matchs + cotes 1N2 synchronisés depuis The Odds API
+	// (footsync.ts) — event_id = id de l'événement côté API, clé d'upsert.
+	await sql`
+		CREATE TABLE IF NOT EXISTS foot_matches (
+			id          SERIAL PRIMARY KEY,
+			event_id    TEXT UNIQUE NOT NULL,
+			sport_key   TEXT NOT NULL,
+			league      TEXT NOT NULL,
+			home        TEXT NOT NULL,
+			away        TEXT NOT NULL,
+			commence_at TIMESTAMPTZ NOT NULL,
+			odds_home   DOUBLE PRECISION,
+			odds_draw   DOUBLE PRECISION,
+			odds_away   DOUBLE PRECISION,
+			status      TEXT NOT NULL DEFAULT 'open',
+			home_score  INTEGER,
+			away_score  INTEGER,
+			updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+			settled_at  TIMESTAMPTZ
+		)
+	`;
+	await sql`CREATE INDEX IF NOT EXISTS foot_matches_status_idx ON foot_matches (status, commence_at)`;
+
+	await sql`
+		CREATE TABLE IF NOT EXISTS foot_bets (
+			id         SERIAL PRIMARY KEY,
+			user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			match_id   INTEGER NOT NULL REFERENCES foot_matches(id) ON DELETE CASCADE,
+			pick       TEXT NOT NULL,
+			odds       DOUBLE PRECISION NOT NULL,
+			stake      INTEGER NOT NULL,
+			status     TEXT NOT NULL DEFAULT 'pending',
+			payout     INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			settled_at TIMESTAMPTZ,
+			UNIQUE (user_id, match_id)
+		)
+	`;
+	await sql`CREATE INDEX IF NOT EXISTS foot_bets_status_idx ON foot_bets (status)`;
+	await sql`CREATE INDEX IF NOT EXISTS foot_bets_user_idx ON foot_bets (user_id, status)`;
+	// REAL (float4) massacrait les cotes (1.65 → 1.649999976…) : double partout.
+	await sql`ALTER TABLE foot_matches ALTER COLUMN odds_home TYPE DOUBLE PRECISION`;
+	await sql`ALTER TABLE foot_matches ALTER COLUMN odds_draw TYPE DOUBLE PRECISION`;
+	await sql`ALTER TABLE foot_matches ALTER COLUMN odds_away TYPE DOUBLE PRECISION`;
+	await sql`ALTER TABLE foot_bets ALTER COLUMN odds TYPE DOUBLE PRECISION`;
+
 	await sql`
 		CREATE TABLE IF NOT EXISTS giveaway_entries (
 			giveaway_id INTEGER NOT NULL REFERENCES giveaways(id) ON DELETE CASCADE,

@@ -8,45 +8,75 @@ import Footer from "../components/Footer.astro";
   <Nav />
   <main class="wrap">
     <header class="head">
-      <h1>Paris d'exam 🎓</h1>
-      <p>Prédis ta note avant la date de l'exam. Plus tu es précis, plus tu gagnes.</p>
+      <h1>Paris</h1>
+      <p>Prédis ta note d'exam ou parie sur les vrais matchs de foot — tout en points, rien en euros.</p>
     </header>
 
-    <div class="baremes-row">
-      <div class="bareme-card panel">
-        <div class="bt">Standard (×10)</div>
-        <div class="br"><span>Exact</span><b>10×</b></div>
-        <div class="br"><span>±10</span><b>3×</b></div>
-        <div class="br"><span>±20</span><b>1.5×</b></div>
-        <div class="br"><span>±30</span><b>remboursé</b></div>
-        <div class="br dim"><span>au-delà</span><b>perdu</b></div>
-      </div>
-      <div class="bareme-card panel">
-        <div class="bt">Final (×6)</div>
-        <div class="br"><span>Exact</span><b>10×</b></div>
-        <div class="br"><span>±6</span><b>3×</b></div>
-        <div class="br"><span>±12</span><b>1.5×</b></div>
-        <div class="br"><span>±18</span><b>remboursé</b></div>
-        <div class="br dim"><span>au-delà</span><b>perdu</b></div>
-      </div>
+    <div class="tabs" role="tablist">
+      <button class="tab is-active" data-tab="exam" role="tab">🎓 Exams</button>
+      <button class="tab" data-tab="foot" role="tab">⚽ Foot</button>
     </div>
 
-    <section class="exams-section">
-      <h2 class="section-title">Examens à venir</h2>
-      <div class="exam-cards" data-exam-cards>
-        <p class="loading">Chargement…</p>
+    <!-- ═══ Onglet Exams ═══ -->
+    <div data-panel="exam">
+      <div class="baremes-row">
+        <div class="bareme-card panel">
+          <div class="bt">Standard (×10)</div>
+          <div class="br"><span>Exact</span><b>10×</b></div>
+          <div class="br"><span>±10</span><b>3×</b></div>
+          <div class="br"><span>±20</span><b>1.5×</b></div>
+          <div class="br"><span>±30</span><b>remboursé</b></div>
+          <div class="br dim"><span>au-delà</span><b>perdu</b></div>
+        </div>
+        <div class="bareme-card panel">
+          <div class="bt">Final (×6)</div>
+          <div class="br"><span>Exact</span><b>10×</b></div>
+          <div class="br"><span>±6</span><b>3×</b></div>
+          <div class="br"><span>±12</span><b>1.5×</b></div>
+          <div class="br"><span>±18</span><b>remboursé</b></div>
+          <div class="br dim"><span>au-delà</span><b>perdu</b></div>
+        </div>
       </div>
-    </section>
 
-    <section class="history-section">
-      <h2 class="section-title">Mes paris réglés</h2>
-      <ul class="feed" data-history><li class="empty">Aucun pari réglé.</li></ul>
-    </section>
+      <section class="exams-section">
+        <h2 class="section-title">Examens à venir</h2>
+        <div class="exam-cards" data-exam-cards>
+          <p class="loading">Chargement…</p>
+        </div>
+      </section>
 
-    <section class="feed-section">
-      <h2 class="section-title">Derniers résultats</h2>
-      <ul class="feed" data-feed><li class="empty">Chargement…</li></ul>
-    </section>
+      <section class="history-section">
+        <h2 class="section-title">Mes paris réglés</h2>
+        <ul class="feed" data-history><li class="empty">Aucun pari réglé.</li></ul>
+      </section>
+
+      <section class="feed-section">
+        <h2 class="section-title">Derniers résultats</h2>
+        <ul class="feed" data-feed><li class="empty">Chargement…</li></ul>
+      </section>
+    </div>
+
+    <!-- ═══ Onglet Foot ═══ -->
+    <div data-panel="foot" hidden>
+      <p class="foot-lede">Cotes réelles des bookmakers, gains en points. La cote est verrouillée au moment de ta mise, pari annulable jusqu'au coup d'envoi.</p>
+
+      <section class="matches-section">
+        <h2 class="section-title">Matchs à venir</h2>
+        <div class="match-groups" data-matches>
+          <p class="loading">Chargement…</p>
+        </div>
+      </section>
+
+      <section class="history-section">
+        <h2 class="section-title">Mes paris réglés</h2>
+        <ul class="feed" data-foot-history><li class="empty">Aucun pari réglé.</li></ul>
+      </section>
+
+      <section class="feed-section">
+        <h2 class="section-title">Derniers résultats</h2>
+        <ul class="feed" data-foot-feed><li class="empty">Chargement…</li></ul>
+      </section>
+    </div>
   </main>
   <Footer />
 </Layout>
@@ -62,6 +92,12 @@ import Footer from "../components/Footer.astro";
 		modifyExamBet,
 		cancelExamBet,
 		onExamSettled,
+		getFootMatches,
+		getFootBets,
+		getFootFeed,
+		placeFootBet,
+		cancelFootBet,
+		onFootSettled,
 		getBalance,
 		fmt,
 	} from "../lib/casino";
@@ -71,6 +107,18 @@ import Footer from "../components/Footer.astro";
 	const $$ = <T extends HTMLElement>(s: string, root: ParentNode = document) =>
 		[...root.querySelectorAll<T>(s)];
 
+	// ── Tabs ────────────────────────────────────────────────────────────────
+	function showTab(name: string)
+	{
+		$$("[data-tab]").forEach((b) => b.classList.toggle("is-active", b.dataset.tab === name));
+		$$("[data-panel]").forEach((p) => { (p as HTMLElement).hidden = p.dataset.panel !== name; });
+		history.replaceState(null, "", name === "foot" ? "#foot" : "#");
+	}
+	$$("[data-tab]").forEach((b) =>
+		b.addEventListener("click", () => showTab((b as HTMLButtonElement).dataset.tab!)));
+	if (location.hash === "#foot") showTab("foot");
+
+	// ═══════════════════════ Paris d'exam ═══════════════════════
 	const cardsEl = $("[data-exam-cards]");
 	const histEl  = $("[data-history]");
 	const feedEl  = $("[data-feed]");
@@ -457,8 +505,277 @@ import Footer from "../components/Footer.astro";
 		renderFeed(feed);
 	}
 
+	// ═══════════════════════ Paris foot ═══════════════════════
+	const matchesEl  = $("[data-matches]");
+	const footHistEl = $("[data-foot-history]");
+	const footFeedEl = $("[data-foot-feed]");
+
+	const PICK_LABEL: Record<string, string> = { home: "1", draw: "N", away: "2" };
+
+	function pickName(m: any, pick: string): string
+	{
+		return pick === "home" ? m.home : pick === "away" ? m.away : "Nul";
+	}
+
+	function footCountdown(dateStr: string): string
+	{
+		const diff = new Date(dateStr).getTime() - Date.now();
+		if (diff <= 0) return "En cours";
+		return countdown(dateStr);
+	}
+
+	// ── One match card ──────────────────────────────────────────────────────
+	function renderMatchCard(match: any, existingBet: any | null, container: HTMLElement)
+	{
+		container.innerHTML = "";
+		const started = new Date(match.commence_at) <= new Date();
+		const date = new Date(match.commence_at).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
+
+		const hdr = document.createElement("div");
+		hdr.className = "mc-header";
+		hdr.innerHTML = `
+			<div class="mc-teams"><b>${match.home}</b><span class="vs">vs</span><b>${match.away}</b></div>
+			<div class="mc-meta">
+				<span class="mc-date">${date}</span>
+				<span class="mc-countdown ${started ? "live" : ""}">${footCountdown(match.commence_at)}</span>
+				${match.bet_count ? `<span class="mc-count">${match.bet_count} pari(s)</span>` : ""}
+			</div>`;
+		container.appendChild(hdr);
+
+		if (existingBet)
+		{
+			renderFootManage(container, match, existingBet, started);
+			return;
+		}
+		if (started)
+		{
+			const badge = document.createElement("div");
+			badge.className = "mc-locked";
+			badge.textContent = "Match commencé — paris fermés";
+			container.appendChild(badge);
+			return;
+		}
+		renderFootForm(container, match);
+	}
+
+	function renderFootForm(container: HTMLElement, match: any)
+	{
+		let pick: string | null = null;
+
+		const body = document.createElement("div");
+		body.className = "mc-body";
+		body.innerHTML = `
+			<div class="odds-row">
+				<button class="odd-btn" data-pick="home"><span class="ol">1 · ${match.home}</span><b>${match.odds_home}</b></button>
+				<button class="odd-btn" data-pick="draw"><span class="ol">N · Nul</span><b>${match.odds_draw}</b></button>
+				<button class="odd-btn" data-pick="away"><span class="ol">2 · ${match.away}</span><b>${match.odds_away}</b></button>
+			</div>
+			<label class="ec-lbl">Mise</label>
+			<input class="input" data-stake type="number" min="10" value="100" />
+			<div class="chips" style="margin-top:6px">
+				<button data-amt="half">½</button>
+				<button data-amt="double">2×</button>
+				<button data-amt="max">Max</button>
+			</div>
+			<div class="gain" data-gain hidden>Gain potentiel : <b data-gainval></b></div>
+			<button class="btn" data-place style="margin-top:12px" disabled>Choisis un résultat</button>
+			<p class="ec-err" data-err></p>`;
+		container.appendChild(body);
+
+		const stakeEl  = $<HTMLInputElement>("[data-stake]", body);
+		const errEl    = $<HTMLParagraphElement>("[data-err]", body);
+		const placeBtn = $<HTMLButtonElement>("[data-place]", body);
+		const gainEl   = $<HTMLDivElement>("[data-gain]", body);
+		const gainVal  = $<HTMLElement>("[data-gainval]", body);
+
+		function oddsFor(p: string): number
+		{
+			return p === "home" ? match.odds_home : p === "draw" ? match.odds_draw : match.odds_away;
+		}
+		function updateGain()
+		{
+			if (!pick) { gainEl.hidden = true; return; }
+			const stake = Math.max(0, Math.floor(Number(stakeEl.value) || 0));
+			gainVal.textContent = `${fmt(Math.floor(stake * oddsFor(pick)))} pts (${oddsFor(pick)}×)`;
+			gainEl.hidden = false;
+		}
+
+		$$("[data-pick]", body).forEach((b) =>
+		{
+			b.addEventListener("click", () =>
+			{
+				$$(".odd-btn", body).forEach((x) => x.classList.remove("is-active"));
+				b.classList.add("is-active");
+				pick = (b as HTMLButtonElement).dataset.pick!;
+				placeBtn.disabled = false;
+				placeBtn.textContent = "Parier";
+				updateGain();
+			});
+		});
+		stakeEl.addEventListener("input", updateGain);
+
+		$$("[data-amt]", body).forEach((b) =>
+		{
+			b.addEventListener("click", () =>
+			{
+				const cur = Math.max(10, Math.floor(Number(stakeEl.value) || 10));
+				const m = (b as HTMLButtonElement).dataset.amt;
+				if (m === "half")        stakeEl.value = String(Math.max(10, Math.floor(cur / 2)));
+				else if (m === "double") stakeEl.value = String(Math.min(1_000_000, cur * 2));
+				else if (m === "max")    stakeEl.value = String(Math.max(10, getBalance()));
+				updateGain();
+			});
+		});
+
+		placeBtn.addEventListener("click", async () =>
+		{
+			errEl.textContent = "";
+			if (!pick) return;
+			const stake = Math.floor(Number(stakeEl.value));
+			if (stake < 10) { errEl.textContent = "Mise min 10 pts"; return; }
+			placeBtn.disabled = true;
+			try
+			{
+				await placeFootBet(match.id, pick, stake);
+				await refreshFoot();
+			}
+			catch (e: any)
+			{
+				errEl.textContent = e?.message ?? "Erreur";
+				placeBtn.disabled = false;
+			}
+		});
+	}
+
+	function renderFootManage(container: HTMLElement, match: any, bet: any, started: boolean)
+	{
+		const potential = Math.floor(bet.stake * bet.odds);
+		const body = document.createElement("div");
+		body.className = "ec-body ec-manage";
+		body.innerHTML = `
+			<div class="ec-pending-info">
+				<div class="pick-big">${PICK_LABEL[bet.pick]}<small> · ${pickName(match, bet.pick)}</small></div>
+				<span class="stake-info">Mise <b>${fmt(bet.stake)} pts</b> à <b>${bet.odds}×</b> → gain potentiel <b>${fmt(potential)} pts</b></span>
+				<span class="wait">${started ? "Match en cours…" : "En attente du coup d'envoi…"}</span>
+			</div>
+			${started ? "" : `
+			<div class="manage-btns">
+				<button class="btn btn-danger" data-cancel>Annuler (+${fmt(bet.stake)} remboursés)</button>
+			</div>`}
+			<p class="ec-err" data-err></p>`;
+		container.appendChild(body);
+
+		const cancelBtn = body.querySelector<HTMLButtonElement>("[data-cancel]");
+		cancelBtn?.addEventListener("click", async () =>
+		{
+			cancelBtn.disabled = true;
+			try
+			{
+				await cancelFootBet(bet.id);
+				await refreshFoot();
+			}
+			catch (e: any)
+			{
+				($("[data-err]", body) as HTMLElement).textContent = e?.message ?? "Erreur";
+				cancelBtn.disabled = false;
+			}
+		});
+	}
+
+	// ── All matches, grouped by league ──────────────────────────────────────
+	function renderMatches(matches: any[], pendingBets: any[])
+	{
+		if (!matches.length)
+		{
+			matchesEl.innerHTML = `<p class="empty-state">Aucun match à venir pour l'instant — repasse un peu plus tard.</p>`;
+			return;
+		}
+
+		matchesEl.innerHTML = "";
+		const betByMatch = new Map(pendingBets.map((b: any) => [b.match_id, b]));
+
+		const byLeague = new Map<string, any[]>();
+		matches.forEach((m) =>
+		{
+			if (!byLeague.has(m.league)) byLeague.set(m.league, []);
+			byLeague.get(m.league)!.push(m);
+		});
+
+		byLeague.forEach((ms, league) =>
+		{
+			const group = document.createElement("div");
+			group.className = "league-group";
+			group.innerHTML = `<h3 class="league-title">${league}</h3>`;
+			const grid = document.createElement("div");
+			grid.className = "match-cards";
+			group.appendChild(grid);
+			matchesEl.appendChild(group);
+
+			ms.forEach((m) =>
+			{
+				const started = new Date(m.commence_at) <= new Date();
+				const card = document.createElement("div");
+				card.className = `exam-card panel${started ? " locked" : ""}`;
+				grid.appendChild(card);
+				renderMatchCard(m, betByMatch.get(m.id) ?? null, card);
+			});
+		});
+	}
+
+	function renderFootHistory(history: any[])
+	{
+		footHistEl.innerHTML = history.length
+			? history.map((h) =>
+			{
+					const win = h.payout > 0;
+					const voided = h.match_status === "void";
+					const score = voided ? "annulé" : `${h.home_score}-${h.away_score}`;
+					return `<li class="frow">
+						<div class="frow-main">
+							<span class="fn">${h.home} ${score} ${h.away}</span>
+							<span class="fp">Parié <b>${PICK_LABEL[h.pick]}</b> à ${h.odds}×</span>
+						</div>
+						<div class="frow-right">
+							<span class="fr ${win ? "win" : "lose"}">${win ? "+" + fmt(h.payout) + " pts" : "−" + fmt(h.stake) + " pts"}</span>
+							${voided ? `<span class="fmult">remboursé</span>` : ""}
+						</div>
+					</li>`;
+				}).join("")
+			: `<li class="empty">Aucun pari réglé.</li>`;
+	}
+
+	function renderFootFeed(feed: any[])
+	{
+		footFeedEl.innerHTML = feed.length
+			? feed.map((f) =>
+			{
+					const av = f.image_url
+						? `<img class="fav" src="${f.image_url}" width="28" height="28" alt="" />`
+						: `<span class="fav fb">${f.login.charAt(0).toUpperCase()}</span>`;
+					const win = f.payout > 0;
+					return `<li class="frow">
+						${av}
+						<div class="frow-main">
+							<span class="fn">@${f.login}</span>
+							<span class="fp">${f.home} ${f.home_score}-${f.away_score} ${f.away} · parié ${PICK_LABEL[f.pick]} à ${f.odds}×</span>
+						</div>
+						<span class="fr ${win ? "win" : "lose"}">${win ? "+" + fmt(f.payout) : "−" + fmt(f.stake ?? 0)}</span>
+					</li>`;
+				}).join("")
+			: `<li class="empty">Aucun résultat pour l'instant.</li>`;
+	}
+
+	async function refreshFoot()
+	{
+		const [matches, myBets, feed] = await Promise.all([getFootMatches(), getFootBets(), getFootFeed()]);
+		renderMatches(matches, myBets.pending ?? []);
+		renderFootHistory(myBets.history ?? []);
+		renderFootFeed(feed);
+	}
+
 	onExamSettled(() => refresh());
-	loadMe().then(refresh);
+	onFootSettled(() => refreshFoot());
+	loadMe().then(() => { void refresh(); void refreshFoot(); });
 </script>
 
 <style>
@@ -474,8 +791,43 @@ import Footer from "../components/Footer.astro";
     letter-spacing: -0.03em;
   }
   .head p {
-    margin: 8px 0 28px;
+    margin: 8px 0 22px;
     color: var(--muted);
+    max-width: 640px;
+  }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-bottom: 26px;
+  }
+  .tab {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 8px 18px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .tab:hover { color: var(--fg); }
+  .tab.is-active {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  .foot-lede {
+    margin: 0 0 22px;
+    color: var(--muted);
+    font-size: 14px;
     max-width: 640px;
   }
 
@@ -512,7 +864,7 @@ import Footer from "../components/Footer.astro";
   .br.dim b { color: var(--lose); }
 
   /* ── Sections ── */
-  .exams-section, .history-section, .feed-section {
+  .exams-section, .matches-section, .history-section, .feed-section {
     margin-bottom: 32px;
   }
   .section-title {
@@ -520,7 +872,7 @@ import Footer from "../components/Footer.astro";
     font-size: 17px;
     font-weight: 800;
   }
-  .loading, .empty-state {
+  .loading, .empty-state, .match-groups :global(.empty-state) {
     color: var(--muted);
     font-size: 14px;
   }
@@ -540,14 +892,29 @@ import Footer from "../components/Footer.astro";
   .exam-cards :global(.core-done b) { font-size: 18px; }
   .exam-cards :global(.core-done p) { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
 
-  /* ── Exam cards grid ── */
+  /* ── Cards grid (exams + matchs foot) ── */
   .exam-cards {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
     gap: 14px;
   }
-  .exam-cards :global(.exam-card) {
+  .match-groups :global(.league-group) { margin-bottom: 24px; }
+  .match-groups :global(.league-title) {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .match-groups :global(.match-cards) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .exam-cards :global(.exam-card),
+  .match-groups :global(.exam-card) {
     flex: 1 1 320px;
     max-width: 460px;
     padding: 18px;
@@ -559,12 +926,13 @@ import Footer from "../components/Footer.astro";
     border: 1px solid var(--line);
     border-radius: 12px;
   }
-  .exam-cards :global(.exam-card.locked) {
+  .exam-cards :global(.exam-card.locked),
+  .match-groups :global(.exam-card.locked) {
     opacity: 0.72;
     border-color: var(--raise);
   }
 
-  /* ── Card header ── */
+  /* ── Card header (exam) ── */
   .exam-cards :global(.ec-header) { display: flex; flex-direction: column; gap: 6px; }
   .exam-cards :global(.ec-title)  { font-weight: 800; font-size: 16px; }
   .exam-cards :global(.ec-meta)   {
@@ -595,6 +963,69 @@ import Footer from "../components/Footer.astro";
     text-align: center;
   }
 
+  /* ── Card header (match foot) ── */
+  .match-groups :global(.mc-header) { display: flex; flex-direction: column; gap: 6px; }
+  .match-groups :global(.mc-teams)  { font-size: 15px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-weight: 800; }
+  .match-groups :global(.mc-teams .vs) { color: var(--muted); font-size: 12px; font-weight: 400; }
+  .match-groups :global(.mc-meta) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .match-groups :global(.mc-countdown)      { font-weight: 700; color: var(--win); }
+  .match-groups :global(.mc-countdown.live) { color: #fbbf24; }
+  .match-groups :global(.mc-locked) {
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+    text-align: center;
+  }
+
+  /* ── Odds buttons ── */
+  .match-groups :global(.odds-row) { display: flex; gap: 6px; }
+  .match-groups :global(.odd-btn) {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    background: var(--raise);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 8px;
+    font-family: inherit;
+    padding: 8px 4px;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+  .match-groups :global(.odd-btn .ol) {
+    font-size: 10px;
+    font-weight: 600;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .match-groups :global(.odd-btn b) { font-size: 16px; color: var(--fg); }
+  .match-groups :global(.odd-btn:hover)       { color: var(--fg); border-color: var(--accent); }
+  .match-groups :global(.odd-btn.is-active)   { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .match-groups :global(.odd-btn.is-active b) { color: var(--accent-ink); }
+
+  .match-groups :global(.gain) {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .match-groups :global(.gain b) { color: var(--win); }
+  .match-groups :global(.pick-big) { font-size: 44px; font-weight: 800; line-height: 1; color: var(--accent); }
+  .match-groups :global(.pick-big small) { font-size: 16px; color: var(--muted); font-weight: 600; }
+
   /* ── Locked + bet placed ── */
   .exam-cards :global(.ec-bet-locked) {
     display: flex;
@@ -621,22 +1052,26 @@ import Footer from "../components/Footer.astro";
     border: 1px solid rgba(251, 191, 36, 0.25);
   }
 
-  /* ── Form body ── */
-  .exam-cards :global(.ec-body) {
+  /* ── Form body (partagé exam/foot via ec-*) ── */
+  .exam-cards :global(.ec-body),
+  .match-groups :global(.ec-body),
+  .match-groups :global(.mc-body) {
     display: flex;
     flex-direction: column;
     gap: 4px;
     border-top: 1px solid var(--line);
     padding-top: 12px;
   }
-  .exam-cards :global(.ec-lbl) {
+  .exam-cards :global(.ec-lbl),
+  .match-groups :global(.ec-lbl) {
     color: var(--muted);
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     margin: 8px 0 4px;
   }
-  .exam-cards :global(.ec-err) { color: var(--lose); font-size: 12px; min-height: 16px; margin: 4px 0 0; }
+  .exam-cards :global(.ec-err),
+  .match-groups :global(.ec-err) { color: var(--lose); font-size: 12px; min-height: 16px; margin: 4px 0 0; }
 
   /* ── Score picker ── */
   .exam-cards :global(.score-grid) { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -666,14 +1101,20 @@ import Footer from "../components/Footer.astro";
   .exam-cards :global(.pred-display small) { font-size: 16px; color: var(--muted); }
 
   /* ── Pending manage ── */
-  .exam-cards :global(.ec-manage)       { align-items: center; text-align: center; }
-  .exam-cards :global(.ec-pending-info) { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .exam-cards :global(.pred-big)        { font-size: 56px; font-weight: 800; line-height: 1; color: var(--accent); }
-  .exam-cards :global(.pred-big small)  { font-size: 20px; color: var(--muted); }
-  .exam-cards :global(.stake-info)      { color: var(--muted); font-size: 13px; }
-  .exam-cards :global(.stake-info b)    { color: var(--fg); }
-  .exam-cards :global(.wait)            { color: var(--muted); font-size: 12px; font-style: italic; }
-  .exam-cards :global(.manage-btns)     { display: flex; flex-direction: column; gap: 7px; width: 100%; margin-top: 8px; }
+  .exam-cards :global(.ec-manage),
+  .match-groups :global(.ec-manage)       { align-items: center; text-align: center; }
+  .exam-cards :global(.ec-pending-info),
+  .match-groups :global(.ec-pending-info) { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .exam-cards :global(.pred-big)          { font-size: 56px; font-weight: 800; line-height: 1; color: var(--accent); }
+  .exam-cards :global(.pred-big small)    { font-size: 20px; color: var(--muted); }
+  .exam-cards :global(.stake-info),
+  .match-groups :global(.stake-info)      { color: var(--muted); font-size: 13px; }
+  .exam-cards :global(.stake-info b),
+  .match-groups :global(.stake-info b)    { color: var(--fg); }
+  .exam-cards :global(.wait),
+  .match-groups :global(.wait)            { color: var(--muted); font-size: 12px; font-style: italic; }
+  .exam-cards :global(.manage-btns),
+  .match-groups :global(.manage-btns)     { display: flex; flex-direction: column; gap: 7px; width: 100%; margin-top: 8px; }
 
   .exam-cards :global(.btn-outline) {
     background: transparent !important;
@@ -681,8 +1122,10 @@ import Footer from "../components/Footer.astro";
     color: var(--accent) !important;
   }
   .exam-cards :global(.btn-outline:hover) { background: var(--accent) !important; color: var(--accent-ink) !important; }
-  .exam-cards :global(.btn-danger)        { background: var(--lose) !important; }
-  .exam-cards :global(.btn-danger:hover)  { filter: brightness(1.15); }
+  .exam-cards :global(.btn-danger),
+  .match-groups :global(.btn-danger)        { background: var(--lose) !important; }
+  .exam-cards :global(.btn-danger:hover),
+  .match-groups :global(.btn-danger:hover)  { filter: brightness(1.15); }
 
   .exam-cards :global(.edit-header) {
     display: flex;

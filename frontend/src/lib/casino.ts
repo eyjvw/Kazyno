@@ -211,6 +211,9 @@ export function connectRealtime()
 			case "exam_settled":
 				examListeners.forEach((fn) => fn(msg));
 				break;
+			case "foot_settled":
+				footListeners.forEach((fn) => fn(msg));
+				break;
 			case "giveaway_drawn":
 				giveawayListeners.forEach((fn) => fn(msg));
 				break;
@@ -523,6 +526,62 @@ export async function getExamFeed()
 		return [];
 	}
 }
+// ── Paris foot ────────────────────────────────────────────────────────────
+type FootListener = (msg: any) => void;
+const footListeners = new Set<FootListener>();
+export function onFootSettled(fn: FootListener)
+{
+	footListeners.add(fn);
+}
+export async function getFootMatches()
+{
+	try
+	{
+		const r = await fetch("/api/foot/matches");
+		return r.ok ? (await r.json()).matches : [];
+	} catch {
+		return [];
+	}
+}
+export async function getFootBets()
+{
+	try
+	{
+		const r = await fetch("/api/foot/me");
+		return r.ok ? await r.json() : { pending: [], history: [] };
+	} catch {
+		return { pending: [], history: [] };
+	}
+}
+export async function getFootFeed()
+{
+	try
+	{
+		const r = await fetch("/api/foot/feed");
+		return r.ok ? (await r.json()).feed : [];
+	} catch {
+		return [];
+	}
+}
+export async function placeFootBet(match_id: number, pick: string, stake: number)
+{
+	const r = await fetch("/api/foot/bets", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ match_id, pick, stake }),
+	});
+	const data = await r.json().catch(() => ({}));
+	if (!r.ok) throw new Error(data?.error ?? "Erreur");
+	return data;
+}
+export async function cancelFootBet(betId: number)
+{
+	const r = await fetch(`/api/foot/bets/${betId}`, { method: "DELETE" });
+	const data = await r.json().catch(() => ({}));
+	if (!r.ok) throw new Error(data?.error ?? "Erreur");
+	return data;
+}
+
 // ── Notifications ───────────────────────────────────────────────────────────
 export interface Notif
 {

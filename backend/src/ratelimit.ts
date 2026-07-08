@@ -40,6 +40,8 @@ export const BUCKETS = {
 	games:       { name: "games",        max: 30,  window: 10_000, baseBlock:  5_000, maxBlock:    300_000 },
 	// Mutations de paris d'exam, volontairement serré.
 	examBets:    { name: "exam-bets",    max: 10,  window: 60_000, baseBlock: 30_000, maxBlock:    600_000 },
+	// Mutations de paris foot : plusieurs matchs pariables d'affilée, un peu plus large.
+	footBets:    { name: "foot-bets",    max: 20,  window: 60_000, baseBlock: 30_000, maxBlock:    600_000 },
 	// Lectures sociales (presence, amis, profils, notifs) : très large,
 	// chaque navigation en consomme 4-5.
 	socialRead:  { name: "social-read",  max: 240, window: 30_000, baseBlock: 10_000, maxBlock:    300_000 },
