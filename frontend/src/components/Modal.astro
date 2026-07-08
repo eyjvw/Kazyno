@@ -1,0 +1,101 @@
+---
+interface Props {
+  open: boolean;
+  title?: string;
+  class?: string;
+}
+
+const { open, title, class: className = '' } = Astro.props;
+---
+
+<div class={`modal-backdrop ${open ? 'open' : ''}`} data-modal-backdrop>
+  <div class={`modal-panel ${className}`.trim()}>
+    {title && <h2 class="modal-title">{title}</h2>}
+    <button class="modal-close" data-modal-close aria-label="Fermer">✕</button>
+    <slot />
+  </div>
+</div>
+
+<style>
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+    backdrop-filter: blur(4px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-short) var(--easing-smooth);
+  }
+
+  .modal-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .modal-panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 28px 24px 24px;
+    max-width: 480px;
+    width: 100%;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    position: relative;
+    animation: modalPop var(--duration-short) var(--easing-smooth);
+  }
+
+  @keyframes modalPop {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .modal-title {
+    font-size: 22px;
+    font-weight: 800;
+    margin: 0 0 16px;
+    letter-spacing: -0.02em;
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: color var(--duration-short), background var(--duration-short);
+    font-family: inherit;
+  }
+
+  .modal-close:hover {
+    color: var(--text);
+    background: var(--raise);
+  }
+</style>
+
+<script>
+  document.querySelectorAll('[data-modal-backdrop]').forEach(backdrop => {
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) {
+        const closeBtn = backdrop.querySelector('[data-modal-close]');
+        closeBtn?.click();
+      }
+    });
+  });
+</script>

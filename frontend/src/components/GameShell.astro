@@ -1,0 +1,143 @@
+---
+interface Props {
+  title: string;
+  subtitle?: string;
+  emoji?: string;
+  class?: string;
+}
+
+const { title, subtitle, emoji, class: className = '' } = Astro.props;
+---
+
+<div class={`game-shell ${className}`.trim()}>
+  <div class="game-header">
+    <a href="/" class="gh-back">← Lobby</a>
+    {emoji && <span class="gh-icon">{emoji}</span>}
+    <div>
+      <h1>{title}</h1>
+      {subtitle && <p class="gh-sub">{subtitle}</p>}
+    </div>
+  </div>
+
+  <div class="shell">
+    <div class="betpanel">
+      <slot name="betpanel" />
+    </div>
+    <div class="stage">
+      <slot name="stage" />
+    </div>
+  </div>
+</div>
+
+<style>
+  .game-shell {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 1;
+  }
+
+  .game-header {
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 28px clamp(16px, 4vw, 40px) 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .gh-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--text-muted);
+    border-radius: 20px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    transition: color var(--duration-short), border-color var(--duration-short);
+    text-decoration: none;
+  }
+
+  .gh-back:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+  }
+
+  .gh-icon {
+    font-size: 28px;
+    line-height: 1;
+  }
+
+  .game-header h1 {
+    margin: 0;
+    font-size: clamp(20px, 3.5vw, 28px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .gh-sub {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 400;
+  }
+
+  .shell {
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: clamp(12px, 2vw, 20px) clamp(16px, 4vw, 40px) clamp(16px, 3vw, 32px);
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .betpanel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: sticky;
+    top: 80px;
+    height: fit-content;
+  }
+
+  .stage {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    min-height: 520px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  @media (max-width: 820px) {
+    .shell {
+      grid-template-columns: 1fr;
+    }
+    .stage {
+      order: -1;
+      min-height: 320px;
+    }
+    .betpanel {
+      position: static;
+      sticky: initial;
+    }
+  }
+</style>

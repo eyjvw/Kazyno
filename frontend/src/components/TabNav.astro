@@ -1,0 +1,103 @@
+---
+interface Tab {
+  id: string;
+  label: string;
+}
+
+interface Props {
+  tabs: Tab[];
+  active: string;
+  class?: string;
+}
+
+const { tabs, active, class: className = '' } = Astro.props;
+---
+
+<div class={`tab-nav ${className}`.trim()}>
+  <div class="tab-buttons">
+    {tabs.map(tab => (
+      <button
+        class={`tab-button ${tab.id === active ? 'active' : ''}`}
+        data-tab-id={tab.id}
+        data-tab-button
+      >
+        {tab.label}
+      </button>
+    ))}
+  </div>
+  <div class="tab-indicator"></div>
+</div>
+
+<div class="tab-content" data-tab-content>
+  <slot />
+</div>
+
+<style>
+  .tab-nav {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--line);
+    position: relative;
+  }
+
+  .tab-buttons {
+    display: flex;
+    gap: 0;
+  }
+
+  .tab-button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px 18px;
+    cursor: pointer;
+    position: relative;
+    transition: color var(--duration-short) var(--easing-smooth);
+  }
+
+  .tab-button:hover {
+    color: var(--text);
+  }
+
+  .tab-button.active {
+    color: var(--primary);
+  }
+
+  .tab-indicator {
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    background: var(--primary);
+    transition: left var(--duration-short) var(--easing-smooth),
+                width var(--duration-short) var(--easing-smooth);
+  }
+
+  .tab-content {
+    animation: fadeUp var(--duration-medium) var(--easing-smooth);
+  }
+</style>
+
+<script>
+  document.querySelectorAll('[data-tab-button]').forEach(button => {
+    button.addEventListener('click', () => {
+      const nav = button.closest('.tab-nav');
+      const indicator = nav?.querySelector('.tab-indicator');
+
+      const left = button.offsetLeft;
+      const width = button.offsetWidth;
+
+      if (indicator) {
+        indicator.style.left = `${left}px`;
+        indicator.style.width = `${width}px`;
+      }
+    });
+
+    if (button.classList.contains('active')) {
+      button.click();
+    }
+  });
+</script>

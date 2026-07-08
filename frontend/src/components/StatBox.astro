@@ -1,0 +1,68 @@
+---
+interface Props {
+  label: string;
+  value: number | string;
+  animate?: boolean;
+  class?: string;
+}
+
+const { label, value, animate = false, class: className = '' } = Astro.props;
+const isNumber = typeof value === 'number';
+---
+
+<div class={`stat-box ${className}`.trim()}>
+  <span class="stat-label">{label}</span>
+  {isNumber && animate ? (
+    <b class="stat-value" data-tally={value}>{value}</b>
+  ) : (
+    <b class="stat-value">{value}</b>
+  )}
+</div>
+
+<style>
+  .stat-box {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .stat-label {
+    color: var(--text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 700;
+  }
+
+  .stat-value {
+    font-size: 16px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+
+<script>
+  document.querySelectorAll('[data-tally]').forEach(el => {
+    const target = parseInt(el.getAttribute('data-tally'), 10);
+    const duration = 600;
+    const start = Date.now();
+    const initialValue = parseInt(el.textContent || '0', 10);
+
+    const animate = () => {
+      const now = Date.now();
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+
+      const current = Math.floor(initialValue + (target - initialValue) * progress);
+      el.textContent = current.toLocaleString('fr-FR');
+
+      if (progress < 1) requestAnimationFrame(animate);
+    };
+
+    animate();
+  });
+</script>

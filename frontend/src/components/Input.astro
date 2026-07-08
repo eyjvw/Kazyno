@@ -1,0 +1,39 @@
+---
+interface Props {
+  type?: string;
+  placeholder?: string;
+  uppercase?: boolean;
+  class?: string;
+}
+
+const { type = 'text', placeholder = '', uppercase = false, class: className = '' } = Astro.props;
+const style = uppercase ? 'text-transform: uppercase;' : '';
+---
+
+<input
+  type={type}
+  placeholder={placeholder}
+  class={`input ${className}`.trim()}
+  style={style}
+/>
+
+<style>
+  .input {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 15px;
+    padding: 12px 13px;
+    outline: none;
+    width: 100%;
+    font-variant-numeric: tabular-nums;
+    transition: border-color var(--duration-short), box-shadow var(--duration-short);
+  }
+
+  .input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 12px var(--primary-glow);
+  }
+</style>

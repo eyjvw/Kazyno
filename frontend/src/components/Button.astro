@@ -1,0 +1,83 @@
+---
+interface Props {
+  variant?: 'primary' | 'ghost';
+  size?: 'sm' | 'md' | 'lg';
+  disabled?: boolean;
+  class?: string;
+}
+
+const { variant = 'primary', size = 'md', disabled = false, class: className = '' } = Astro.props;
+
+const baseClasses = 'btn';
+const variantClass = variant === 'primary' ? 'btn-primary' : 'btn-ghost';
+const sizeClass = size === 'sm' ? 'btn-sm' : size === 'lg' ? 'btn-lg' : 'btn-md';
+const disabledClass = disabled ? 'btn-disabled' : '';
+
+const allClasses = `${baseClasses} ${variantClass} ${sizeClass} ${disabledClass} ${className}`.trim();
+---
+
+<button class={allClasses} disabled={disabled} type="button">
+  <slot />
+</button>
+
+<style>
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 10px;
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background var(--duration-short) var(--easing-smooth),
+                transform var(--duration-short) var(--easing-smooth),
+                box-shadow var(--duration-short) var(--easing-smooth);
+  }
+
+  .btn-primary {
+    background: var(--primary);
+    color: var(--accent-ink);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--primary-hover);
+    box-shadow: 0 4px 20px var(--primary-glow);
+    transform: translateY(-2px);
+  }
+
+  .btn-primary:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  .btn-ghost {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--text-muted);
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--primary);
+  }
+
+  .btn-sm {
+    font-size: 13px;
+    padding: 9px 14px;
+  }
+
+  .btn-md {
+    font-size: 15px;
+    padding: 14px 18px;
+  }
+
+  .btn-lg {
+    font-size: 16px;
+    padding: 16px 22px;
+  }
+
+  .btn-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>
