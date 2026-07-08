@@ -1,0 +1,36 @@
+:root {
+  /* Existing (keep) */
+  --bg: #0a1612;
+  --bg-2: #0e1e18;
+  --panel: #142b21;
+  --panel-2: #1a352a;
+  --raise: #234233;
+  --fg: #f2f5ef;
+  --muted: #9bb5a4;
+  --line: #1f3a2c;
+  --accent: #d4af37;
+  --accent-hover: #e8c766;
+  --accent-ink: #16281d;
+  --win: #4ade80;
+  --lose: #ef4444;
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  /* New (Design System) */
+  --primary: #d4af37;
+  --primary-hover: #e8c766;
+  --primary-glow: rgba(212, 175, 55, 0.3);
+  --surface-1: #0a1612;
+  --surface-2: #0e1e18;
+  --surface-3: #142b21;
+  --text: #f2f5ef;
+  --text-muted: #9bb5a4;
+  --success: #4ade80;
+  --danger: #ef4444;
+
+  /* Animation timings */
+  --duration-short: 150ms;
+  --duration-medium: 300ms;
+  --duration-long: 500ms;
+  --easing-smooth: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
